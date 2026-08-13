@@ -1,0 +1,133 @@
+package com.ai.gateway.adapter.redis;
+
+import com.ai.gateway.domain.model.CatalogSnapshot;
+import com.ai.gateway.domain.port.CatalogPort;
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
+import org.redisson.api.RBucket;
+import org.redisson.api.RedissonClient;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+/**
+ * Unit tests for {@link RedisCatalogPortDecorator}.
+ *
+ * <p>Verifies the two-level cache behavior (Caffeine L1 + Redis L2 +
+ * PostgreSQL source of truth) using a mocked Redisson client, so no running
+ * Redis is required.</p>
+ */
+class RedisCatalogPortDecoratorTest {
+
+    private static final String ENV = "production";
+
+    private CatalogPort delegate;
+    private RedissonClient redissonClient;
+    private RBucket<String> bucket;
+    private ObjectMapper objectMapper;
+    private RedisCatalogPortDecorator decorator;
+
+    @BeforeEach
+    @SuppressWarnings("unchecked")
+    void setUp() {
+        delegate = mock(CatalogPort.class);
+        redissonClient = mock(RedissonClient.class);
+        bucket = mock(RBucket.class);
+        objectMapper = new ObjectMapper()
+                .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        doReturn(bucket).when(redissonClient).getBucket(anyString());
+        decorator = new RedisCatalogPortDecorator(delegate, redissonClient, objectMapper, 30);
+    }
+
+    private CatalogSnapshot snapshot(long version) {
+        return new CatalogSnapshot(version, ENV, List.of(), "policy-v" + version, "");
+    }
+
+    @Test
+    @DisplayName("read misses Redis, loads from PostgreSQL and back-fills Redis")
+    void readThroughBackFillsRedis() throws Exception {
+        when(bucket.get()).thenReturn(null);
+        when(delegate.loadCurrentSnapshot(ENV)).thenReturn(snapshot(7));
+
+        CatalogSnapshot result = decorator.loadCurrentSnapshot(ENV);
+
+        assertThat(result.snapshotVersion()).isEqualTo(7);
+        verify(delegate, times(1)).loadCurrentSnapshot(ENV);
+        verify(bucket, times(1)).set(anyString());
+    }
+
+    @Test
+    @DisplayName("read hits Redis and does not touch PostgreSQL")
+    void readHitsRedis() throws Exception {
+        String json = objectMapper.writeValueAsString(snapshot(9));
+        when(bucket.get()).thenReturn(json);
+
+        CatalogSnapshot result = decorator.loadCurrentSnapshot(ENV);
+
+        assertThat(result.snapshotVersion()).isEqualTo(9);
+        verify(delegate, never()).loadCurrentSnapshot(ENV);
+    }
+
+    @Test
+    @DisplayName("second read is served by the Caffeine L1 cache")
+    void secondReadServedByL1() {
+        when(bucket.get()).thenReturn(null);
+        when(delegate.loadCurrentSnapshot(ENV)).thenReturn(snapshot(3));
+
+        decorator.loadCurrentSnapshot(ENV);
+        CatalogSnapshot second = decorator.loadCurrentSnapshot(ENV);
+
+        assertThat(second.snapshotVersion()).isEqualTo(3);
+        // PostgreSQL hit only once; the second call is served from L1.
+        verify(delegate, times(1)).loadCurrentSnapshot(ENV);
+    }
+
+    @Test
+    @DisplayName("save is write-through: PostgreSQL then Redis")
+    void saveIsWriteThrough() {
+        CatalogSnapshot snapshot = snapshot(11);
+
+        decorator.saveSnapshot(snapshot);
+
+        verify(delegate, times(1)).saveSnapshot(snapshot);
+        verify(bucket, times(1)).set(anyString());
+    }
+
+    @Test
+    @DisplayName("Redis read failure degrades gracefully to PostgreSQL")
+    void redisFailureDegradesToPostgres() {
+        when(bucket.get()).thenThrow(new RuntimeException("redis down"));
+        when(delegate.loadCurrentSnapshot(ENV)).thenReturn(snapshot(5));
+
+        CatalogSnapshot result = decorator.loadCurrentSnapshot(ENV);
+
+        assertThat(result.snapshotVersion()).isEqualTo(5);
+        verify(delegate, times(1)).loadCurrentSnapshot(ENV);
+    }
+
+    @Test
+    @DisplayName("invalidate clears the local L1 entry")
+    void invalidateClearsL1() {
+        when(bucket.get()).thenReturn(null);
+        when(delegate.loadCurrentSnapshot(ENV)).thenReturn(snapshot(4));
+
+        decorator.loadCurrentSnapshot(ENV);
+        decorator.invalidate(ENV);
+        decorator.loadCurrentSnapshot(ENV);
+
+        // After invalidation the PostgreSQL source is consulted again.
+        verify(delegate, times(2)).loadCurrentSnapshot(ENV);
+        verify(bucket, times(1)).delete();
+    }
+}

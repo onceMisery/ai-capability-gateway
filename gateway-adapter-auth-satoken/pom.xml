@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.ai.gateway</groupId>
+        <artifactId>ai-capability-gateway</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>gateway-adapter-auth-satoken</artifactId>
+    <name>Gateway Adapter Auth Sa-Token</name>
+    <description>Pluggable authentication/authorization adapter backed by Sa-Token (JWT mode)</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-domain</artifactId>
+        </dependency>
+
+        <!-- Sa-Token core: framework-agnostic auth engine (no Spring Boot starter,
+             avoiding auto-configuration intrusion per the tech-selection doc). -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-core</artifactId>
+        </dependency>
+
+        <!-- Sa-Token JWT extension: stateless JWT creation/parsing (hutool-jwt based). -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-jwt</artifactId>
+        </dependency>
+
+        <!-- Sa-Token Redisson DAO (Jackson codec): session persistence into
+             the shared Redis (tech-selection doc §9 lists sa-token-dao-redisson,
+             whose correct 1.39.0 artifactId is sa-token-redisson-jackson).
+             The transitive redisson-spring-boot-starter is excluded: it brings
+             auto-configuration that would unconditionally connect to Redis,
+             conflicting with the programmatic Redisson wiring in
+             SaTokenRedisDaoConfiguration. -->
+        <dependency>
+            <groupId>cn.dev33</groupId>
+            <artifactId>sa-token-redisson-jackson</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.redisson</groupId>
+                    <artifactId>redisson-spring-boot-starter</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- Spring context only for @Configuration/@Bean conditional wiring. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+
+
+        <!-- Test -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>
