@@ -65,6 +65,19 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
 
+        <!-- Sa-Token Redisson DAO (sa-token-redisson-jackson) internally uses
+             Spring Data Redis's GenericJackson2JsonRedisSerializer at runtime,
+             so this dependency must be present on the classpath even though we
+             wire Redisson programmatically (the redisson-spring-boot-starter is
+             excluded above). Lettuce is not used by the gateway (Redisson is the
+             Redis client) but is kept to satisfy Spring Data Redis's autoconfig
+             classpath detection; its connection factory simply backs off without
+             spring.data.redis configuration and never actually connects. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
 
         <!-- Test -->
         <dependency>
