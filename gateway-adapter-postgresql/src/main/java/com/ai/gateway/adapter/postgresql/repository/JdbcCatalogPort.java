@@ -67,8 +67,18 @@ public class JdbcCatalogPort implements CatalogPort {
 
     @Override
     public long reserveSnapshotVersion() {
+        // Allocate the next version as the greater of the sequence's next value
+        // and (max existing version + 1). Relying solely on the sequence can
+        // collide when the catalog_snapshot table already holds rows whose
+        // snapshot_version was not produced by the sequence (e.g. a reseeded or
+        // reset sequence, a manually inserted row, or a partially applied
+        // migration). Taking max(version)+1 keeps the allocation monotonic and
+        // collision-free regardless of the sequence's current position.
         Long version = jdbcTemplate.queryForObject(
-                "SELECT nextval('catalog_snapshot_snapshot_version_seq')", Long.class);
+                "SELECT GREATEST(" +
+                "nextval('catalog_snapshot_snapshot_version_seq'), " +
+                "COALESCE((SELECT MAX(snapshot_version) FROM catalog_snapshot), 0) + 1)",
+                Long.class);
         if (version == null) {
             throw new IllegalStateException("PostgreSQL did not allocate a snapshot version");
         }
