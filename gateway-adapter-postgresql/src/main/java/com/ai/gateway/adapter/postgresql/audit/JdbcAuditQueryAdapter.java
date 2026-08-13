@@ -9,7 +9,7 @@ import org.springframework.stereotype.Repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.time.Instant;
+import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -95,11 +95,11 @@ public class JdbcAuditQueryAdapter implements AuditQueryPort {
         }
         if (criteria.from() != null) {
             conditions.add("timestamp >= ?");
-            params.add(criteria.from());
+            params.add(Timestamp.from(criteria.from()));
         }
         if (criteria.to() != null) {
             conditions.add("timestamp < ?");
-            params.add(criteria.to());
+            params.add(Timestamp.from(criteria.to()));
         }
 
         if (!conditions.isEmpty()) {
