@@ -23,6 +23,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Java 8 time types (java.time.Instant, etc.) must serialize over the
+             HTTP API. Spring Boot auto-registers JavaTimeModule only when this
+             artifact is on the classpath; declaring it explicitly keeps the
+             mapping deterministic across builds. Version is managed by the Spring
+             Boot BOM imported in the parent POM. -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>

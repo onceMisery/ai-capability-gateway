@@ -205,10 +205,10 @@ async function handleUserCommand(command: string) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  color: #dbe5ee;
-  background: var(--gateway-sidebar);
+  color: var(--gateway-sidebar-text);
+  background: linear-gradient(180deg, var(--gateway-sidebar-bg) 0%, var(--gateway-sidebar-bg-2) 100%);
   border-right: 1px solid var(--gateway-sidebar-border);
-  transition: width 180ms ease-out;
+  transition: width 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .brand {
@@ -226,14 +226,14 @@ async function handleUserCommand(command: string) {
 }
 
 .brand--mobile {
-  color: #dbe5ee;
-  background: var(--gateway-sidebar);
+  color: var(--gateway-sidebar-text);
+  background: var(--gateway-sidebar-bg);
 }
 
 :global(.mobile-drawer.el-drawer),
 :global(.mobile-drawer .el-drawer__body) {
-  color: #dbe5ee;
-  background: var(--gateway-sidebar);
+  color: var(--gateway-sidebar-text);
+  background: var(--gateway-sidebar-bg);
 }
 
 :global(.mobile-drawer .el-drawer__body) {
@@ -241,17 +241,17 @@ async function handleUserCommand(command: string) {
 }
 
 :global(.mobile-drawer .el-menu-item) {
-  color: #b8c5d1;
+  color: var(--gateway-sidebar-text-dim);
 }
 
 :global(.mobile-drawer .el-menu-item:hover) {
   color: #fff;
-  background: #243341;
+  background: var(--gateway-sidebar-hover-bg);
 }
 
 :global(.mobile-drawer .el-menu-item.is-active) {
   color: #fff;
-  background: var(--gateway-primary);
+  background: var(--gateway-sidebar-active-bg);
 }
 
 .brand-mark {
@@ -261,9 +261,11 @@ async function handleUserCommand(command: string) {
   height: 36px;
   place-items: center;
   color: #fff;
-  background: var(--gateway-primary);
-  border-radius: 7px;
+  background: linear-gradient(135deg, var(--gateway-primary), var(--gateway-secondary));
+  border-radius: 9px;
   font-weight: 750;
+  box-shadow: 0 4px 10px -2px rgba(79, 70, 229, 0.5);
+  letter-spacing: 0.5px;
 }
 
 .brand-copy {
@@ -281,34 +283,39 @@ async function handleUserCommand(command: string) {
 .brand-copy strong {
   color: #fff;
   font-size: 14px;
+  letter-spacing: -0.1px;
 }
 
 .brand-copy span {
-  color: #9fb0c0;
+  color: var(--gateway-sidebar-text-dim);
   font-size: 12px;
 }
 
 :deep(.el-menu) {
-  padding: 10px 8px;
+  padding: 12px 10px;
   background: transparent;
   border-right: 0;
 }
 
 :deep(.el-menu-item) {
+  position: relative;
   min-height: 44px;
   margin-bottom: 4px;
-  color: #b8c5d1;
-  border-radius: 6px;
+  color: var(--gateway-sidebar-text-dim);
+  border-radius: 9px;
+  transition: color var(--gateway-transition), background-color var(--gateway-transition);
 }
 
 :deep(.el-menu-item:hover) {
   color: #fff;
-  background: #243341;
+  background: var(--gateway-sidebar-hover-bg);
 }
 
 :deep(.el-menu-item.is-active) {
-  color: #fff;
-  background: var(--gateway-primary);
+  color: var(--gateway-sidebar-active-text);
+  background: var(--gateway-sidebar-active-bg);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--gateway-primary), 0 6px 16px -8px rgba(79, 70, 229, 0.6);
 }
 
 .sidebar-footer {
@@ -320,7 +327,14 @@ async function handleUserCommand(command: string) {
 .collapse-button {
   width: 100%;
   justify-content: flex-start;
-  color: #b8c5d1;
+  color: var(--gateway-sidebar-text-dim);
+  border-radius: 9px;
+  transition: color var(--gateway-transition), background-color var(--gateway-transition);
+}
+
+.collapse-button:hover {
+  color: #fff;
+  background: var(--gateway-sidebar-hover-bg);
 }
 
 .brand--collapsed + nav + .sidebar-footer .collapse-button,
@@ -334,14 +348,17 @@ async function handleUserCommand(command: string) {
 
 .topbar {
   display: flex;
-  flex: 0 0 72px;
+  flex: 0 0 var(--gateway-topbar-height);
   align-items: center;
   justify-content: space-between;
   min-width: 0;
-  height: 72px;
+  height: var(--gateway-topbar-height);
   padding: 0 24px;
-  background: var(--gateway-surface);
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--gateway-border);
+  box-shadow: 0 6px 18px -16px rgba(15, 23, 42, 0.4);
+  z-index: 10;
 }
 
 .topbar-title,
@@ -359,12 +376,14 @@ async function handleUserCommand(command: string) {
   font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
+  letter-spacing: -0.2px;
 }
 
 .topbar-context {
   display: block;
-  color: var(--gateway-text-muted);
+  color: var(--gateway-text-3);
   font-size: 11px;
+  letter-spacing: 0.4px;
 }
 
 .mobile-menu-button {
@@ -378,15 +397,16 @@ async function handleUserCommand(command: string) {
   align-items: center;
   min-height: 44px;
   padding: 4px 8px;
-  color: var(--gateway-text);
+  color: var(--gateway-text-1);
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 10px;
   cursor: pointer;
+  transition: background-color var(--gateway-transition), border-color var(--gateway-transition);
 }
 
 .user-menu:hover {
-  background: var(--gateway-surface-subtle);
+  background: var(--gateway-bg);
   border-color: var(--gateway-border);
 }
 
@@ -397,9 +417,10 @@ async function handleUserCommand(command: string) {
   margin-right: 8px;
   place-items: center;
   color: #fff;
-  background: var(--gateway-info);
+  background: linear-gradient(135deg, var(--gateway-info), var(--gateway-secondary));
   border-radius: 50%;
   font-weight: 700;
+  box-shadow: 0 3px 8px -2px rgba(14, 165, 233, 0.5);
 }
 
 .user-copy {
@@ -419,7 +440,7 @@ async function handleUserCommand(command: string) {
 }
 
 .user-copy small {
-  color: var(--gateway-text-muted);
+  color: var(--gateway-text-3);
   font-size: 11px;
 }
 
@@ -427,7 +448,10 @@ async function handleUserCommand(command: string) {
   min-width: 0;
   padding: 24px;
   overflow: auto;
-  background: var(--gateway-bg);
+  background:
+    radial-gradient(1200px 400px at 100% -10%, rgba(79, 70, 229, 0.04), transparent 60%),
+    radial-gradient(900px 360px at -10% 0%, rgba(13, 148, 136, 0.05), transparent 55%),
+    var(--gateway-bg);
 }
 
 .main-content:focus {
@@ -436,12 +460,17 @@ async function handleUserCommand(command: string) {
 
 .page-fade-enter-active,
 .page-fade-leave-active {
-  transition: opacity 150ms ease-out;
+  transition: opacity 200ms ease-out, transform 200ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-.page-fade-enter-from,
+.page-fade-enter-from {
+  opacity: 0;
+  transform: translateY(10px);
+}
+
 .page-fade-leave-to {
   opacity: 0;
+  transform: translateY(-6px);
 }
 
 @media (max-width: 900px) {
@@ -460,7 +489,7 @@ async function handleUserCommand(command: string) {
 
 @media (max-width: 620px) {
   .topbar {
-    height: 64px;
+    height: var(--gateway-topbar-height);
   }
 
   .topbar-context,
