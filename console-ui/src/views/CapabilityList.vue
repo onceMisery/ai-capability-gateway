@@ -416,28 +416,6 @@ async function submitImport() {
   white-space: nowrap;
 }
 
-.pagination-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-top: 16px;
-}
-
-.inline-error {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-  padding: 10px 12px;
-  color: var(--gateway-danger);
-  background: #fff5f4;
-  border: 1px solid #f6c7c3;
-  border-radius: 6px;
-}
-
 .empty-action {
   display: block;
   margin: 16px auto 0;
@@ -445,14 +423,6 @@ async function submitImport() {
 
 .detail-loading {
   min-height: 260px;
-}
-
-.detail-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
 }
 
 .eyebrow {
@@ -473,34 +443,10 @@ async function submitImport() {
   font-size: 12px;
 }
 
-.detail-section {
-  margin-top: 24px;
-}
-
-.detail-section h4 {
-  margin: 0 0 9px;
-  font-size: 14px;
-}
-
 .tag-list {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-}
-
-.json-preview {
-  max-height: 280px;
-  margin: 0;
-  padding: 12px;
-  overflow: auto;
-  color: #273442;
-  background: var(--gateway-surface-subtle);
-  border: 1px solid var(--gateway-border);
-  border-radius: 6px;
-  font-size: 12px;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
 }
 
 .example-list {
@@ -511,15 +457,6 @@ async function submitImport() {
 
 .example-list li + li {
   margin-top: 6px;
-}
-
-.drawer-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 28px;
-  padding-top: 16px;
-  border-top: 1px solid var(--gateway-border);
 }
 
 .form-helper {

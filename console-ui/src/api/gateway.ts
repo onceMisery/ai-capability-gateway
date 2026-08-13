@@ -69,8 +69,14 @@ export const gatewayApi = {
   snapshots: (environment: string, limit = 50) =>
     get<SnapshotSummary[]>('/admin/v1/releases', { params: { environment, limit } }),
   snapshot: (version: number) => get<SnapshotDetail>(`/admin/v1/releases/${version}`),
-  publish: (environment: string) =>
-    post<ManifestMutationResult>('/admin/v1/releases:publish', { environment }),
+  publish: (
+    environment: string,
+    capabilities?: Array<{ capabilityId: string; version: string }>
+  ) =>
+    post<ManifestMutationResult>('/admin/v1/releases:publish', {
+      environment,
+      capabilities
+    }),
   rollback: (targetSnapshotVersion: number, environment: string) =>
     post<ManifestMutationResult>('/admin/v1/releases:rollback', { targetSnapshotVersion, environment }),
 

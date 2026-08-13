@@ -245,8 +245,7 @@ function openCapabilityAudit(row: CapabilityStat) {
   margin-bottom: 16px;
 }
 
-.readiness-alert,
-.inline-error {
+.readiness-alert {
   margin-bottom: 16px;
 }
 
@@ -255,17 +254,6 @@ function openCapabilityAudit(row: CapabilityStat) {
   min-width: 0;
   flex: 1;
   gap: 2px;
-}
-
-.inline-error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 12px;
-  color: var(--gateway-danger);
-  background: #fff5f4;
-  border: 1px solid #f6c7c3;
-  border-radius: 6px;
 }
 
 .trend-section,
