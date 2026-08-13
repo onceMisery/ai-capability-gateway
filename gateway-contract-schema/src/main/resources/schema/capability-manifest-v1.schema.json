@@ -1,0 +1,740 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://gateway.ai/schema/capability-manifest-v1.schema.json",
+  "title": "AI Capability Gateway — Capability Manifest v1",
+  "description": "JSON Schema 2020-12 definition for the AI Capability Gateway Capability Manifest. Covers Sections 6.2–6.7, 6.5.1, 6.9, 10.1, 10.5, 12.3, 12.5 and 13.1 of the design document. This schema is the machine-checkable contract for Manifest import and validation (Section 8.2 step 1).",
+  "$comment": "Cross-field constraints that JSON Schema cannot express (e.g. parameterTypes/arguments positional correspondence, projection target uniqueness, redaction path existence within publicSchema) are enforced by the Contract Validator (Section 8.2).",
+
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "spec"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "gateway.ai/v1",
+      "description": "Manifest specification version (Section 6.1)."
+    },
+    "kind": {
+      "type": "string",
+      "const": "Capability",
+      "description": "Manifest kind, fixed to Capability (Section 6.2)."
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "spec": {
+      "$ref": "#/$defs/spec"
+    }
+  },
+
+  "$defs": {
+    "jsonPointer": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "A non-empty JSON Pointer (RFC 6901) starting with '/'."
+    },
+
+    "sourceEnum": {
+      "type": "string",
+      "enum": ["MODEL", "PRINCIPAL", "CONSTANT", "SYSTEM"],
+      "description": "Controlled argument source (Section 6.5)."
+    },
+
+    "converterWhitelist": {
+      "type": "string",
+      "enum": ["ISO_DATE_TO_EPOCH_MILLIS", "ENUM_UPPERCASE", "STRING_TRIM"],
+      "description": "Built-in converter whitelist (Section 6.5.1). New converters are not accepted via Manifest; changes follow platform release process."
+    },
+
+    "systemSourcePathWhitelist": {
+      "type": "string",
+      "enum": ["/traceId", "/deadlineEpochMs", "/idempotencyKey", "/locale"],
+      "description": "SYSTEM source can only read platform built-in whitelist paths (Section 6.5). Manifest cannot declare new system variables."
+    },
+
+    "metadata": {
+      "type": "object",
+      "required": ["id", "version", "owner"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9.-]+$",
+          "maxLength": 128,
+          "description": "Globally stable capability ID, e.g. order.detail.query. Only lowercase letters, digits, dots and hyphens (Section 6.3)."
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "SemVer contract version MAJOR.MINOR.PATCH (Section 6.3)."
+        },
+        "owner": {
+          "$ref": "#/$defs/owner"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Optional controlled tags for retrieval and governance (Section 6.2)."
+        }
+      }
+    },
+
+    "owner": {
+      "type": "object",
+      "required": ["team", "contact"],
+      "additionalProperties": false,
+      "properties": {
+        "team": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Responsible team name."
+        },
+        "contact": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Contact email or identifier."
+        }
+      }
+    },
+
+    "spec": {
+      "type": "object",
+      "required": ["displayName", "description", "examples", "risk", "inputSchema", "invocation", "output", "resilience"],
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "User-understandable capability name (Section 6.2)."
+        },
+        "description": {
+          "type": "string",
+          "maxLength": 1024,
+          "description": "Single business action description (Section 6.2)."
+        },
+        "examples": {
+          "$ref": "#/$defs/examples"
+        },
+        "risk": {
+          "type": "string",
+          "enum": ["READ_ONLY", "WRITE_LOW", "WRITE_HIGH"],
+          "description": "Risk level determining execution control strength (Section 6.2). READ_ONLY: direct execution. WRITE_LOW: Prepare/Confirm required. WRITE_HIGH: prohibited until independent security review and dual approval (Section 13.1)."
+        },
+        "inputSchema": {
+          "$ref": "#/$defs/inputSchema"
+        },
+        "authorization": {
+          "$ref": "#/$defs/authorization"
+        },
+        "invocation": {
+          "$ref": "#/$defs/invocation"
+        },
+        "output": {
+          "$ref": "#/$defs/output"
+        },
+        "resilience": {
+          "$ref": "#/$defs/resilience"
+        }
+      }
+    },
+
+    "examples": {
+      "type": "object",
+      "required": ["positive", "negative", "synonyms"],
+      "additionalProperties": false,
+      "properties": {
+        "positive": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "At least three natural-language positive examples (Section 6.8)."
+        },
+        "negative": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "At least two easily-confused negative examples, indicating which other capability to choose or no match (Section 6.8)."
+        },
+        "synonyms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Key noun synonyms for retrieval disambiguation (Section 6.8)."
+        }
+      }
+    },
+
+    "inputSchema": {
+      "type": "object",
+      "required": ["type", "additionalProperties"],
+      "properties": {
+        "type": {
+          "const": "object",
+          "description": "Root type must be object (Section 6.4)."
+        },
+        "additionalProperties": {
+          "const": false,
+          "description": "Must be explicitly false to prevent mass assignment (Section 6.4)."
+        }
+      },
+      "description": "JSON Schema 2020-12 for model-visible business parameters only. Must not contain orgId, tenantId, userId, roles, service addresses or interface names (Section 6.4). Only MODEL-sourced parameters appear here."
+    },
+
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "permissions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*:[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$",
+            "description": "Permission string in domain:resource:action[:scope] format (Section 10.5). Wildcards are prohibited."
+          },
+          "description": "Required permission strings. Orthogonal to risk: permissions determine 'can call', risk determines 'control strength' (Section 10.5)."
+        },
+        "principalClaims": {
+          "type": "object",
+          "patternProperties": {
+            "^/": {
+              "$ref": "#/$defs/principalClaimSpec"
+            }
+          },
+          "additionalProperties": false,
+          "description": "Required Principal claims keyed by JSON Pointer, e.g. /orgId (Section 6.2, 10.1)."
+        },
+        "maxAuthAgeSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum authentication age in seconds for write operations. Confirm must re-check auth freshness (Section 10.1)."
+        },
+        "requiredAcr": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Required Authentication Context Class Reference (Section 10.1)."
+        },
+        "requiredAmr": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Required Authentication Method References, e.g. MFA level (Section 10.1)."
+        }
+      },
+      "description": "Optional authorization requirements (Section 6.2). Shelved in first phase; all authenticated users can call published READ_ONLY capabilities (Section 10.2)."
+    },
+
+    "principalClaimSpec": {
+      "type": "object",
+      "required": ["type", "required"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "number", "boolean", "array", "object"],
+          "description": "Expected JSON type of the Principal claim."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "Whether the claim must be present on the Principal."
+        }
+      }
+    },
+
+    "fieldBinding": {
+      "type": "object",
+      "required": ["source"],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/sourceEnum"
+        },
+        "sourcePath": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "converter": {
+          "$ref": "#/$defs/converterWhitelist"
+        },
+        "value": {
+          "description": "Constant value for CONSTANT source. Type must be compatible with target field."
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "CONSTANT source requires a value.",
+          "if": {
+            "properties": {
+              "source": {
+                "const": "CONSTANT"
+              }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["value"]
+          }
+        },
+        {
+          "$comment": "SYSTEM source must reference a whitelisted platform path.",
+          "if": {
+            "properties": {
+              "source": {
+                "const": "SYSTEM"
+              }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["sourcePath"],
+            "properties": {
+              "sourcePath": {
+                "$ref": "#/$defs/systemSourcePathWhitelist"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "MODEL and PRINCIPAL sources require a sourcePath to read from.",
+          "if": {
+            "anyOf": [
+              {
+                "properties": {
+                  "source": {
+                    "const": "MODEL"
+                  }
+                },
+                "required": ["source"]
+              },
+              {
+                "properties": {
+                  "source": {
+                    "const": "PRINCIPAL"
+                  }
+                },
+                "required": ["source"]
+              }
+            ]
+          },
+          "then": {
+            "required": ["sourcePath"]
+          }
+        }
+      ],
+      "description": "A single source-to-target field binding used in composite argument objects and attachment bindings (Section 6.5). Converter operates on a single source value to a single target field; cross-field composition is not supported (Section 6.5.1)."
+    },
+
+    "argumentBinding": {
+      "type": "object",
+      "required": ["position", "name", "protocolType"],
+      "additionalProperties": false,
+      "properties": {
+        "position": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Zero-based protocol parameter position. Must be unique and continuous across arguments; must match parameterTypes (Section 6.5)."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Parameter name."
+        },
+        "protocolType": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Java fully-qualified type name for protocol invocation, e.g. java.lang.Long or com.example.order.api.OrderQueryRequest."
+        },
+        "source": {
+          "$ref": "#/$defs/sourceEnum"
+        },
+        "sourcePath": {
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "converter": {
+          "$ref": "#/$defs/converterWhitelist"
+        },
+        "value": {
+          "description": "Constant value for CONSTANT source (simple binding only)."
+        },
+        "object": {
+          "type": "object",
+          "patternProperties": {
+            "^/": {
+              "$ref": "#/$defs/fieldBinding"
+            }
+          },
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Composite binding: JSON Pointer to FieldBinding map (Section 6.5). A DTO mixing business and trusted fields must use this. Reserved fields like /class, /@type are rejected by the binder."
+        }
+      },
+      "oneOf": [
+        {
+          "title": "Simple argument binding",
+          "required": ["source"],
+          "properties": {
+            "object": false
+          },
+          "description": "Simple binding: single source to a single protocol parameter."
+        },
+        {
+          "title": "Composite argument binding",
+          "required": ["object"],
+          "properties": {
+            "source": false,
+            "sourcePath": false,
+            "converter": false,
+            "value": false
+          },
+          "description": "Composite binding: JSON Pointer map for DTO with mixed source fields."
+        }
+      ],
+      "allOf": [
+        {
+          "$comment": "Simple binding: CONSTANT source requires value.",
+          "if": {
+            "properties": {
+              "source": {
+                "const": "CONSTANT"
+              }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["value"]
+          }
+        },
+        {
+          "$comment": "Simple binding: SYSTEM source must reference a whitelisted platform path.",
+          "if": {
+            "properties": {
+              "source": {
+                "const": "SYSTEM"
+              }
+            },
+            "required": ["source"]
+          },
+          "then": {
+            "required": ["sourcePath"],
+            "properties": {
+              "sourcePath": {
+                "$ref": "#/$defs/systemSourcePathWhitelist"
+              }
+            }
+          }
+        },
+        {
+          "$comment": "Simple binding: MODEL and PRINCIPAL sources require a sourcePath.",
+          "if": {
+            "anyOf": [
+              {
+                "properties": {
+                  "source": {
+                    "const": "MODEL"
+                  }
+                },
+                "required": ["source"]
+              },
+              {
+                "properties": {
+                  "source": {
+                    "const": "PRINCIPAL"
+                  }
+                },
+                "required": ["source"]
+              }
+            ]
+          },
+          "then": {
+            "required": ["sourcePath"]
+          }
+        }
+      ],
+      "description": "Protocol argument binding — either simple (source-based) or composite (object map). Exactly one binding mode per argument (Section 6.5)."
+    },
+
+    "invocation": {
+      "type": "object",
+      "required": ["protocol", "interfaceName", "version", "method", "parameterTypes", "serialization", "arguments"],
+      "additionalProperties": false,
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "enum": ["DUBBO", "REST", "GRPC"],
+          "description": "Protocol type (Section 6.6). First phase: DUBBO only."
+        },
+        "registryRef": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Reference to an operationally pre-configured registry. Manifest must not carry usernames, passwords or arbitrary registry addresses (Section 6.6). Required when protocol is DUBBO."
+        },
+        "interfaceName": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Fully-qualified interface name. Used as protocol metadata string only; not loaded at runtime (Section 6.6)."
+        },
+        "group": {
+          "type": "string",
+          "description": "Optional service group."
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Service version for protocol routing."
+        },
+        "method": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Method name. Overloaded methods are located by the full parameter type list (Section 12.1)."
+        },
+        "parameterTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Protocol parameter type names. Must correspond one-to-one with arguments by position and protocolType (Section 6.6)."
+        },
+        "serialization": {
+          "type": "string",
+          "enum": ["hessian2", "fastjson2"],
+          "description": "Serialization from the platform whitelist. Only Apache Dubbo community built-in implementations are accepted (Section 12.3). Must match Provider prefer-serialization; negotiation result is固化d in compatibility testing."
+        },
+        "arguments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/argumentBinding"
+          },
+          "description": "Argument bindings ordered by position (Section 6.5)."
+        },
+        "attachments": {
+          "type": "object",
+          "propertyNames": {
+            "enum": [
+              "traceId",
+              "deadlineEpochMs",
+              "locale",
+              "delegatedToken",
+              "b3",
+              "x-b3-traceid",
+              "x-b3-spanid",
+              "x-b3-parentspanid",
+              "x-b3-sampled",
+              "x-b3-flags",
+              "rtid",
+              "x-idempotent-key"
+            ],
+            "description": "Attachment keys must be in the platform whitelist (Section 12.5). Unsigned tenant, user or permission attachments are not allowed."
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/fieldBinding"
+          },
+          "description": "Attachment bindings. Attachments only carry non-authorisation context (Trace ID, deadline, Locale, signed delegated token, observability keys). They never participate in authorisation (Section 12.5)."
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "DUBBO protocol requires registryRef.",
+          "if": {
+            "properties": {
+              "protocol": {
+                "const": "DUBBO"
+              }
+            },
+            "required": ["protocol"]
+          },
+          "then": {
+            "required": ["registryRef"]
+          }
+        }
+      ],
+      "description": "Protocol binding and deterministic argument mapping. Does not enter model context (Section 6.6)."
+    },
+
+    "output": {
+      "type": "object",
+      "required": ["mode", "publicSchema", "maxBytes"],
+      "additionalProperties": false,
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["ENVELOPE", "DIRECT"],
+          "description": "Response unwrapping mode (Section 6.7). ENVELOPE: declare codePath/successValues/dataPath. DIRECT: protocol return root is data, must not declare success code path."
+        },
+        "envelope": {
+          "$ref": "#/$defs/envelope"
+        },
+        "projection": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/projectionItem"
+          },
+          "description": "JSON Pointer whitelist projection from Provider data to public data. Unmapped fields do not leave the gateway (Section 6.7). If absent, extracted data must match publicSchema exactly."
+        },
+        "publicSchema": {
+          "$ref": "#/$defs/publicSchema"
+        },
+        "redactions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/redaction"
+          },
+          "description": "Field redaction rules applied after projection and before publicSchema validation (Section 6.7, 11.3)."
+        },
+        "maxBytes": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 262144,
+          "description": "Maximum response size in bytes (Section 6.7). Default 256 KiB."
+        }
+      },
+      "allOf": [
+        {
+          "$comment": "ENVELOPE mode requires envelope declaration.",
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "ENVELOPE"
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "required": ["envelope"]
+          }
+        },
+        {
+          "$comment": "DIRECT mode must not declare envelope (success code path).",
+          "if": {
+            "properties": {
+              "mode": {
+                "const": "DIRECT"
+              }
+            },
+            "required": ["mode"]
+          },
+          "then": {
+            "properties": {
+              "envelope": false
+            }
+          }
+        }
+      ],
+      "description": "Response contract: unwrapping, projection, public schema, redaction and size limit (Section 6.7). Provider return is converted to neutral JSON tree before processing; protocol metadata keys (class, @type) are recursively stripped (Section 12.1)."
+    },
+
+    "envelope": {
+      "type": "object",
+      "required": ["codePath", "successValues", "dataPath"],
+      "additionalProperties": false,
+      "properties": {
+        "codePath": {
+          "$ref": "#/$defs/jsonPointer",
+          "description": "JSON Pointer to the business success code field."
+        },
+        "successValues": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": ["string", "number", "boolean"]
+          },
+          "description": "Success code values. JSON scalars compared exactly: number 0 and string \"0\" are distinct values (Section 6.7)."
+        },
+        "dataPath": {
+          "$ref": "#/$defs/jsonPointer",
+          "description": "JSON Pointer to the data payload field."
+        },
+        "messagePath": {
+          "$ref": "#/$defs/jsonPointer",
+          "description": "Optional JSON Pointer to the message field."
+        }
+      },
+      "description": "Envelope specification for ENVELOPE mode (Section 6.7). Platform standard档: code is string \"200\", data path is /value."
+    },
+
+    "projectionItem": {
+      "type": "object",
+      "required": ["from", "to"],
+      "additionalProperties": false,
+      "properties": {
+        "from": {
+          "$ref": "#/$defs/jsonPointer",
+          "description": "Source JSON Pointer in Provider data."
+        },
+        "to": {
+          "$ref": "#/$defs/jsonPointer",
+          "description": "Target JSON Pointer in public data."
+        }
+      },
+      "description": "A single projection mapping (Section 6.7)."
+    },
+
+    "redaction": {
+      "type": "object",
+      "required": ["path", "method"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/jsonPointer",
+          "description": "JSON Pointer to the field to redact in the projected result."
+        },
+        "method": {
+          "type": "string",
+          "enum": ["DELETE", "PARTIAL_MASK", "HASH"],
+          "description": "Redaction method: DELETE removes the field, PARTIAL_MASK masks part of the value, HASH replaces with irreversible hash (Section 11.3)."
+        }
+      },
+      "description": "A single redaction rule (Section 6.7)."
+    },
+
+    "publicSchema": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "const": "object",
+          "description": "Root type must be object (Section 6.7)."
+        }
+      },
+      "description": "JSON Schema 2020-12 for the public output after projection and redaction (Section 6.7). Validated after redaction; failure blocks result return."
+    },
+
+    "resilience": {
+      "type": "object",
+      "required": ["timeoutMs", "retries", "maxConcurrent"],
+      "additionalProperties": false,
+      "properties": {
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000,
+          "description": "Provider call timeout in milliseconds (Section 6.9). Actual timeout is the minimum of Manifest value, platform cap and入口 remaining deadline (Section 12.4)."
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3,
+          "description": "Maximum retry count for transient network errors only (Section 6.9). Read-only defaults to at most 1; write operations default to 0 unless Provider-verifiable idempotency key is present (Section 12.4)."
+        },
+        "maxConcurrent": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000,
+          "description": "Maximum concurrent invocations per capability for bulkhead isolation (Section 6.9)."
+        }
+      },
+      "description": "Resilience settings: timeout, retries, concurrency and size limits (Section 6.9)."
+    }
+  }
+}

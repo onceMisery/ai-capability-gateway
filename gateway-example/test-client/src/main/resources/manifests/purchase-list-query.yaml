@@ -1,0 +1,114 @@
+# =============================================================================
+# Capability Manifest: purchase.list.query
+# =============================================================================
+# 端到端可运行示例 — 指向 gateway-test-provider 的真实 Dubbo 接口。
+#
+# 运行前提：
+#   1. Nacos 运行在 localhost:8848
+#   2. gateway-test-provider 已启动（mvn -pl gateway-test-provider spring-boot:run）
+#   3. gateway-bootstrap 已启动（mvn -pl gateway-bootstrap spring-boot:run）
+#
+# 目标接口：com.ai.gateway.testprovider.PurchaseListApi#queryList(Long, Map)
+# 响应格式：{code: "200", value: {total, pageNo, pageSize, records: [...]}, message}
+# =============================================================================
+
+apiVersion: gateway.ai/v1
+kind: Capability
+
+metadata:
+  id: purchase.list.query
+  version: 1.0.0
+  owner:
+    team: purchase-platform
+    contact: purchase-platform@example.com
+  tags: [purchase, query, list, read-only]
+
+spec:
+  displayName: 查询待采购列表
+  description: 查询当前组织下的待采购商品列表，支持分页查询。
+  examples:
+    positive:
+      - 帮我查找待采购列表前 10 个的信息
+      - 查看待采购商品
+      - 哪些商品需要采购
+    negative:
+      - 创建采购订单
+      - 删除采购单 PO202607210001
+    synonyms: [采购列表, 待采购, 采购清单, 缺货商品]
+
+  risk: READ_ONLY
+
+  inputSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      pageSize:
+        type: integer
+        minimum: 1
+        maximum: 100
+        description: 每页数量
+      pageNo:
+        type: integer
+        minimum: 1
+        description: 页码
+    required: []
+
+  invocation:
+    protocol: DUBBO
+    registryRef: nacos-main
+    interfaceName: com.ai.gateway.testprovider.PurchaseListApi
+    method: queryList
+    parameterTypes:
+      - java.lang.Long
+      - java.util.Map
+    serialization: fastjson2
+    arguments:
+      - position: 0
+        name: orgId
+        protocolType: java.lang.Long
+        source: PRINCIPAL
+        sourcePath: /orgId
+      - position: 1
+        name: request
+        protocolType: java.util.Map
+        source: MODEL
+        sourcePath: /
+
+  output:
+    mode: ENVELOPE
+    envelope:
+      codePath: /code
+      successValues: ["200"]
+      dataPath: /value
+      messagePath: /message
+    publicSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        total:
+          type: integer
+        pageNo:
+          type: integer
+        pageSize:
+          type: integer
+        records:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            properties:
+              purchaseNo:
+                type: string
+              supplierName:
+                type: string
+              amount:
+                type: number
+              status:
+                type: string
+    redactions: []
+    maxBytes: 262144
+
+  resilience:
+    timeoutMs: 3000
+    retries: 1
+    maxConcurrent: 30

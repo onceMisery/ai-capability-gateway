@@ -1,0 +1,173 @@
+server:
+  port: 8080
+  shutdown: graceful
+  max-http-request-header-size: 16KB
+
+spring:
+  application:
+    name: ai-capability-gateway
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 5000
+      idle-timeout: 300000
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+  metrics:
+    tags:
+      application: ai-capability-gateway
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.95,0.99
+
+# Gateway configuration
+gateway:
+  # Non-sensitive static configuration
+  max-request-size-bytes: 65536  # 64 KiB
+  max-response-bytes: 1048576    # 1 MiB
+  max-json-depth: 50
+  max-array-length: 1000
+  default-timeout-ms: 15000
+  
+  # Environment configuration (resolved from env)
+  environment: ${GATEWAY_ENV:development}
+
+  # Authentication/Authorization provider selection (pluggable).
+  #   stub     -> default initial-release stubs (no real verification)
+  #   sa-token -> Sa-Token JWT adapter (gateway-adapter-auth-satoken)
+  #
+  # When switching to sa-token, both the gateway and the example Demo must
+  # share the same jwt-secret-key. Set the env var GATEWAY_AUTH_JWT_SECRET
+  # on both sides to an identical value.
+  auth:
+    provider: ${GATEWAY_AUTH_PROVIDER:stub}
+    sa-token:
+      token-name: Authorization
+      login-type: ${GATEWAY_AUTH_LOGIN_TYPE:login}
+      # CRITICAL in production: provide a real random secret via
+      # GATEWAY_AUTH_JWT_SECRET. Empty value disables sa-token JWT signing.
+      jwt-secret-key: ${GATEWAY_AUTH_JWT_SECRET:}
+      access-token-timeout-seconds: 7200    # 2h
+      refresh-token-timeout-seconds: 604800 # 7d
+
+    # Console admin credentials (used when gateway.auth.provider=sa-token)
+    console-admin:
+      username: ${GATEWAY_CONSOLE_ADMIN_USERNAME:admin}
+      password: ${GATEWAY_CONSOLE_ADMIN_PASSWORD:admin}
+
+  # Distributed snapshot cache provider (pluggable, milestone M2).
+  #   stub  -> logging SnapshotNotifier + direct PostgreSQL CatalogPort
+  #   redis -> Redis pub/sub notifier + Write-Through CatalogPort decorator
+  cache:
+    provider: ${GATEWAY_CACHE_PROVIDER:stub}
+
+  # Redis (Redisson) connection — used when gateway.cache.provider=redis
+  # (and later by milestone M4 distributed locks).
+  redis:
+    address: ${GATEWAY_REDIS_ADDRESS:redis://127.0.0.1:6379}
+    password: ${GATEWAY_REDIS_PASSWORD:}
+    database: ${GATEWAY_REDIS_DATABASE:0}
+    snapshot:
+      local-ttl-seconds: 30   # Caffeine L1 TTL
+
+  # Rate limiting provider (pluggable, milestone M3).
+  #   stub     -> always-allow (no limiting)
+  #   sentinel -> Sentinel Core programmatic flow/degrade rules
+  ratelimit:
+    provider: ${GATEWAY_RATELIMIT_PROVIDER:stub}
+
+  # Sentinel hardcoded rule thresholds (used when ratelimit.provider=sentinel)
+  sentinel:
+    global-qps: 2000
+    llm-qps: 20
+    llm-max-queueing-ms: 2000
+  
+  # LLM configuration
+  llm:
+    endpoint: ${LLM_ENDPOINT:https://api.deepseek.com/chat/completions}
+    api-key: ${LLM_API_KEY:}
+    model: ${LLM_MODEL:deepseek-v4-flash}
+    temperature: 0.1
+    max-tokens: 4096
+    max-concurrent: 10
+  
+  # Registry configuration
+  registries:
+    nacos-main:
+      address: ${NACOS_ADDRESS:nacos.local.com}
+      port: ${NACOS_PORT:8848}
+  
+  # Audit batch writer
+  audit:
+    batch-size: 50
+    batch-wait-millis: 5
+    queue-capacity: 10000
+  
+  # Rate limits
+  rate-limits:
+    per-user: 100
+    per-tenant: 500
+    per-application: 1000
+    llm-concurrent: 10
+    provider-concurrent: 50
+    clarification-sessions: 100
+    prepare-operations: 50
+  
+  # Snapshot configuration
+  snapshot:
+    max-lag-millis: 30000
+    
+  # Data retention
+  retention:
+    interaction-ttl-hours: 1
+    audit-retention-days: 90
+
+# Dubbo configuration
+dubbo:
+  application:
+    name: ai-capability-gateway
+    register-mode: interface
+    serialize-check-status: STRICT
+  registry:
+    address: ${DUBBO_REGISTRY:nacos://nacos.local.com:8848}
+  protocol:
+    name: dubbo
+    port: -1
+  consumer:
+    timeout: 3000
+    retries: 1
+    check: false
+    serialization: fastjson2
+
+logging:
+  level:
+    com.ai.gateway: INFO
+    org.springframework: WARN
+    org.apache.dubbo: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] [%X{traceId}] %-5level %logger{36} - %msg%n"
