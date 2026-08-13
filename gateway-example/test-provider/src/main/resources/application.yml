@@ -1,0 +1,22 @@
+server:
+  port: 8081
+
+spring:
+  application:
+    name: gateway-test-provider
+
+dubbo:
+  application:
+    name: gateway-test-provider
+    register-mode: interface
+    serialize-check-status: STRICT
+  registry:
+    address: nacos://nacos.dev.com:8848
+  protocol:
+    name: dubbo
+    port: 20880
+    serialization: fastjson2
+    prefer-serialization: fastjson2,hessian2
+  provider:
+    timeout: 5000
+    retries: 0

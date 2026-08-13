@@ -1,0 +1,116 @@
+# =============================================================================
+# Capability Manifest: order.detail.query
+# =============================================================================
+# 端到端可运行示例 — 指向 gateway-test-provider 的真实 Dubbo 接口。
+#
+# 运行前提：
+#   1. Nacos 运行在 localhost:8848
+#   2. gateway-test-provider 已启动（mvn -pl gateway-test-provider spring-boot:run）
+#   3. gateway-bootstrap 已启动（mvn -pl gateway-bootstrap spring-boot:run）
+#
+# 目标接口：com.ai.gateway.testprovider.OrderQueryApi#query(Long, Map)
+# 响应格式：{code: "200", value: {orderNo, status, amount, customerName, orgId}, message}
+# =============================================================================
+
+apiVersion: gateway.ai/v1
+kind: Capability
+
+metadata:
+  id: order.detail.query
+  version: 1.0.0
+  owner:
+    team: order-platform
+    contact: order-platform@example.com
+  tags: [order, query, read-only]
+
+spec:
+  displayName: 查询订单详情
+  description: 根据订单号查询当前组织下的单个订单详情，包括订单状态、金额和客户信息。
+  examples:
+    positive:
+      - 查询订单 SO202607210001
+      - 看一下 SO202607210001 的当前状态
+      - 帮我找订单号为 SO202607210001 的订单
+    negative:
+      - 查询今天创建的全部订单
+      - 取消订单 SO202607210001
+    synonyms: [订单详情, 订单状态, 订单信息, 查看订单]
+
+  risk: READ_ONLY
+
+  inputSchema:
+    type: object
+    additionalProperties: false
+    properties:
+      orderNo:
+        type: string
+        pattern: "^SO[0-9]{12}$"
+        maxLength: 14
+        description: 业务订单号，格式为 SO 加 12 位数字
+    required: [orderNo]
+
+  invocation:
+    protocol: DUBBO
+    registryRef: nacos-main
+    interfaceName: com.ai.gateway.testprovider.OrderQueryApi
+    method: query
+    parameterTypes:
+      - java.lang.Long
+      - java.util.Map
+    serialization: fastjson2
+    arguments:
+      - position: 0
+        name: orgId
+        protocolType: java.lang.Long
+        source: PRINCIPAL
+        sourcePath: /orgId
+      - position: 1
+        name: request
+        protocolType: java.util.Map
+        object:
+          /orderNo:
+            source: MODEL
+            sourcePath: /orderNo
+    attachments:
+      traceId:
+        source: SYSTEM
+        sourcePath: /traceId
+
+  output:
+    mode: ENVELOPE
+    envelope:
+      codePath: /code
+      successValues: ["200"]
+      dataPath: /value
+      messagePath: /message
+    projection:
+      - from: /orderNo
+        to: /orderNo
+      - from: /status
+        to: /status
+      - from: /amount
+        to: /amount
+      - from: /customerName
+        to: /customerName
+    publicSchema:
+      type: object
+      additionalProperties: false
+      properties:
+        orderNo:
+          type: string
+        status:
+          type: string
+        amount:
+          type: number
+        customerName:
+          type: string
+      required: [orderNo, status]
+    redactions:
+      - path: /customerName
+        method: PARTIAL_MASK
+    maxBytes: 262144
+
+  resilience:
+    timeoutMs: 3000
+    retries: 1
+    maxConcurrent: 50
