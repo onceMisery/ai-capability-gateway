@@ -7,6 +7,7 @@ import com.ai.gateway.bootstrap.config.LlmAdaptersConfiguration;
 import com.ai.gateway.bootstrap.config.PostgresqlAdaptersConfiguration;
 import com.ai.gateway.bootstrap.config.RateLimitProviderConfiguration;
 import com.ai.gateway.bootstrap.config.WebAdaptersConfiguration;
+import cn.dev33.satoken.dao.SaTokenDaoRedissonJackson;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Import;
@@ -39,7 +40,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  *
  * @since 0.1.0
  */
-@SpringBootApplication
+@SpringBootApplication(exclude = SaTokenDaoRedissonJackson.class)
 @EnableScheduling
 @Import({
         // --- Pluggable provider wiring (auth / catalog / rate limiting) ---

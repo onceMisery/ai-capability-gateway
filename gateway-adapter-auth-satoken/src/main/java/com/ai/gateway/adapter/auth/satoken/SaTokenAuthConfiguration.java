@@ -5,6 +5,7 @@ import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.AclRepository;
 import com.ai.gateway.domain.port.TokenIssuerPort;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -110,7 +111,7 @@ public class SaTokenAuthConfiguration {
      * @return the token issuer
      */
     @Bean
-    public TokenIssuerPort tokenIssuerPort(SaTokenAuthenticationAdapter adapter) {
+    public TokenIssuerPort tokenIssuerPort(@Qualifier("saTokenAuthenticationAdapter") SaTokenAuthenticationAdapter adapter) {
         return adapter;
     }
 

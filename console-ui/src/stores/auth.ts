@@ -51,7 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
   const username = ref(principalSnapshot?.subject || localStorage.getItem('console_user') || '')
   const roles = ref<string[]>(principalSnapshot?.roles || safeArray('console_roles'))
   const permissions = ref<string[]>(principalSnapshot?.permissions || safeArray('console_perms'))
-  const authMode = ref(localStorage.getItem('console_auth_mode') || 'stub')
+  const authMode = ref(localStorage.getItem('console_auth_mode') || 'sa-token')
   const restored = ref(false)
   let restorePromise: Promise<boolean> | null = null
 
@@ -64,7 +64,7 @@ export const useAuthStore = defineStore('auth', () => {
     username.value = snapshot?.subject || localStorage.getItem('console_user') || ''
     roles.value = snapshot?.roles || safeArray('console_roles')
     permissions.value = snapshot?.permissions || safeArray('console_perms')
-    authMode.value = localStorage.getItem('console_auth_mode') || 'stub'
+    authMode.value = localStorage.getItem('console_auth_mode') || 'sa-token'
   }
 
   function persistPrincipal(principal: PrincipalInfo) {
@@ -99,7 +99,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function fetchCapabilities() {
     try {
       const capabilities = await gatewayApi.authCapabilities()
-      authMode.value = capabilities.authProvider || 'stub'
+      authMode.value = capabilities.authProvider || 'sa-token'
       localStorage.setItem('console_auth_mode', authMode.value)
       return capabilities
     } catch {

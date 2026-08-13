@@ -6,6 +6,8 @@ server:
 spring:
   application:
     name: ai-capability-gateway
+  profiles:
+    active: local
   datasource:
     url: ${DB_URL:jdbc:postgresql://}
     username: ${DB_USERNAME:}
@@ -65,13 +67,14 @@ gateway:
   # share the same jwt-secret-key. Set the env var GATEWAY_AUTH_JWT_SECRET
   # on both sides to an identical value.
   auth:
-    provider: ${GATEWAY_AUTH_PROVIDER:stub}
+    provider: ${GATEWAY_AUTH_PROVIDER:sa-token}
     sa-token:
       token-name: Authorization
       login-type: ${GATEWAY_AUTH_LOGIN_TYPE:login}
       # CRITICAL in production: provide a real random secret via
-      # GATEWAY_AUTH_JWT_SECRET. Empty value disables sa-token JWT signing.
-      jwt-secret-key: ${GATEWAY_AUTH_JWT_SECRET:}
+      # GATEWAY_AUTH_JWT_SECRET. A development default is provided so the
+      # gateway can boot without the env var; override it for any real deploy.
+      jwt-secret-key: ${GATEWAY_AUTH_JWT_SECRET:dev-only-insecure-secret-change-me}
       access-token-timeout-seconds: 7200    # 2h
       refresh-token-timeout-seconds: 604800 # 7d
 
@@ -84,7 +87,7 @@ gateway:
   #   stub  -> logging SnapshotNotifier + direct PostgreSQL CatalogPort
   #   redis -> Redis pub/sub notifier + Write-Through CatalogPort decorator
   cache:
-    provider: ${GATEWAY_CACHE_PROVIDER:stub}
+    provider: ${GATEWAY_CACHE_PROVIDER:redis}
 
   # Redis (Redisson) connection — used when gateway.cache.provider=redis
   # (and later by milestone M4 distributed locks).

@@ -29,6 +29,7 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 @ConditionalOnProperty(name = "gateway.auth.provider", havingValue = "sa-token")
+
 public class SaTokenRedisDaoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SaTokenRedisDaoConfiguration.class);

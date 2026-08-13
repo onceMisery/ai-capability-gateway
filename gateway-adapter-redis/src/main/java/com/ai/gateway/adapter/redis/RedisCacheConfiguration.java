@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * Conditional Spring wiring for the Redis (Redisson) infrastructure
@@ -89,11 +90,12 @@ public class RedisCacheConfiguration {
      *
      * @param postgresCatalogPort the PostgreSQL catalog port (qualified)
      * @param redissonClient the Redisson client
-     * @param objectMapper the snapshot object mapper
+     * @param redisSnapshotObjectMapper the snapshot object mapper
      * @param localTtlSeconds the Caffeine L1 TTL in seconds
      * @return the caching catalog port decorator
      */
     @Bean
+    @Primary
     public CatalogPort catalogPort(
             @Qualifier("postgresCatalogPort") CatalogPort postgresCatalogPort,
             RedissonClient redissonClient,
