@@ -149,7 +149,7 @@ const resultCodes = computed(() => [...new Set(timeSeries.value.map((point) => p
 const timeBuckets = computed(() => [...new Set(timeSeries.value.map((point) => Number(point.time)))].sort((a, b) => a - b))
 const chartSummary = computed(() => `所选范围共 ${formatNumber(totalCalls.value)} 条能力审计事件，成功事件 ${formatNumber(successCalls.value)} 条，失败事件 ${formatNumber(failureCalls.value)} 条。`)
 
-const seriesColors = ['#1769aa', '#18794e', '#b42318', '#9a5b13', '#6b4fa1', '#44566c']
+const seriesColors = ['#1a1a1a', '#4d4d4d', '#737373', '#999999', '#b3b3b3', '#cccccc']
 const chartOption = computed(() => ({
   animationDuration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220,
   aria: { enabled: true, description: chartSummary.value },
@@ -160,16 +160,16 @@ const chartOption = computed(() => ({
   xAxis: {
     type: 'category',
     data: timeBuckets.value.map((time) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit' }).format(new Date(time))),
-    axisLabel: { color: '#536171', hideOverlap: true },
-    axisLine: { lineStyle: { color: '#c7d0da' } }
+    axisLabel: { color: '#6f6f6f', hideOverlap: true },
+    axisLine: { lineStyle: { color: '#cfcfcf' } }
   },
   yAxis: {
     type: 'value',
     minInterval: 1,
     name: '次数',
-    nameTextStyle: { color: '#748295' },
-    axisLabel: { color: '#536171' },
-    splitLine: { lineStyle: { color: '#e8ecf0' } }
+    nameTextStyle: { color: '#8a8a8a' },
+    axisLabel: { color: '#6f6f6f' },
+    splitLine: { lineStyle: { color: '#e6e6e6' } }
   },
   series: resultCodes.value.map((code) => ({
     name: code,

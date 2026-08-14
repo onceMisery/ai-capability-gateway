@@ -126,7 +126,7 @@ async function submit() {
   justify-content: center;
   padding: 48px;
   color: #fff;
-  background: linear-gradient(150deg, #1e1b4b 0%, #312e81 50%, #4c1d95 100%);
+  background: linear-gradient(150deg, #262626 0%, #171717 50%, #000000 100%);
 }
 .brand-decor {
   position: absolute;
@@ -140,14 +140,14 @@ async function submit() {
   height: 360px;
   top: -120px;
   right: -90px;
-  background: radial-gradient(circle, rgba(139, 92, 246, 0.7), transparent 70%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.2), transparent 70%);
 }
 .brand-decor--2 {
   width: 300px;
   height: 300px;
   bottom: -110px;
   left: -80px;
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.6), transparent 70%);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.14), transparent 70%);
 }
 .brand-inner {
   position: relative;
@@ -167,6 +167,7 @@ async function submit() {
   font-size: 34px;
   font-weight: 800;
   letter-spacing: -0.02em;
+  color: #fff;
 }
 .brand-tagline {
   margin: 12px 0 0;

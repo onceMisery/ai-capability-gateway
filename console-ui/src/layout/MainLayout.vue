@@ -145,7 +145,7 @@ function logout() {
   flex-shrink: 0;
   padding: 18px 14px;
   color: #fff;
-  background: linear-gradient(165deg, #1e1b4b 0%, #312e81 52%, #4c1d95 100%);
+  background: linear-gradient(165deg, #262626 0%, #171717 52%, #000000 100%);
   transition: width var(--gateway-transition);
   z-index: 30;
 }
@@ -153,7 +153,7 @@ function logout() {
   content: "";
   position: absolute;
   inset: 0;
-  background: radial-gradient(420px 220px at 30% -10%, rgba(139, 92, 246, 0.45), transparent 60%);
+  background: radial-gradient(420px 220px at 30% -10%, rgba(255, 255, 255, 0.14), transparent 60%);
   pointer-events: none;
 }
 .sidebar.collapsed {
@@ -175,7 +175,7 @@ function logout() {
   border-radius: 12px;
   color: #fff;
   background: var(--gateway-gradient-brand);
-  box-shadow: 0 8px 20px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   flex-shrink: 0;
 }
 .brand-text {
@@ -222,7 +222,7 @@ function logout() {
   background: var(--gateway-gradient-brand);
   color: #fff;
   font-weight: 650;
-  box-shadow: 0 10px 24px rgba(99, 102, 241, 0.5);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
 }
 .sidebar.collapsed .el-menu-item {
   margin: 5px auto;
@@ -395,7 +395,7 @@ function logout() {
     display: block;
     position: fixed;
     inset: 0;
-    background: rgba(15, 15, 35, 0.45);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(2px);
     z-index: 25;
   }

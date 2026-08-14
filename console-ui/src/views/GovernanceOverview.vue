@@ -312,17 +312,17 @@ function openAudit(row: AuditEvent) {
 
 .queue-status--info {
   color: var(--gateway-primary);
-  background: #eaf3f9;
+  background: #e8e8e8;
 }
 
 .queue-status--warning {
   color: var(--gateway-warning);
-  background: #fff4df;
+  background: #f0f0f0;
 }
 
 .queue-status--danger {
   color: var(--gateway-danger);
-  background: #fff0ef;
+  background: #f7f7f7;
 }
 
 .queue-copy strong,

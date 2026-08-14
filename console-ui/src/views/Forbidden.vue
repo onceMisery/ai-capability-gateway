@@ -19,10 +19,10 @@ const router = useRouter()
 </script>
 
 <style scoped>
-.forbidden-page { display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: var(--gateway-bg, #f5f7fa); }
-.forbidden-content { width: min(560px, 100%); padding: 40px; text-align: center; background: var(--gateway-surface, #fff); border: 1px solid var(--gateway-border, #dfe5ec); border-radius: 8px; box-shadow: 0 12px 32px rgb(31 45 61 / 10%); }
-.eyebrow { margin: 0 0 8px; color: var(--gateway-danger, #b42318); font-size: 14px; font-weight: 700; }
-h1 { margin: 0; color: var(--gateway-text, #1f2d3d); font-size: clamp(24px, 4vw, 32px); }
-p:not(.eyebrow) { margin: 16px 0 24px; color: var(--gateway-muted, #536171); line-height: 1.6; }
+.forbidden-page { display: grid; min-height: 100dvh; place-items: center; padding: 24px; background: var(--gateway-bg, #f5f5f5); }
+.forbidden-content { width: min(560px, 100%); padding: 40px; text-align: center; background: var(--gateway-surface, #fff); border: 1px solid var(--gateway-border, #e5e5e5); border-radius: 8px; box-shadow: 0 12px 32px rgb(0 0 0 / 10%); }
+.eyebrow { margin: 0 0 8px; color: var(--gateway-danger, #111111); font-size: 14px; font-weight: 700; }
+h1 { margin: 0; color: var(--gateway-text, #1f1f1f); font-size: clamp(24px, 4vw, 32px); }
+p:not(.eyebrow) { margin: 16px 0 24px; color: var(--gateway-muted, #6f6f6f); line-height: 1.6; }
 .forbidden-actions { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
 </style>

@@ -561,7 +561,7 @@ async function openDetail(row: SnapshotSummary) {
 }
 
 .preview-section {
-  background: var(--gateway-bg-soft, #f7f8fa);
+  background: var(--gateway-bg-soft, #f5f5f5);
   border: 1px solid var(--gateway-border);
   border-radius: 6px;
   padding: 12px;
