@@ -7,9 +7,9 @@ spring:
   application:
     name: ai-capability-gateway
   datasource:
-    url: ${DB_URL:jdbc:postgresql://114.66.55.245:20035/dbx_test}
-    username: ${DB_USERNAME:dbx_test}
-    password: ${DB_PASSWORD:bxGyxEy5TJklZDcQbZ96vaYA}
+    url: ${DB_URL:}
+    username: ${DB_USERNAME:}
+    password: ${DB_PASSWORD:}
     hikari:
       maximum-pool-size: 20
       minimum-idle: 5
@@ -90,8 +90,8 @@ gateway:
   # Redis (Redisson) connection — used when gateway.cache.provider=redis
   # (and later by milestone M4 distributed locks).
   redis:
-    address: ${GATEWAY_REDIS_ADDRESS:redis://redis.dev.com:6379}
-    password: ${GATEWAY_REDIS_PASSWORD:A4l5ZNRiCE_SJC4ZG6NZAHb9HkenJT}
+    address: ${GATEWAY_REDIS_ADDRESS:}
+    password: ${GATEWAY_REDIS_PASSWORD:}
     database: ${GATEWAY_REDIS_DATABASE:0}
     snapshot:
       local-ttl-seconds: 30   # Caffeine L1 TTL
@@ -111,7 +111,7 @@ gateway:
   # LLM configuration
   llm:
     endpoint: ${LLM_ENDPOINT:https://api.deepseek.com/chat/completions}
-    api-key: ${LLM_API_KEY:sk-dbc5593ac2d0496da8c9fff76f7def5b}
+    api-key: ${LLM_API_KEY:}
     model: ${LLM_MODEL:deepseek-v4-flash}
     temperature: 0.1
     max-tokens: 4096
@@ -120,7 +120,7 @@ gateway:
   # Registry configuration
   registries:
     nacos-main:
-      address: ${NACOS_ADDRESS:nacos.dev.com}
+      address: ${NACOS_ADDRESS:}
       port: ${NACOS_PORT:8848}
   
   # Audit batch writer
@@ -155,7 +155,7 @@ dubbo:
     register-mode: interface
     serialize-check-status: STRICT
   registry:
-    address: ${DUBBO_REGISTRY:nacos://nacos.dev.com:8848}
+    address: ${DUBBO_REGISTRY:nacos://nacos.local.com:8848}
   protocol:
     name: dubbo
     port: -1
