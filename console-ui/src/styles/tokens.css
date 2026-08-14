@@ -508,6 +508,61 @@ a {
   padding-right: 6px;
 }
 
+/* 文字 / 链接按钮不应继承实心按钮的背景，否则文字会被背景盖住看不见 */
+.el-button--primary.is-text,
+.el-button--primary.is-link,
+.el-button--primary.is-text:hover,
+.el-button--primary.is-link:hover,
+.el-button--primary.is-text:active,
+.el-button--primary.is-link:active,
+.el-button--primary.is-text.is-disabled,
+.el-button--primary.is-link.is-disabled {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+  color: var(--gateway-primary);
+}
+
+.el-button--warning.is-text,
+.el-button--warning.is-link,
+.el-button--warning.is-text:hover,
+.el-button--warning.is-link:hover,
+.el-button--warning.is-text:active,
+.el-button--warning.is-link:active {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+  color: var(--gateway-warning, #e6a23c);
+}
+
+.el-button--danger.is-text,
+.el-button--danger.is-link,
+.el-button--danger.is-text:hover,
+.el-button--danger.is-link:hover,
+.el-button--danger.is-text:active,
+.el-button--danger.is-link:active {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+  color: var(--gateway-danger, #f56c6c);
+}
+
+.el-button--info.is-text,
+.el-button--info.is-link,
+.el-button--info.is-text:hover,
+.el-button--info.is-link:hover,
+.el-button--info.is-text:active,
+.el-button--info.is-link:active {
+  background: transparent;
+  box-shadow: none;
+  filter: none;
+  transform: none;
+  color: var(--gateway-text-secondary, #909399);
+}
+
 /* 输入框 / 选择 */
 .el-input__wrapper,
 .el-textarea__inner,

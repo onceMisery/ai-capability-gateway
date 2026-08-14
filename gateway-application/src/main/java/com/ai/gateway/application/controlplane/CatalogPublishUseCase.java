@@ -1,6 +1,5 @@
 package com.ai.gateway.application.controlplane;
 
-import com.ai.gateway.domain.model.CapabilityLifecycle;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
@@ -14,6 +13,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 /**
@@ -54,13 +54,13 @@ public final class CatalogPublishUseCase {
      * Constructs a new CatalogPublishUseCase with the required dependencies.
      *
      * @param manifestRepository the repository for querying manifest lifecycle states
-     * @param catalogPort the port for loading and creating catalog snapshots
-     * @param snapshotNotifier the notifier for propagating snapshot changes to instances
+     * @param catalogPort        the port for loading and creating catalog snapshots
+     * @param snapshotNotifier   the notifier for propagating snapshot changes to instances
      * @throws NullPointerException if any argument is null
      */
     public CatalogPublishUseCase(ManifestRepository manifestRepository,
-                                  CatalogPort catalogPort,
-                                  SnapshotNotifier snapshotNotifier) {
+                                 CatalogPort catalogPort,
+                                 SnapshotNotifier snapshotNotifier) {
         this.manifestRepository = java.util.Objects.requireNonNull(
                 manifestRepository, "manifestRepository must not be null");
         this.catalogPort = java.util.Objects.requireNonNull(
@@ -72,22 +72,45 @@ public final class CatalogPublishUseCase {
     /**
      * Publishes the capability catalog to the specified environment
      *
-     * <p>The publication is performed in a single logical transaction:</p>
-     * <ol>
-     * <li>Validate target versions are APPROVED.</li>
-     * <li>Generate a new monotonically increasing snapshot version.</li>
-     * <li>Freeze all active capabilities and policy references.</li>
-     * <li>Mark the new snapshot as current.</li>
-     * <li>Write publish audit and notification event.</li>
-     * </ol>
+     * <p>Publications all APPROVED capability manifests. To publish only a
+     * subset, use {@link #publish(String, List)}.</p>
      *
      * @param environment the target environment (e.g., "production")
      * @return the publish result
      * @throws NullPointerException if {@code environment} is null
      */
     public PublishResult publish(String environment) {
-        java.util.Objects.requireNonNull(environment, "environment must not be null");
-        log.info("Publishing catalog to environment: {}", environment);
+        return publish(environment, List.of());
+    }
+
+    /**
+     * Publishes selected capability manifests to the specified environment
+     *
+     * <p>The publication is performed in a single logical transaction:</p>
+     * <ol>
+     * <li>Validate target versions are APPROVED.</li>
+     * <li>Generate a new monotonically increasing snapshot version.</li>
+     * <li>Freeze the selected capabilities and policy references.</li>
+     * <li>Mark the new snapshot as current.</li>
+     * <li>Write publish audit and notification event.</li>
+     * </ol>
+     *
+     * <p>If {@code selectedCapabilities} is empty, all APPROVED manifests are
+     * published to preserve backward compatibility.</p>
+     *
+     * @param environment          the target environment (e.g., "production")
+     * @param selectedCapabilities the capabilities selected for publication
+     * @return the publish result
+     * @throws NullPointerException if {@code environment} or
+     *                              {@code selectedCapabilities} is null
+     */
+    public PublishResult publish(String environment,
+                                 List<SelectedCapability> selectedCapabilities) {
+        Objects.requireNonNull(environment, "environment must not be null");
+        Objects.requireNonNull(
+                selectedCapabilities, "selectedCapabilities must not be null");
+        log.info("Publishing catalog to environment: {}, selected={}",
+                environment, selectedCapabilities.size());
 
         // Step 1: Validate target versions are APPROVED
         List<ManifestRepository.ManifestDetail> allManifests =
@@ -98,6 +121,14 @@ public final class CatalogPublishUseCase {
             if (detail.lifecycle() == com.ai.gateway.domain.model.CapabilityLifecycle.APPROVED) {
                 approvedManifests.add(detail.manifest());
             }
+        }
+
+        if (!selectedCapabilities.isEmpty()) {
+            approvedManifests = approvedManifests.stream()
+                    .filter(m -> selectedCapabilities.stream().anyMatch(
+                            s -> s.capabilityId().equals(m.metadata().id())
+                                    && s.version().equals(m.metadata().version())))
+                    .collect(Collectors.toList());
         }
 
         if (approvedManifests.isEmpty()) {
@@ -151,16 +182,16 @@ public final class CatalogPublishUseCase {
      * Computes the content SHA-256 digest of the snapshot for integrity
      * verification.
      *
-     * @param capabilities the list of capability manifests in the snapshot
-     * @param environment the target environment
+     * @param capabilities    the list of capability manifests in the snapshot
+     * @param environment     the target environment
      * @param snapshotVersion the new snapshot version
-     * @param policyRef the policy reference
+     * @param policyRef       the policy reference
      * @return the hex-encoded SHA-256 digest
      */
     private String computeSnapshotDigest(List<CapabilityManifest> capabilities,
-                                          String environment,
-                                          long snapshotVersion,
-                                          String policyRef) {
+                                         String environment,
+                                         long snapshotVersion,
+                                         String policyRef) {
         try {
             StringBuilder content = new StringBuilder();
             content.append(snapshotVersion).append('\n');
@@ -187,11 +218,23 @@ public final class CatalogPublishUseCase {
     }
 
     /**
+     * A capability selected for publication.
+     *
+     * @param capabilityId the unique capability identifier
+     * @param version      the version to publish
+     */
+    public record SelectedCapability(
+            String capabilityId,
+            String version
+    ) {
+    }
+
+    /**
      * The result of a catalog publish operation.
      *
-     * @param success whether the publish succeeded
+     * @param success         whether the publish succeeded
      * @param snapshotVersion the new snapshot version; 0 on failure
-     * @param error the error message; null on success
+     * @param error           the error message; null on success
      */
     public record PublishResult(
             boolean success,

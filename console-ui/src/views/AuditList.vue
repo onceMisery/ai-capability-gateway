@@ -10,13 +10,13 @@
 
     <section class="surface audit-surface">
       <div class="surface-body">
-        <div class="filter-grid" role="search" aria-label="审计筛选">
+        <div class="filter-bar audit-filter-bar" role="search" aria-label="审计筛选">
           <div class="filter-field filter-field--wide"><label class="field-label">时间范围</label><el-date-picker v-model="filters.timeRange" type="datetimerange" range-separator="至" start-placeholder="开始时间" end-placeholder="结束时间" :clearable="false" style="width: 100%" /></div>
           <div class="filter-field"><label class="field-label" for="audit-request-id">Request ID</label><el-input id="audit-request-id" v-model.trim="filters.requestId" clearable placeholder="精确关联请求" /></div>
           <div class="filter-field"><label class="field-label" for="audit-capability-id">能力 ID</label><el-input id="audit-capability-id" v-model.trim="filters.capabilityId" clearable placeholder="能力标识" /></div>
           <div class="filter-field"><label class="field-label" for="audit-event-type">事件类型</label><el-select id="audit-event-type" v-model="filters.eventType" filterable allow-create clearable placeholder="全部事件" style="width: 100%"><el-option v-for="item in eventTypes" :key="item" :label="item" :value="item" /></el-select></div>
           <div class="filter-field"><label class="field-label" for="audit-result-code">结果码</label><el-select id="audit-result-code" v-model="filters.resultCode" filterable allow-create clearable placeholder="全部结果" style="width: 100%"><el-option v-for="item in resultCodes" :key="item" :label="item" :value="item" /></el-select></div>
-          <div class="filter-actions"><el-button type="primary" :icon="Search" :loading="loading" @click="search">查询</el-button><el-button text @click="resetFilters">重置</el-button></div>
+          <div class="filter-actions"><el-button type="primary" :icon="Search" :loading="loading" @click="search">查询</el-button><el-button text :disabled="!hasFilters" @click="resetFilters">重置</el-button></div>
         </div>
 
         <div v-if="errorMsg" class="inline-error" role="alert"><el-icon><Warning /></el-icon>{{ errorMsg }}<el-button text type="primary" @click="search">重试</el-button></div>
@@ -35,8 +35,8 @@
           <div v-else-if="!loading" class="empty-state"><div><strong>没有匹配的审计事件</strong><span>调整时间范围或筛选条件后重试。</span></div></div>
         </div>
 
-        <div class="pagination-row">
-          <span class="muted">共 {{ total }} 条事件</span>
+        <div class="pagination-row audit-pagination">
+          <span class="muted">共 <strong class="data-number">{{ total }}</strong> 条事件 · 当前第 <strong class="data-number">{{ page }}</strong> 页</span>
           <el-pagination v-model:current-page="page" v-model:page-size="pageSize" :total="total" :page-sizes="[20, 50, 100]" layout="sizes, prev, pager, next" @current-change="loadData" @size-change="handlePageSize" />
         </div>
       </div>
@@ -74,7 +74,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { Refresh, Search, Warning } from '@element-plus/icons-vue'
 import { gatewayApi } from '@/api/gateway'
@@ -145,6 +145,13 @@ function resultType(resultCode?: string): 'success' | 'warning' | 'danger' | 'in
   return resultCode ? 'danger' : 'info'
 }
 
+const hasFilters = computed(() =>
+  filters.eventType !== '' ||
+  filters.capabilityId !== '' ||
+  filters.requestId !== '' ||
+  filters.resultCode !== ''
+)
+
 function openDetail(row: AuditEvent) {
   selectedEvent.value = row
   detailOpen.value = true
@@ -173,37 +180,54 @@ function prettyDetails(value: string) {
   min-height: 520px;
 }
 
-.filter-grid {
-  display: grid;
-  grid-template-columns: minmax(300px, 1.35fr) repeat(4, minmax(160px, 0.65fr)) auto;
-  align-items: end;
+.audit-filter-bar {
   gap: 12px;
-  margin-bottom: 16px;
+  padding: 18px;
+  margin: calc(var(--gateway-pad) * -1) calc(var(--gateway-pad) * -1) 18px;
+  background: linear-gradient(180deg, var(--gateway-surface-subtle), transparent);
+  border-bottom: 1px solid var(--gateway-border);
 }
 
-.filter-actions {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.audit-filter-bar .filter-field {
+  min-width: 170px;
+}
+
+.audit-filter-bar .filter-field--wide {
+  flex: 2 1 320px;
+  min-width: 280px;
+}
+
+.audit-filter-bar .filter-actions {
+  margin-left: auto;
 }
 
 :deep(.el-table__row) {
   cursor: pointer;
 }
 
+:deep(.el-table__row:hover) {
+  background: var(--gateway-surface-hover);
+}
+
+.audit-pagination {
+  padding-top: 8px;
+  border-top: 1px solid var(--gateway-border);
+}
+
 @media (max-width: 1280px) {
-  .filter-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .audit-filter-bar .filter-field {
+    min-width: 200px;
   }
 }
 
 @media (max-width: 720px) {
-  .filter-grid {
-    grid-template-columns: 1fr;
+  .audit-filter-bar {
+    padding: 16px;
+    margin: -16px -16px 16px;
   }
 
-  .filter-actions,
-  .filter-actions .el-button {
+  .audit-filter-bar .filter-actions,
+  .audit-filter-bar .filter-actions .el-button {
     width: 100%;
   }
 }

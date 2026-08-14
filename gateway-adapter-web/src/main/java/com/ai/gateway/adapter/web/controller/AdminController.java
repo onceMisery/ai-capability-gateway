@@ -248,8 +248,14 @@ public class AdminController {
         String environment = request.environment() != null ? request.environment() : "production";
         log.info("Catalog publish requested: environment={}", environment);
 
+        List<CatalogPublishUseCase.SelectedCapability> selected =
+                request.capabilities() == null ? List.of() : request.capabilities().stream()
+                        .map(c -> new CatalogPublishUseCase.SelectedCapability(
+                                c.capabilityId(), c.version()))
+                        .toList();
+
         CatalogPublishUseCase.PublishResult result =
-                catalogPublishUseCase.publish(environment);
+                catalogPublishUseCase.publish(environment, selected);
 
         Map<String, Object> body = new LinkedHashMap<>();
 
@@ -427,10 +433,30 @@ public class AdminController {
      * Request body for POST /releases:publish
      *
      * @param environment the target environment
+     * @param capabilities the capabilities selected for publication; if empty,
+     *                     all APPROVED capabilities are published
      */
     public record PublishRequest(
             @Size(max = 64)
-            String environment
+            String environment,
+            @Valid
+            List<SelectedCapabilityRequest> capabilities
+    ) {
+    }
+
+    /**
+     * A capability selected for publication in the publish request.
+     *
+     * @param capabilityId the unique capability identifier
+     * @param version the version to publish
+     */
+    public record SelectedCapabilityRequest(
+            @NotBlank
+            @Size(max = 128)
+            String capabilityId,
+            @NotBlank
+            @Size(max = 64)
+            String version
     ) {
     }
 

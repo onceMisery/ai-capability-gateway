@@ -88,6 +88,7 @@ import {
   Lock, Menu, Monitor, Refresh, Setting, SwitchButton, Warning
 } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
 const router = useRouter()
@@ -107,7 +108,8 @@ const menuItems = [
 ]
 
 const currentTitle = computed(() => menuItems.find(item => route.path.startsWith(item.path))?.title || '控制台')
-const username = ref(localStorage.getItem('gateway_username') || 'admin')
+const auth = useAuthStore()
+const username = computed(() => auth.username || 'admin')
 const initial = computed(() => (username.value || 'A').charAt(0).toUpperCase())
 
 function reloadCurrent() {
@@ -119,9 +121,8 @@ function logout() {
     confirmButtonText: '退出',
     cancelButtonText: '取消',
     type: 'warning'
-  }).then(() => {
-    localStorage.removeItem('gateway_token')
-    localStorage.removeItem('gateway_username')
+  }).then(async () => {
+    await auth.logout()
     router.replace('/login')
   }).catch(() => {})
 }

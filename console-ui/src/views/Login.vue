@@ -65,11 +65,12 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Check, Lock, User, Warning } from '@element-plus/icons-vue'
 import { ElMessage, FormInstance, FormRules } from 'element-plus'
-import { gatewayApi } from '@/api/gateway'
+import { useAuthStore } from '@/stores/auth'
 import { apiErrorMessage } from '@/utils/format'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const formRef = ref<FormInstance>()
 const loading = ref(false)
@@ -84,7 +85,7 @@ const rules: FormRules = {
 const redirect = computed(() => (typeof route.query.redirect === 'string' ? route.query.redirect : '/overview'))
 
 onMounted(() => {
-  if (localStorage.getItem('gateway_token')) router.replace(redirect.value)
+  if (auth.isLoggedIn) router.replace(redirect.value)
 })
 
 async function submit() {
@@ -97,9 +98,7 @@ async function submit() {
   }
   loading.value = true
   try {
-    const response = await gatewayApi.login(form.username, form.password)
-    localStorage.setItem('gateway_token', response.token)
-    localStorage.setItem('gateway_username', form.username)
+    await auth.login(form.username, form.password)
     ElMessage.success('登录成功')
     router.replace(redirect.value)
   } catch (error) {

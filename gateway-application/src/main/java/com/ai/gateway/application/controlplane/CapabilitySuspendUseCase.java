@@ -55,14 +55,14 @@ public final class CapabilitySuspendUseCase {
      * Constructs a new CapabilitySuspendUseCase with the required dependencies.
      *
      * @param manifestRepository the repository for updating capability lifecycle
-     * @param catalogPort the port for loading the current snapshot
-     * @param snapshotNotifier the notifier for high-priority snapshot propagation
+     * @param catalogPort        the port for loading the current snapshot
+     * @param snapshotNotifier   the notifier for high-priority snapshot propagation
      * @throws NullPointerException if any argument is null
      */
     public CapabilitySuspendUseCase(ManifestRepository manifestRepository,
-                                     CatalogPort catalogPort,
-                                     SnapshotNotifier snapshotNotifier,
-                                     String environment) {
+                                    CatalogPort catalogPort,
+                                    SnapshotNotifier snapshotNotifier,
+                                    String environment) {
         this.manifestRepository = java.util.Objects.requireNonNull(
                 manifestRepository, "manifestRepository must not be null");
         this.catalogPort = java.util.Objects.requireNonNull(
@@ -81,8 +81,8 @@ public final class CapabilitySuspendUseCase {
      * plane queries the local suspension table before calling the Provider.</p>
      *
      * @param capabilityId the capability identifier to suspend
-     * @param reason the suspension reason (for audit)
-     * @param operator the operator performing the suspension
+     * @param reason       the suspension reason (for audit)
+     * @param operator     the operator performing the suspension
      * @return the suspension result
      * @throws NullPointerException if any argument is null
      */
@@ -159,14 +159,14 @@ public final class CapabilitySuspendUseCase {
     /**
      * Computes the content SHA-256 digest for the suspension snapshot.
      *
-     * @param capabilities the remaining capabilities after suspension
+     * @param capabilities    the remaining capabilities after suspension
      * @param snapshotVersion the new snapshot version
-     * @param policyRef the new policy reference
+     * @param policyRef       the new policy reference
      * @return the hex-encoded SHA-256 digest
      */
     private String computeSuspendDigest(List<CapabilityManifest> capabilities,
-                                         long snapshotVersion,
-                                         String policyRef) {
+                                        long snapshotVersion,
+                                        String policyRef) {
         try {
             StringBuilder content = new StringBuilder();
             content.append(snapshotVersion).append('\n');
@@ -194,9 +194,9 @@ public final class CapabilitySuspendUseCase {
     /**
      * The result of an emergency suspension operation.
      *
-     * @param success whether the suspension succeeded
+     * @param success         whether the suspension succeeded
      * @param snapshotVersion the new snapshot version; 0 on failure
-     * @param error the error message; null on success
+     * @param error           the error message; null on success
      */
     public record SuspendResult(
             boolean success,
