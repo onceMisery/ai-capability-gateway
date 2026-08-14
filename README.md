@@ -260,16 +260,7 @@ mvn test -pl gateway-domain
 mvn test -pl gateway-example
 ```
 
-## 独立性保证
 
-本工程是完全独立的 Maven 根工程：
-
-- 不继承任何父仓库 POM
-- 不依赖任何内部基础设施或业务 API JAR
-- Maven Enforcer 强制禁止 `com.ec:*` 依赖
-- ArchUnit 测试强制校验依赖方向
-- 可在只检出本工程的干净环境中独立构建
-- 生成 SBOM 验证无内部制品
 
 ## 许可证
 
