@@ -1,0 +1,188 @@
+package com.ai.gateway.application.runtime;
+
+import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.CatalogSnapshot;
+import com.ai.gateway.domain.model.ErrorCode;
+import com.ai.gateway.domain.model.ExecutionPlan;
+import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.RequestContext;
+import com.ai.gateway.domain.model.ResiliencePolicy;
+import com.ai.gateway.domain.model.RiskLevel;
+import com.ai.gateway.domain.model.SystemContext;
+import com.ai.gateway.domain.model.ValidationReport;
+import com.ai.gateway.domain.port.AuthenticationPort;
+import com.ai.gateway.domain.port.AuthorizationPort;
+import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.port.SchemaValidator;
+import com.ai.gateway.domain.port.TypeConverterRegistry;
+import com.ai.gateway.domain.service.ArgumentBinder;
+import com.ai.gateway.domain.service.ManifestDigest;
+import com.ai.gateway.domain.service.Sha256Digest;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
+
+/**
+ * Deterministic structured invocation entry point.
+ *
+ * <p>This is the protocol-neutral runtime boundary for callers that already
+ * selected a capability. Natural-language routing and future MCP/HTTP tool
+ * adapters must converge on the same {@link DeterministicExecutionUseCase}
+ * after this boundary has pinned the catalog snapshot, authorization decision,
+ * schema and argument binding.</p>
+ */
+public final class StructuredInvocationUseCase {
+
+    private final AuthenticationPort authenticationPort;
+    private final AuthorizationPort authorizationPort;
+    private final CatalogPort catalogPort;
+    private final SchemaValidator schemaValidator;
+    private final TypeConverterRegistry typeConverterRegistry;
+    private final DeterministicExecutionUseCase deterministicExecutionUseCase;
+    private final String environment;
+
+    public StructuredInvocationUseCase(AuthenticationPort authenticationPort,
+                                       AuthorizationPort authorizationPort,
+                                       CatalogPort catalogPort,
+                                       SchemaValidator schemaValidator,
+                                       TypeConverterRegistry typeConverterRegistry,
+                                       DeterministicExecutionUseCase deterministicExecutionUseCase,
+                                       String environment) {
+        this.authenticationPort = Objects.requireNonNull(authenticationPort);
+        this.authorizationPort = Objects.requireNonNull(authorizationPort);
+        this.catalogPort = Objects.requireNonNull(catalogPort);
+        this.schemaValidator = Objects.requireNonNull(schemaValidator);
+        this.typeConverterRegistry = Objects.requireNonNull(typeConverterRegistry);
+        this.deterministicExecutionUseCase = Objects.requireNonNull(deterministicExecutionUseCase);
+        this.environment = Objects.requireNonNull(environment);
+        if (environment.isBlank()) {
+            throw new IllegalArgumentException("environment must not be blank");
+        }
+    }
+
+    /** Invokes a read-only capability using the pinned active snapshot. */
+    public Result invoke(RequestContext requestContext, String requestId,
+                         String capabilityId, String capabilityVersion,
+                         Map<String, Object> modelArguments, String locale) {
+        Objects.requireNonNull(requestContext);
+        requireText(requestId, "requestId");
+        requireText(capabilityId, "capabilityId");
+        requireText(capabilityVersion, "capabilityVersion");
+        Objects.requireNonNull(modelArguments, "modelArguments");
+        requireText(locale, "locale");
+
+        Principal principal;
+        try {
+            principal = authenticationPort.authenticate(requestContext);
+        } catch (RuntimeException e) {
+            return error(ErrorCode.AUTHENTICATION_FAILED, "Authentication failed", 0L);
+        }
+
+        CatalogSnapshot snapshot = catalogPort.loadCurrentSnapshot(environment);
+        if (snapshot == null || snapshot.snapshotVersion() <= 0) {
+            return error(ErrorCode.CAPABILITY_UNAVAILABLE, "Capability catalog unavailable", 0L);
+        }
+        CapabilityManifest manifest = snapshot.capabilities().stream()
+                .filter(candidate -> capabilityId.equals(candidate.metadata().id())
+                        && capabilityVersion.equals(candidate.metadata().version()))
+                .findFirst().orElse(null);
+        if (manifest == null) {
+            return error(ErrorCode.NO_CAPABILITY_MATCH, "Capability not found", snapshot.snapshotVersion());
+        }
+        List<CapabilityManifest> visible = authorizationPort.filterVisibleCapabilities(
+                principal, List.of(manifest));
+        if (visible == null || visible.isEmpty()) {
+            return error(ErrorCode.PERMISSION_DENIED, "Capability is not available", snapshot.snapshotVersion());
+        }
+        if (manifest.spec().risk() != RiskLevel.READ_ONLY) {
+            return error(ErrorCode.CONFIRMATION_REQUIRED,
+                    "Write capabilities require the Prepare/Confirm protocol", snapshot.snapshotVersion());
+        }
+
+        ValidationReport report;
+        try {
+            report = schemaValidator.validate(modelArguments, manifest.spec().inputSchema());
+        } catch (RuntimeException e) {
+            return error(ErrorCode.INVALID_MODEL_OUTPUT, "Input validation unavailable", snapshot.snapshotVersion());
+        }
+        if (report == null || !report.valid()) {
+            return error(ErrorCode.ARGUMENT_VALIDATION_FAILED,
+                    "Arguments failed validation", snapshot.snapshotVersion());
+        }
+        if (!authorizationPort.authorizeExecution(
+                principal, capabilityId, capabilityVersion)) {
+            return error(ErrorCode.PERMISSION_DENIED, "Execution authorization denied",
+                    snapshot.snapshotVersion());
+        }
+
+        String manifestDigest = ManifestDigest.sha256(manifest);
+        String executionId = UUID.randomUUID().toString();
+        String principalDigest = Sha256Digest.sha256Hex(principal.subject());
+        SystemContext context = new SystemContext(
+                requestId, Instant.now().plusSeconds(15).toEpochMilli(), null, locale);
+        List<Object> boundArguments;
+        try {
+            boundArguments = new ArgumentBinder(typeConverterRegistry, schemaValidator,
+                    principal, context, manifest).bind(modelArguments);
+        } catch (RuntimeException e) {
+            return error(ErrorCode.ARGUMENT_VALIDATION_FAILED,
+                    "Arguments failed binding", snapshot.snapshotVersion());
+        }
+        ResiliencePolicy policy = manifest.spec().resilience() != null
+                ? manifest.spec().resilience() : new ResiliencePolicy(15_000, 0, 1, true);
+        ExecutionPlan plan = new ExecutionPlan(executionId, principalDigest,
+                snapshot.snapshotVersion(), capabilityId, capabilityVersion, manifestDigest,
+                modelArguments, boundArguments, "policy-" + executionId,
+                manifest.spec().risk(), policy);
+        DeterministicExecutionUseCase.ExecutionResult execution =
+                deterministicExecutionUseCase.execute(requestId, plan, principal, manifest);
+        if (execution.errorCode() != null) {
+            return new Result(Status.ERROR, execution.data(), execution.errorCode(),
+                    execution.summary(), snapshot.snapshotVersion(), capabilityId, capabilityVersion);
+        }
+        return new Result(Status.COMPLETED, execution.data(), null, execution.summary(),
+                snapshot.snapshotVersion(), capabilityId, capabilityVersion);
+    }
+
+    /** Returns only capabilities visible to the authenticated principal. */
+    public List<Tool> listTools(RequestContext requestContext) {
+        Principal principal = authenticationPort.authenticate(requestContext);
+        CatalogSnapshot snapshot = catalogPort.loadCurrentSnapshot(environment);
+        if (snapshot == null || snapshot.snapshotVersion() <= 0) {
+            return List.of();
+        }
+        List<CapabilityManifest> visible = authorizationPort.filterVisibleCapabilities(
+                principal, snapshot.capabilities());
+        if (visible == null) {
+            return List.of();
+        }
+        return visible.stream().map(manifest -> new Tool(
+                manifest.metadata().id(), manifest.metadata().version(),
+                manifest.spec().displayName(), manifest.spec().description(),
+                manifest.spec().risk().name(), snapshot.snapshotVersion())).toList();
+    }
+
+    private Result error(ErrorCode code, String message, long snapshotVersion) {
+        return new Result(Status.ERROR, null, code.name(), message, snapshotVersion, null, null);
+    }
+
+    private static void requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+    }
+
+    public enum Status { COMPLETED, ERROR }
+
+    public record Result(Status status, Map<String, Object> data, String errorCode,
+                         String message, long snapshotVersion,
+                         String capabilityId, String capabilityVersion) {
+    }
+
+    public record Tool(String capabilityId, String version, String displayName,
+                       String description, String risk, long snapshotVersion) {
+    }
+}
