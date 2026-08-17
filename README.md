@@ -1,6 +1,6 @@
 # AI Capability Gateway
 
-AI 能力网关将经过治理的微服务 API 转换为可被自然语言发现和调用的"能力"。网关在用户权限范围内检索候选能力，由大语言模型完成能力选择和业务参数提取，最终通过确定性执行链路完成认证、授权、参数注入、Schema 校验、协议调用、结果脱敏和审计。
+AI 能力网关是受治理的能力目录与可信执行平面：把微服务 API 转换为可发现、可授权、可验证、可审计的能力。结构化工具调用是稳定入口，自然语言只是可选的候选选择适配器；所有入口最终经过同一套确定性执行链路完成认证、授权、参数注入、Schema 校验、Dubbo 调用、结果脱敏和审计。
 
 ## 核心设计理念
 
@@ -15,8 +15,9 @@ AI 能力网关将经过治理的微服务 API 转换为可被自然语言发现
 |------|------|
 | Capability Manifest 管理 | 导入、校验（10 步流水线）、确认、发布、停用、回滚 |
 | 自然语言路由 | BM25 候选检索 + LLM 受限选择 + 确定性校验 |
+| 结构化工具调用 | 授权后的 `/api/v1/tools` 目录与 `:invoke` 调用（只允许只读能力） |
 | 确定性执行链路 | 参数绑定、Principal 注入、协议调用、结果脱敏 |
-| 多协议适配 | Dubbo GenericService 泛化调用（首期），REST/gRPC（演进） |
+| 协议适配 | Dubbo GenericService 泛化调用（当前唯一支持协议） |
 | 写操作二阶段协议 | Prepare/Confirm/Status 状态机，幂等键，CAS 防重 |
 | 审计与可观测性 | 三检查点持久化、Micro-batching 分组提交、Outbox 导出 |
 | 弹性控制 | 限流、熔断、舱壁隔离、超时预算逐层递减 |
@@ -44,15 +45,26 @@ mvn -f ai-capability-gateway/pom.xml dependency:tree
 
 ### 配置
 
-复制并修改 `gateway-bootstrap/src/main/resources/application.yml`：
+不要修改或提交 `application-local.yml`。开发环境请复制未跟踪的
+`gateway-bootstrap/src/main/resources/application-local.yml.example` 为
+`application-local.yml`，生产环境通过环境变量或 Secret 注入全部必需配置：
 
 ```yaml
 # 必需环境变量
 DB_URL=jdbc:postgresql://localhost:5432/ai_gateway
 DB_USERNAME=gateway
 DB_PASSWORD=your-password
+GATEWAY_ENV=development|staging|production
+GATEWAY_AUTH_PROVIDER=sa-token
+GATEWAY_CACHE_PROVIDER=redis
+GATEWAY_RATELIMIT_PROVIDER=sentinel
+GATEWAY_AUTH_JWT_SECRET=at-least-32-bytes
+GATEWAY_CONFIRMATION_SECRET=at-least-32-bytes
+GATEWAY_CONSOLE_ADMIN_USERNAME=operator
+GATEWAY_CONSOLE_ADMIN_PASSWORD=strong-password
 LLM_ENDPOINT=https://api.openai.com/v1/chat/completions
 LLM_API_KEY=sk-xxx
+LLM_MODEL=your-model
 NACOS_ADDRESS=localhost
 ```
 
@@ -63,7 +75,7 @@ NACOS_ADDRESS=localhost
 mvn -pl gateway-bootstrap spring-boot:run
 
 # 启动测试 Provider（独立终端）
-mvn -pl gateway-test-provider spring-boot:run
+mvn -pl gateway-example/test-provider spring-boot:run
 ```
 
 ### 基本使用
@@ -75,6 +87,18 @@ curl -X POST http://localhost:8080/api/v1/natural-language/queries \
   -H "Authorization: Bearer <your-token>" \
   -H "Content-Type: application/json" \
   -d '{"requestId": "req-001", "text": "查询订单 SO202607210001", "locale": "zh-CN"}'
+```
+
+**结构化工具调用：**
+
+```bash
+curl http://localhost:8080/api/v1/tools \
+  -H "Authorization: Bearer <your-token>"
+
+curl -X POST http://localhost:8080/api/v1/tools/order.detail.query:invoke \
+  -H "Authorization: Bearer <your-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"requestId":"req-002","version":"1.0.0","locale":"zh-CN","arguments":{"orderNo":"SO202607210001"}}'
 ```
 
 **响应示例（成功）：**
@@ -103,11 +127,13 @@ curl -X POST http://localhost:8080/api/v1/natural-language/queries \
 ```bash
 # 导入 Manifest
 curl -X POST http://localhost:8080/admin/v1/manifests:import \
+  -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
-  -d @gateway-example/src/main/resources/manifests/order-detail-query.yaml
+  -d @gateway-example/test-client/src/main/resources/manifests/order-detail-query.yaml
 
 # 发布快照
 curl -X POST http://localhost:8080/admin/v1/releases:publish \
+  -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
   -d '{"environment": "production"}'
 ```
@@ -130,13 +156,12 @@ ai-capability-gateway/
 ├── gateway-adapter-postgresql/  # 持久化（Flyway + JDBC + Audit Micro-batching）
 ├── gateway-adapter-llm-http/    # LLM 结构化调用
 ├── gateway-adapter-dubbo/       # Dubbo 泛化调用
-├── gateway-adapter-rest/        # REST 适配器（演进骨架）
-├── gateway-adapter-grpc/        # gRPC 适配器（演进骨架）
+├── gateway-adapter-rest/        # 已退役：未实现，不进入运行时制品
+├── gateway-adapter-grpc/        # 已退役：未实现，不进入运行时制品
 ├── gateway-bootstrap/           # Spring Boot 启动 + Bean 装配
 ├── gateway-contract-schema/     # Manifest JSON Schema (2020-12)
-├── gateway-manifest-cli/        # 离线 Manifest 生成/校验工具
-├── gateway-test-provider/       # 独立 Dubbo 测试服务
-└── gateway-example/             # 使用示例和演示
+├── gateway-manifest-cli/        # 离线 Manifest 校验工具
+└── gateway-example/             # 使用示例、测试客户端和测试 Provider
 ```
 
 ### 依赖方向
@@ -245,7 +270,7 @@ spec:
     maxConcurrent: 50
 ```
 
-完整示例参见 `gateway-example/src/main/resources/manifests/`。
+完整示例参见 `gateway-example/test-client/src/main/resources/manifests/`。
 
 ## 测试
 

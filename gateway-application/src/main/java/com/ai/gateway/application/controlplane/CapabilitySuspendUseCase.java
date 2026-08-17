@@ -6,12 +6,12 @@ import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.ManifestRepository;
 import com.ai.gateway.domain.port.SnapshotNotifier;
+import com.ai.gateway.domain.port.TransactionPort;
+import com.ai.gateway.domain.service.LifecycleStateMachine;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -50,6 +50,8 @@ public final class CapabilitySuspendUseCase {
     private final CatalogPort catalogPort;
     private final SnapshotNotifier snapshotNotifier;
     private final String environment;
+    private final LifecycleStateMachine lifecycleStateMachine;
+    private final TransactionPort transactionPort;
 
     /**
      * Constructs a new CapabilitySuspendUseCase with the required dependencies.
@@ -57,12 +59,15 @@ public final class CapabilitySuspendUseCase {
      * @param manifestRepository the repository for updating capability lifecycle
      * @param catalogPort        the port for loading the current snapshot
      * @param snapshotNotifier   the notifier for high-priority snapshot propagation
+     * @param lifecycleStateMachine the lifecycle state machine guarding manifest transitions
      * @throws NullPointerException if any argument is null
      */
     public CapabilitySuspendUseCase(ManifestRepository manifestRepository,
                                     CatalogPort catalogPort,
                                     SnapshotNotifier snapshotNotifier,
-                                    String environment) {
+                                    String environment,
+                                    LifecycleStateMachine lifecycleStateMachine,
+                                    TransactionPort transactionPort) {
         this.manifestRepository = java.util.Objects.requireNonNull(
                 manifestRepository, "manifestRepository must not be null");
         this.catalogPort = java.util.Objects.requireNonNull(
@@ -71,6 +76,10 @@ public final class CapabilitySuspendUseCase {
                 snapshotNotifier, "snapshotNotifier must not be null");
         this.environment = java.util.Objects.requireNonNull(
                 environment, "environment must not be null");
+        this.lifecycleStateMachine = java.util.Objects.requireNonNull(
+                lifecycleStateMachine, "lifecycleStateMachine must not be null");
+        this.transactionPort = java.util.Objects.requireNonNull(
+                transactionPort, "transactionPort must not be null");
     }
 
     /**
@@ -93,67 +102,66 @@ public final class CapabilitySuspendUseCase {
         log.warn("Emergency suspension requested: capabilityId={}, reason={}, operator={}",
                 capabilityId, reason, operator);
 
-        // Step 1: Find the capability in the current snapshot to determine its version
-        CatalogSnapshot currentSnapshot;
+        SuspendResult result;
         try {
-            currentSnapshot = catalogPort.loadCurrentSnapshot(environment);
+            result = transactionPort.inTransaction(() -> {
+                catalogPort.lockEnvironmentForPublication(environment);
+                CatalogSnapshot currentSnapshot = catalogPort.loadCurrentSnapshot(environment);
+                if (currentSnapshot == null) {
+                    return new SuspendResult(false, 0, "No active snapshot found");
+                }
+
+                String suspendedVersion = null;
+                List<CapabilityManifest> remainingCapabilities = new ArrayList<>();
+                for (CapabilityManifest manifest : currentSnapshot.capabilities()) {
+                    if (manifest.metadata().id().equals(capabilityId)) {
+                        suspendedVersion = manifest.metadata().version();
+                    } else {
+                        remainingCapabilities.add(manifest);
+                    }
+                }
+                if (suspendedVersion == null) {
+                    return new SuspendResult(false, 0,
+                            "Capability " + capabilityId + " not found in current snapshot");
+                }
+
+                lifecycleStateMachine.validateTransition(
+                        CapabilityLifecycle.PUBLISHED, CapabilityLifecycle.SUSPENDED);
+                manifestRepository.updateLifecycle(capabilityId, suspendedVersion,
+                        CapabilityLifecycle.SUSPENDED);
+                log.info("Capability {} version {} transitioned to SUSPENDED",
+                        capabilityId, suspendedVersion);
+
+                long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
+                List<CapabilityManifest> remainingForTransaction = List.copyOf(remainingCapabilities);
+                String policyRef = currentSnapshot.policyRef()
+                        + "-suspend-" + newSnapshotVersion;
+                String digest = computeSuspendDigest(
+                        remainingForTransaction, newSnapshotVersion, policyRef);
+                CatalogSnapshot snapshot = new CatalogSnapshot(
+                        newSnapshotVersion, environment, remainingForTransaction, policyRef, digest);
+                catalogPort.saveSnapshot(snapshot);
+                catalogPort.recordSnapshotPublication(snapshot, "MANIFEST_SUSPENDED");
+                return new SuspendResult(true, newSnapshotVersion, null);
+            });
         } catch (Exception e) {
-            log.error("Failed to load current snapshot for suspension: {}", e.getMessage());
-            return new SuspendResult(false, 0,
-                    "Failed to load current snapshot: " + e.getMessage());
+            log.error("Failed to suspend capability {}: {}", capabilityId, e.getMessage());
+            return new SuspendResult(false, 0, e.getMessage());
         }
 
-        if (currentSnapshot == null) {
-            return new SuspendResult(false, 0, "No active snapshot found");
+        if (!result.success()) {
+            return result;
         }
 
-        // Find the capability to suspend and build the new capability list
-        String suspendedVersion = null;
-        List<CapabilityManifest> remainingCapabilities = new ArrayList<>();
-        for (CapabilityManifest manifest : currentSnapshot.capabilities()) {
-            if (manifest.metadata().id().equals(capabilityId)) {
-                suspendedVersion = manifest.metadata().version();
-                // Skip this capability — it is being suspended
-            } else {
-                remainingCapabilities.add(manifest);
-            }
-        }
+        log.info("Created suspension snapshot version {}", result.snapshotVersion());
 
-        if (suspendedVersion == null) {
-            log.warn("Capability {} not found in current snapshot; may already be suspended",
-                    capabilityId);
-            return new SuspendResult(false, 0,
-                    "Capability " + capabilityId + " not found in current snapshot");
-        }
-
-        // Step 2: Transition the capability lifecycle to SUSPENDED
-        manifestRepository.updateLifecycle(capabilityId, suspendedVersion,
-                CapabilityLifecycle.SUSPENDED);
-        log.info("Capability {} version {} transitioned to SUSPENDED", capabilityId, suspendedVersion);
-
-        // Step 3: Generate a new snapshot excluding the suspended capability
-        long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
-        String policyRef = currentSnapshot.policyRef() + "-suspend-" + newSnapshotVersion;
-        String digest = computeSuspendDigest(remainingCapabilities, newSnapshotVersion, policyRef);
-
-        CatalogSnapshot suspendedSnapshot = new CatalogSnapshot(
-                newSnapshotVersion,
-                environment,
-                remainingCapabilities,
-                policyRef,
-                digest);
-        catalogPort.saveSnapshot(suspendedSnapshot);
-
-        log.info("Created suspension snapshot version {} with {} remaining capabilities",
-                newSnapshotVersion, remainingCapabilities.size());
-
-        // Step 4: Propagate via high-priority notification
-        snapshotNotifier.notifySnapshotSuspended(newSnapshotVersion);
+        // Step 4: Propagate via high-priority notification after commit
+        snapshotNotifier.notifySnapshotSuspended(result.snapshotVersion());
 
         log.warn("Emergency suspension complete: capabilityId={}, snapshotVersion={}, operator={}",
-                capabilityId, newSnapshotVersion, operator);
+                capabilityId, result.snapshotVersion(), operator);
 
-        return new SuspendResult(true, newSnapshotVersion, null);
+        return result;
     }
 
     /**
@@ -167,28 +175,7 @@ public final class CapabilitySuspendUseCase {
     private String computeSuspendDigest(List<CapabilityManifest> capabilities,
                                         long snapshotVersion,
                                         String policyRef) {
-        try {
-            StringBuilder content = new StringBuilder();
-            content.append(snapshotVersion).append('\n');
-            content.append(policyRef).append('\n');
-            for (CapabilityManifest manifest : capabilities) {
-                content.append(manifest.metadata().id())
-                        .append(':')
-                        .append(manifest.metadata().version())
-                        .append('\n');
-            }
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available", e);
-            return "DIGEST_ERROR";
-        }
+        return CatalogSnapshotDigest.sha256(snapshotVersion, environment, policyRef, capabilities);
     }
 
     /**

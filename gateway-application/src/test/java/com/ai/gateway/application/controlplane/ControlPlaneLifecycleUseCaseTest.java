@@ -7,6 +7,7 @@ import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.ManifestRepository;
 import com.ai.gateway.domain.port.SnapshotNotifier;
+import com.ai.gateway.domain.port.TransactionPort;
 import com.ai.gateway.domain.service.LifecycleStateMachine;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -60,7 +61,8 @@ class ControlPlaneLifecycleUseCaseTest {
         when(catalog.loadCurrentSnapshot("production"))
                 .thenReturn(new CatalogSnapshot(3L, "production", List.of(), "policy", "digest"));
         when(catalog.reserveSnapshotVersion()).thenReturn(41L);
-        CatalogPublishUseCase useCase = new CatalogPublishUseCase(repository, catalog, notifier);
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction());
 
         CatalogPublishUseCase.PublishResult result = useCase.publish("production");
 
@@ -84,7 +86,7 @@ class ControlPlaneLifecycleUseCaseTest {
         when(catalog.loadCurrentSnapshot("production")).thenReturn(
                 new CatalogSnapshot(5L, "production", List.of(), "policy-5", "current"));
         when(catalog.reserveSnapshotVersion()).thenReturn(73L);
-        CatalogRollbackUseCase useCase = new CatalogRollbackUseCase(catalog, notifier);
+        CatalogRollbackUseCase useCase = new CatalogRollbackUseCase(catalog, notifier, noopTransaction());
 
         CatalogRollbackUseCase.RollbackResult result = useCase.rollback(2L, "production");
 
@@ -107,7 +109,8 @@ class ControlPlaneLifecycleUseCaseTest {
                         "policy-8", "current"));
         when(catalog.reserveSnapshotVersion()).thenReturn(97L);
         CapabilitySuspendUseCase useCase = new CapabilitySuspendUseCase(
-                repository, catalog, notifier, "production");
+                repository, catalog, notifier, "production", new LifecycleStateMachine(),
+                noopTransaction());
 
         CapabilitySuspendUseCase.SuspendResult result =
                 useCase.suspend("order.create", "incident", "admin");
@@ -123,6 +126,16 @@ class ControlPlaneLifecycleUseCaseTest {
             CapabilityManifest manifest, CapabilityLifecycle lifecycle) {
         return new ManifestRepository.ManifestDetail(
                 manifest, lifecycle, "digest-" + manifest.metadata().id(), Instant.now());
+    }
+
+    /** Transaction port that executes the work inline without an outer transaction. */
+    private static TransactionPort noopTransaction() {
+        return new TransactionPort() {
+            @Override
+            public <T> T inTransaction(TransactionWork<T> work) {
+                return work.execute();
+            }
+        };
     }
 
     private static CapabilityManifest manifest(String id, String version) {

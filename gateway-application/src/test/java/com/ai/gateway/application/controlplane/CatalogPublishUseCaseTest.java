@@ -7,8 +7,11 @@ import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.ManifestRepository;
 import com.ai.gateway.domain.port.SnapshotNotifier;
+import com.ai.gateway.domain.port.TransactionPort;
+import com.ai.gateway.domain.service.LifecycleStateMachine;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,6 +20,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Answers.RETURNS_DEEP_STUBS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -30,12 +34,17 @@ class CatalogPublishUseCaseTest {
         CapabilityManifest approvedA = manifest("order.query", "1.0.0");
         CapabilityManifest approvedB = manifest("order.create", "1.0.0");
         CapabilityManifest draft = manifest("order.cancel", "1.0.0");
+        ManifestRepository.ManifestDetail approvedADetail =
+                detail(approvedA, CapabilityLifecycle.APPROVED);
+        ManifestRepository.ManifestDetail approvedBDetail =
+                detail(approvedB, CapabilityLifecycle.APPROVED);
+        ManifestRepository.ManifestDetail draftDetail =
+                detail(draft, CapabilityLifecycle.DRAFT);
         when(repository.findAllWithDetails()).thenReturn(List.of(
-                detail(approvedA, CapabilityLifecycle.APPROVED),
-                detail(approvedB, CapabilityLifecycle.APPROVED),
-                detail(draft, CapabilityLifecycle.DRAFT)));
+                approvedADetail, approvedBDetail, draftDetail));
         when(catalog.reserveSnapshotVersion()).thenReturn(42L);
-        CatalogPublishUseCase useCase = new CatalogPublishUseCase(repository, catalog, notifier);
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction());
 
         CatalogPublishUseCase.PublishResult result = useCase.publish("production");
 
@@ -50,6 +59,12 @@ class CatalogPublishUseCaseTest {
         verify(repository, never()).updateLifecycle(
                 "order.cancel", "1.0.0", CapabilityLifecycle.PUBLISHED);
         verify(notifier).notifySnapshotPublished(42L);
+
+        InOrder publicationOrder = inOrder(catalog, repository);
+        publicationOrder.verify(catalog).lockEnvironmentForPublication("production");
+        publicationOrder.verify(repository).findAllWithDetails();
+        publicationOrder.verify(catalog).reserveSnapshotVersion();
+        publicationOrder.verify(catalog).saveSnapshot(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -60,12 +75,17 @@ class CatalogPublishUseCaseTest {
         CapabilityManifest selected = manifest("order.query", "1.0.0");
         CapabilityManifest notSelected = manifest("order.create", "1.0.0");
         CapabilityManifest wrongVersion = manifest("order.query", "0.9.0");
+        ManifestRepository.ManifestDetail selectedDetail =
+                detail(selected, CapabilityLifecycle.APPROVED);
+        ManifestRepository.ManifestDetail notSelectedDetail =
+                detail(notSelected, CapabilityLifecycle.APPROVED);
+        ManifestRepository.ManifestDetail wrongVersionDetail =
+                detail(wrongVersion, CapabilityLifecycle.APPROVED);
         when(repository.findAllWithDetails()).thenReturn(List.of(
-                detail(selected, CapabilityLifecycle.APPROVED),
-                detail(notSelected, CapabilityLifecycle.APPROVED),
-                detail(wrongVersion, CapabilityLifecycle.APPROVED)));
+                selectedDetail, notSelectedDetail, wrongVersionDetail));
         when(catalog.reserveSnapshotVersion()).thenReturn(43L);
-        CatalogPublishUseCase useCase = new CatalogPublishUseCase(repository, catalog, notifier);
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction());
 
         CatalogPublishUseCase.PublishResult result = useCase.publish("production", List.of(
                 new CatalogPublishUseCase.SelectedCapability("order.query", "1.0.0")));
@@ -87,9 +107,11 @@ class CatalogPublishUseCaseTest {
         CatalogPort catalog = mock(CatalogPort.class);
         SnapshotNotifier notifier = mock(SnapshotNotifier.class);
         CapabilityManifest draft = manifest("order.query", "1.0.0");
-        when(repository.findAllWithDetails()).thenReturn(List.of(
-                detail(draft, CapabilityLifecycle.DRAFT)));
-        CatalogPublishUseCase useCase = new CatalogPublishUseCase(repository, catalog, notifier);
+        ManifestRepository.ManifestDetail draftDetail =
+                detail(draft, CapabilityLifecycle.DRAFT);
+        when(repository.findAllWithDetails()).thenReturn(List.of(draftDetail));
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction());
 
         CatalogPublishUseCase.PublishResult result = useCase.publish("production", List.of(
                 new CatalogPublishUseCase.SelectedCapability("order.query", "1.0.0")));
@@ -106,6 +128,16 @@ class CatalogPublishUseCaseTest {
             CapabilityManifest manifest, CapabilityLifecycle lifecycle) {
         return new ManifestRepository.ManifestDetail(
                 manifest, lifecycle, "digest-" + manifest.metadata().id(), Instant.now());
+    }
+
+    /** Transaction port that executes the work inline without an outer transaction. */
+    private static TransactionPort noopTransaction() {
+        return new TransactionPort() {
+            @Override
+            public <T> T inTransaction(TransactionWork<T> work) {
+                return work.execute();
+            }
+        };
     }
 
     private static CapabilityManifest manifest(String id, String version) {

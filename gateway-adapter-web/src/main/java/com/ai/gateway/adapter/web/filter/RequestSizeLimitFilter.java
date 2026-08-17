@@ -7,9 +7,10 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ai.gateway.adapter.web.GatewayWebProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -57,9 +58,12 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
      * defaults to {@value #DEFAULT_MAX_REQUEST_SIZE}
      * if not configured or non-positive
      */
-    public RequestSizeLimitFilter(
-            @Value("${gateway.max-request-size-bytes:${gateway.web.max-request-size:65536}}")
-            int maxRequestSize) {
+    @Autowired
+    public RequestSizeLimitFilter(GatewayWebProperties properties) {
+        this(properties.getMaxRequestSizeBytes());
+    }
+
+    RequestSizeLimitFilter(int maxRequestSize) {
         this.maxRequestSize = maxRequestSize > 0 ? maxRequestSize : DEFAULT_MAX_REQUEST_SIZE;
         log.info("RequestSizeLimitFilter initialized: maxRequestSize={} bytes ({} KiB)",
                 this.maxRequestSize, this.maxRequestSize / 1024);

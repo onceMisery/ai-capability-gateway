@@ -14,6 +14,7 @@ import com.ai.gateway.domain.port.ConfirmationTokenCodec;
 import com.ai.gateway.domain.port.EncryptionPort;
 import com.ai.gateway.domain.port.InvocationAdapter;
 import com.ai.gateway.domain.port.OperationRepository;
+import com.ai.gateway.domain.service.OperationStateMachine;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -61,7 +62,8 @@ class OperationConfirmUseCaseTest {
         catalogPort = mock(CatalogPort.class);
         useCase = new OperationConfirmUseCase(
                 repository, invocationAdapter, authorizationPort, auditPort, encryptionPort,
-                confirmationTokenCodec, argumentPayloadCodec, catalogPort);
+                confirmationTokenCodec, argumentPayloadCodec, catalogPort,
+                new OperationStateMachine());
 
         principal = new Principal("user-1", 7L, List.of("operator"), List.of(),
                 Instant.now(), "JWT");

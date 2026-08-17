@@ -26,10 +26,9 @@ import java.util.Objects;
  * threshold, a warning is logged on each poll cycle. The relay does not
  * discard events; it continues to retry until the downstream system recovers.</p>
  *
- * <p>The actual export logic (e.g., publishing to Kafka, sending to SIEM)
- * is delegated to {@link #export(OutboxEvent)}, which provides a default
- * logging implementation. Subclasses or configuration can override this
- * to integrate with the actual external sink.</p>
+ * <p>The actual export logic (for example, publishing to Kafka or sending to
+ * a SIEM) is delegated to a configured {@link OutboxExporterPort}. Without
+ * an exporter, the relay deliberately leaves events pending.</p>
  *
  * @since 0.1.0
  */

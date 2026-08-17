@@ -2,12 +2,14 @@ package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.SecretManager;
+import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.actuate.health.Health;
 import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.boot.actuate.health.Status;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -46,7 +48,7 @@ public class GatewayHealthIndicator implements HealthIndicator {
     private final CatalogPort catalogPort;
     private final String environment;
     private final SecretManager secretManager;
-    private volatile boolean adaptersInitialized;
+    private final InMemoryCatalogManager catalogManager;
 
     /**
      * Constructs a new GatewayHealthIndicator.
@@ -54,16 +56,25 @@ public class GatewayHealthIndicator implements HealthIndicator {
      * @param dataSource the JDBC data source for database connectivity checks
      * @param catalogPort the catalog port for snapshot checks
      * @param secretManager the secret manager for secret presence checks
+     * @param environment the active gateway environment (e.g. "production")
      */
+    @Autowired
     public GatewayHealthIndicator(DataSource dataSource,
                                   CatalogPort catalogPort,
-                                  SecretManager secretManager) {
+                                  SecretManager secretManager,
+                                  GatewayProperties properties,
+                                  InMemoryCatalogManager catalogManager) {
         this.dataSource = dataSource;
         this.catalogPort = catalogPort;
-        this.environment = "production";
         this.secretManager = secretManager;
-        this.adaptersInitialized = true;
-        log.info("GatewayHealthIndicator initialized");
+        this.environment = properties.getEnvironment();
+        this.catalogManager = catalogManager;
+        log.info("GatewayHealthIndicator initialized: environment={}", environment);
+    }
+
+    GatewayHealthIndicator(DataSource dataSource, CatalogPort catalogPort,
+                           SecretManager secretManager, GatewayProperties properties) {
+        this(dataSource, catalogPort, secretManager, properties, null);
     }
 
     @Override
@@ -136,12 +147,15 @@ public class GatewayHealthIndicator implements HealthIndicator {
     private boolean checkSnapshot(Map<String, Object> details) {
         try {
             var snapshot = catalogPort.loadCurrentSnapshot(environment);
-            if (snapshot != null) {
+            var activated = catalogManager == null ? snapshot : catalogManager.getCurrentSnapshot();
+            if (snapshot != null && snapshot.snapshotVersion() > 0
+                    && activated != null && activated.snapshotVersion() == snapshot.snapshotVersion()
+                    && environment.equals(activated.environment())) {
                 details.put("snapshot", "UP (version=" + snapshot.snapshotVersion() + ")");
                 return true;
             } else {
-                details.put("snapshot", "DOWN (null snapshot)");
-                log.warn("Health check: catalog snapshot is null");
+                details.put("snapshot", "DOWN (no active snapshot)");
+                log.warn("Health check: no active catalog snapshot for environment {}", environment);
                 return false;
             }
         } catch (Exception e) {
@@ -186,14 +200,12 @@ public class GatewayHealthIndicator implements HealthIndicator {
     private boolean checkAdapters(Map<String, Object> details) {
         boolean catalogOk = catalogPort != null;
         boolean secretOk = secretManager != null;
-        boolean initOk = adaptersInitialized;
 
         Map<String, String> adapterStatus = new LinkedHashMap<>();
         adapterStatus.put("catalogPort", catalogOk ? "initialized" : "null");
         adapterStatus.put("secretManager", secretOk ? "initialized" : "null");
-        adapterStatus.put("initialized", initOk ? "true" : "false");
 
         details.put("adapters", adapterStatus);
-        return catalogOk && secretOk && initOk;
+        return catalogOk && secretOk;
     }
 }

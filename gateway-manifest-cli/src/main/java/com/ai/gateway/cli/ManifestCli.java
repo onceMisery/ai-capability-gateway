@@ -14,8 +14,6 @@ import java.util.Map;
  *
  * <p>Supported commands:</p>
  * <ul>
- * <li>{@code generate-dubbo --api-jar <path> --interface <name> --method <name> --output <file>}
- * &mdash; generates a Manifest from a Dubbo API JAR.</li>
  * <li>{@code validate --manifest <file>} &mdash; validates a Manifest against the
  * Capability Manifest JSON Schema.</li>
  * <li>{@code help} &mdash; prints usage.</li>
@@ -60,8 +58,6 @@ public final class ManifestCli {
         Map<String, String> options = parseOptions(args);
 
         switch (command) {
-            case "generate-dubbo":
-                return generateDubbo(options);
             case "validate":
                 return validate(options);
             case "help":
@@ -74,29 +70,6 @@ public final class ManifestCli {
                 printUsage();
                 return 1;
         }
-    }
-
-    private static int generateDubbo(Map<String, String> options) {
-        String apiJar = options.get("api-jar");
-        String interfaceName = options.get("interface");
-        String method = options.get("method");
-        String output = options.get("output");
-
-        if (isBlank(apiJar) || isBlank(interfaceName) || isBlank(method) || isBlank(output)) {
-            System.err.println("generate-dubbo requires: --api-jar <path> --interface <name> "
-                    + "--method <name> --output <file>");
-            return 1;
-        }
-
-        // Placeholder: real implementation parses .class files from the API JAR via ASM and
-        // projects a Manifest. ASM-based class file parsing not yet implemented
-        //.
-        System.out.println("ASM-based class file parsing not yet implemented");
-        System.out.println(" api-jar = " + apiJar);
-        System.out.println(" interface = " + interfaceName);
-        System.out.println(" method = " + method);
-        System.out.println(" output = " + output);
-        return 0;
     }
 
     private static int validate(Map<String, String> options) {
@@ -180,10 +153,6 @@ public final class ManifestCli {
         System.out.println("Gateway Manifest CLI");
         System.out.println();
         System.out.println("Usage:");
-        System.out.println(" manifest-cli generate-dubbo --api-jar <path> --interface <name> "
-                + "--method <name> --output <file>");
-        System.out.println(" Generate a Capability Manifest from a Dubbo API JAR.");
-        System.out.println();
         System.out.println(" manifest-cli validate --manifest <file>");
         System.out.println(" Validate a Manifest (.json/.yaml/.yml) against the Capability "
                 + "Manifest JSON Schema.");

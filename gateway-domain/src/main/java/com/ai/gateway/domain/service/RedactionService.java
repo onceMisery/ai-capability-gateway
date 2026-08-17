@@ -3,9 +3,6 @@ package com.ai.gateway.domain.service;
 import com.ai.gateway.domain.model.RedactionMethod;
 import com.ai.gateway.domain.model.RedactionRule;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 
@@ -35,7 +32,7 @@ import java.util.Map;
  * within the data tree. Navigation is recursive for nested objects.</p>
  *
  * <p>This class is thread-safe: it holds no mutable state and each call
- * creates its own {@link MessageDigest} instance for HASH operations.</p>
+ * delegates HASH operations to {@link Sha256Digest}.</p>
  *
  * @see RedactionRule
  * @see RedactionMethod
@@ -224,29 +221,7 @@ public final class RedactionService {
         if (value == null) {
             return null;
         }
-        String str = value.toString();
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(str.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 algorithm not available", e);
-        }
-    }
-
-    /**
-     * Converts a byte array to a lowercase hex string.
-     *
-     * @param bytes the bytes to convert
-     * @return the hex string
-     */
-    private String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-            sb.append(Character.forDigit(b & 0xF, 16));
-        }
-        return sb.toString();
+        return Sha256Digest.sha256Hex(value.toString());
     }
 
     /**

@@ -1,6 +1,7 @@
 package com.ai.gateway.adapter.auth.satoken;
 
 import com.ai.gateway.domain.model.AdminAction;
+import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityAclEntry;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.Principal;
@@ -9,30 +10,26 @@ import com.ai.gateway.domain.port.AuthorizationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Sa-Token reference implementation of {@link AuthorizationPort} enforcing
- * capability-level (capabilityId) authorization.
+ * capability-level (capabilityId + version) authorization.
  *
  * <p>The core decision matches the caller's roles against a
- * capability → allowed-roles access-control list (ACL). Per the
- * tech-selection decision, authorization granularity is the capability id;
- * the ACL is intended to be backed by a PostgreSQL table maintained through
- * the admin API. This reference implementation keeps the ACL in memory and
- * seeds it programmatically; a production adapter would replace
- * {@link #loadAcl()} with a database query.</p>
+ * capability → allowed-roles access-control list (ACL). Authorization is
+ * keyed by capability id and version. Production wiring loads ACL entries
+ * from PostgreSQL through {@link AclRepository}; the map is only a process
+ * cache.</p>
  *
- * <p>Initial-release degradation: when {@code allowAllIfAclEmpty} is
- * {@code true} (the default) and no ACL entries are configured, all
- * authenticated callers are authorized — mirroring the spec's initial
- * release rule that authorization is optional. When ACL entries exist, the
- * decision is default-deny.</p>
+ * <p>Empty ACL behavior is explicit. Production wiring uses default-deny;
+ * development-only callers may opt into allow-all with the boolean
+ * constructor argument. ACL loading failures always deny.</p>
  *
  * @since 0.1.0
  */
@@ -56,15 +53,15 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     /**
      * Capability ACL: capabilityId → set of roles allowed to execute it.
      */
-    private final Map<CapabilityKey, AclPolicy> capabilityAcl = new ConcurrentHashMap<>();
+    private volatile Map<CapabilityKey, AclPolicy> capabilityAcl = Map.of();
     private volatile boolean aclLoadHealthy = true;
 
     /**
-     * Constructs an adapter with the initial-release default policy
-     * (allow all authenticated callers when the ACL is empty).
+     * Constructs an adapter with the secure default policy (deny when the ACL
+     * is empty).
      */
     public SaTokenAuthorizationAdapter() {
-        this(true);
+        this(false);
     }
 
     /**
@@ -112,12 +109,13 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(capabilityId, "capabilityId must not be null");
 
-        // Wildcard permission short-circuits the ACL check.
-        if (principal.permissions().contains(PERMISSION_WILDCARD)) {
-            return true;
-        }
         if (!aclLoadHealthy) {
             return false;
+        }
+        // Wildcard is only meaningful after the ACL source has loaded
+        // successfully. Infrastructure failure must remain fail-closed.
+        if (principal.permissions().contains(PERMISSION_WILDCARD)) {
+            return true;
         }
         AclPolicy policy = capabilityAcl.get(new CapabilityKey(capabilityId, version));
         if (policy == null) {
@@ -148,45 +146,58 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
                 || principal.permissions().contains(PERMISSION_WILDCARD);
     }
 
+    @Override
+    public AclPolicyStatus aclPolicyStatus() {
+        return new AclPolicyStatus(
+                aclLoadHealthy,
+                capabilityAcl.size(),
+                allowAllIfAclEmpty ? "ALLOW" : "DENY");
+    }
+
     /**
      * Registers an ACL entry granting the given roles access to a capability.
      *
      * @param capabilityId the capability identifier
      * @param roles the roles allowed to execute the capability
      */
-    public void grant(String capabilityId, Set<String> roles) {
+    public synchronized void grant(String capabilityId, Set<String> roles) {
         Objects.requireNonNull(capabilityId, "capabilityId must not be null");
         Objects.requireNonNull(roles, "roles must not be null");
-        capabilityAcl.put(new CapabilityKey(capabilityId, "*"),
+        Map<CapabilityKey, AclPolicy> updated = new HashMap<>(capabilityAcl);
+        updated.put(new CapabilityKey(capabilityId, "*"),
                 new AclPolicy(Set.copyOf(roles), Set.of()));
+        capabilityAcl = Map.copyOf(updated);
     }
 
-    public void grant(String capabilityId, String version, Set<String> roles,
+    public synchronized void grant(String capabilityId, String version, Set<String> roles,
                       Set<String> requiredPermissions) {
-        capabilityAcl.put(new CapabilityKey(capabilityId, version),
+        Map<CapabilityKey, AclPolicy> updated = new HashMap<>(capabilityAcl);
+        updated.put(new CapabilityKey(capabilityId, version),
                 new AclPolicy(Set.copyOf(roles), Set.copyOf(requiredPermissions)));
+        capabilityAcl = Map.copyOf(updated);
     }
 
     /**
      * Loads the capability ACL.
      *
      * <p>If an {@link AclRepository} is configured, loads entries from
-     * PostgreSQL. Otherwise, leaves the ACL empty, which under the
-     * default {@code allowAllIfAclEmpty} policy authorizes all authenticated
-     * callers (initial-release behavior).</p>
+     * PostgreSQL. Without a repository the ACL remains empty and the
+     * explicit empty-ACL policy decides the result; loading failures deny.</p>
      */
-    protected void loadAcl() {
+    protected synchronized void loadAcl() {
         if (aclRepository == null) {
             return;
         }
         try {
             List<CapabilityAclEntry> entries = aclRepository.findAllAclEntries();
+            Map<CapabilityKey, AclPolicy> loaded = new HashMap<>();
             for (CapabilityAclEntry entry : entries) {
-                capabilityAcl.put(
+                loaded.put(
                         new CapabilityKey(entry.capabilityId(), entry.capabilityVersion()),
                         new AclPolicy(Set.copyOf(entry.allowedRoles()),
                                 Set.copyOf(entry.requiredPermissions())));
             }
+            capabilityAcl = Map.copyOf(loaded);
             aclLoadHealthy = true;
             log.info("Loaded {} ACL entries from database", entries.size());
         } catch (Exception e) {
@@ -202,7 +213,6 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
      * authorization decisions reflect the latest configuration.</p>
      */
     public void refreshAcl() {
-        capabilityAcl.clear();
         loadAcl();
         log.info("ACL cache refreshed, {} entries loaded", capabilityAcl.size());
     }

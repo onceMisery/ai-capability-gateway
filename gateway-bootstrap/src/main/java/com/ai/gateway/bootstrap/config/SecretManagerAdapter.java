@@ -3,7 +3,6 @@ package com.ai.gateway.bootstrap.config;
 import com.ai.gateway.domain.port.SecretManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
@@ -50,8 +49,8 @@ public class SecretManagerAdapter implements SecretManager {
      * from {@code gateway.secret-file-path}; may be
      * empty or {@code null} if no file is configured
      */
-    public SecretManagerAdapter(
-            @Value("${gateway.secret-file-path:}") String secretFilePath) {
+    public SecretManagerAdapter(GatewayProperties properties) {
+        String secretFilePath = properties.getSecretFilePath();
         this.secretFilePath = (secretFilePath != null && !secretFilePath.isBlank())
                 ? Paths.get(secretFilePath) : null;
         this.fileSecrets = loadSecretFile();

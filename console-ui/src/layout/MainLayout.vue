@@ -104,7 +104,7 @@ const menuItems = [
   { path: '/monitor', title: '运行监控', icon: Monitor },
   { path: '/audit', title: '审计追踪', icon: Warning },
   { path: '/acl', title: '访问控制', icon: Lock },
-  { path: '/config', title: '系统配置', icon: Setting }
+  { path: '/system', title: '系统配置', icon: Setting }
 ]
 
 const currentTitle = computed(() => menuItems.find(item => route.path.startsWith(item.path))?.title || '控制台')

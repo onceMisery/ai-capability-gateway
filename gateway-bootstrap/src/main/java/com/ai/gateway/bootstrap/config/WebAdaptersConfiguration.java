@@ -1,6 +1,7 @@
 package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.adapter.web.controller.AclAdminController;
+import com.ai.gateway.adapter.web.GatewayWebProperties;
 import com.ai.gateway.adapter.web.controller.AdminController;
 import com.ai.gateway.adapter.web.controller.CatalogQueryController;
 import com.ai.gateway.adapter.web.controller.ConsoleAuthController;
@@ -16,6 +17,7 @@ import com.ai.gateway.adapter.web.handler.GlobalExceptionHandler;
 import com.ai.gateway.adapter.web.support.RequestContextFactory;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 
 /**
  * Web 适配器装配（gateway-adapter-web）。
@@ -27,6 +29,7 @@ import org.springframework.context.annotation.Import;
  * @since 0.1.0
  */
 @Configuration
+@EnableConfigurationProperties(GatewayWebProperties.class)
 @Import({
         RequestContextFactory.class,
         AdminController.class,

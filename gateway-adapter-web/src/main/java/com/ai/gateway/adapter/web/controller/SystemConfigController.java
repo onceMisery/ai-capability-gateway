@@ -8,11 +8,11 @@ import com.ai.gateway.domain.model.RateLimitRule;
 import com.ai.gateway.domain.port.RateLimitAdminPort;
 import com.ai.gateway.adapter.web.support.ApiResponse;
 import com.ai.gateway.adapter.web.support.SecurityHelper;
+import com.ai.gateway.adapter.web.GatewayWebProperties;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -66,12 +66,12 @@ public class SystemConfigController {
                                    RateLimitAdminPort rateLimitAdminPort,
                                    AuthenticationPort authenticationPort,
                                    AuthorizationPort authorizationPort,
-                                   @Value("${gateway.ratelimit.provider:stub}") String ratelimitProvider) {
+                                   GatewayWebProperties properties) {
         this.configQueryUseCase = Objects.requireNonNull(configQueryUseCase);
         this.rateLimitAdminPort = Objects.requireNonNull(rateLimitAdminPort);
         this.authenticationPort = Objects.requireNonNull(authenticationPort);
         this.authorizationPort = Objects.requireNonNull(authorizationPort);
-        this.ratelimitProvider = Objects.requireNonNull(ratelimitProvider);
+        this.ratelimitProvider = Objects.requireNonNull(properties).getRatelimit().getProvider();
     }
 
     /**

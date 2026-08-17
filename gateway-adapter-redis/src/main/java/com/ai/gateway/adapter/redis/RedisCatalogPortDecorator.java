@@ -12,6 +12,8 @@ import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.util.List;
@@ -24,9 +26,8 @@ import java.util.Optional;
  * <p>Implements the two-level cache described in the tech-selection doc §4:
  * a local Caffeine L1 (short TTL) in front of a Redis L2, with PostgreSQL as
  * the source of truth. Reads of the current snapshot consult L1, then L2,
- * then fall back to PostgreSQL and back-fill the caches. Writes are
- * Write-Through: the snapshot is persisted to PostgreSQL and then written to
- * Redis.</p>
+ * then fall back to PostgreSQL and back-fill the caches. Snapshot writes do
+ * not touch Redis until the publication transaction has committed.</p>
  *
  * <p>Historical snapshot reads and capability lookups are delegated straight
  * to PostgreSQL — only the hot {@code loadCurrentSnapshot} path is cached.
@@ -66,6 +67,11 @@ public class RedisCatalogPortDecorator implements CatalogPort {
                 .expireAfterWrite(Duration.ofSeconds(localTtlSeconds))
                 .maximumSize(64)
                 .build();
+    }
+
+    @Override
+    public void lockEnvironmentForPublication(String environment) {
+        delegate.lockEnvironmentForPublication(environment);
     }
 
     @Override
@@ -127,17 +133,10 @@ public class RedisCatalogPortDecorator implements CatalogPort {
     @Override
     public void saveSnapshot(CatalogSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");
-        // Write-Through: persist to PostgreSQL first, then update Redis.
+        // Do not write Redis before the surrounding database transaction commits.
+        // The publication event schedules the after-commit cache update.
         delegate.saveSnapshot(snapshot);
-        try {
-            RBucket<String> bucket =
-                    redissonClient.getBucket(RedisKeys.snapshotLatest(snapshot.environment()));
-            bucket.set(serialize(snapshot));
-            localCache.put(snapshot.environment(), snapshot);
-        } catch (Exception e) {
-            log.warn("Redis snapshot cache write failed (PostgreSQL already updated): {}",
-                    e.getMessage());
-        }
+        localCache.invalidate(snapshot.environment());
     }
 
     /**
@@ -160,6 +159,33 @@ public class RedisCatalogPortDecorator implements CatalogPort {
     @Override
     public long reserveSnapshotVersion() {
         return delegate.reserveSnapshotVersion();
+    }
+
+    @Override
+    public void recordSnapshotPublication(CatalogSnapshot snapshot, String eventType) {
+        delegate.recordSnapshotPublication(snapshot, eventType);
+        Runnable cacheUpdate = () -> cachePublishedSnapshot(snapshot);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    cacheUpdate.run();
+                }
+            });
+        } else {
+            cacheUpdate.run();
+        }
+    }
+
+    private void cachePublishedSnapshot(CatalogSnapshot snapshot) {
+        try {
+            RBucket<String> bucket =
+                    redissonClient.getBucket(RedisKeys.snapshotLatest(snapshot.environment()));
+            bucket.set(serialize(snapshot));
+            localCache.put(snapshot.environment(), snapshot);
+        } catch (Exception e) {
+            log.warn("Redis snapshot cache update after database commit failed: {}", e.getMessage());
+        }
     }
 
     private String serialize(CatalogSnapshot snapshot) {

@@ -4,7 +4,6 @@ import com.ai.gateway.application.console.ConsoleAuthUseCase;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -26,7 +25,7 @@ class ConsoleAuthControllerTest {
     @Test
     void stubLoginReturnsManagedAccessAndRefreshTokens() throws Exception {
         ConsoleAuthUseCase useCase = mock(ConsoleAuthUseCase.class);
-        when(useCase.login("alice")).thenReturn(Map.of(
+        when(useCase.login("alice", "anything")).thenReturn(Map.of(
                 "status", "OK",
                 "data", Map.of("token", "access", "refreshToken", "refresh")));
         MockMvc mvc = mvc(useCase, mock(AuthenticationPort.class), "stub");
@@ -38,12 +37,14 @@ class ConsoleAuthControllerTest {
                 .andExpect(jsonPath("$.data.token").value("access"))
                 .andExpect(jsonPath("$.data.refreshToken").value("refresh"));
 
-        verify(useCase).login("alice");
+        verify(useCase).login("alice", "anything");
     }
 
     @Test
     void saTokenInvalidCredentialsAreRejectedAndAudited() throws Exception {
         ConsoleAuthUseCase useCase = mock(ConsoleAuthUseCase.class);
+        when(useCase.login("admin", "wrong"))
+                .thenThrow(new SecurityException("invalid credentials"));
         MockMvc mvc = mvc(useCase, mock(AuthenticationPort.class), "sa-token");
 
         mvc.perform(post("/admin/v1/console/auth/login")
@@ -52,8 +53,7 @@ class ConsoleAuthControllerTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.error.errorCode").value("AUTHENTICATION_FAILED"));
 
-        verify(useCase).recordLoginFailure("admin");
-        verify(useCase, never()).login(any());
+        verify(useCase).login("admin", "wrong");
     }
 
     @Test
@@ -89,10 +89,7 @@ class ConsoleAuthControllerTest {
     private static MockMvc mvc(ConsoleAuthUseCase useCase,
                                AuthenticationPort authenticationPort,
                                String authMode) {
-        ConsoleAuthController controller = new ConsoleAuthController(
-                useCase, authenticationPort, authMode);
-        ReflectionTestUtils.setField(controller, "consoleAdminUsername", "admin");
-        ReflectionTestUtils.setField(controller, "consoleAdminPassword", "correct");
+        ConsoleAuthController controller = new ConsoleAuthController(useCase, authenticationPort);
         return MockMvcBuilders.standaloneSetup(controller).build();
     }
 }

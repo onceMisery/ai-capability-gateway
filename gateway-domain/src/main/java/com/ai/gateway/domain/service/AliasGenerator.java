@@ -1,8 +1,5 @@
 package com.ai.gateway.domain.service;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Set;
 
 /**
@@ -30,9 +27,9 @@ import java.util.Set;
  * <p>The model only receives the alias, the public description, and the
  * public input Schema — never the protocol Binding or real capabilityId.</p>
  *
- * <p>This class is thread-safe: each call creates its own
- * {@link MessageDigest} instance (which is not thread-safe) and performs
- * no shared mutable state.</p>
+ * <p>This class is thread-safe: it delegates digest computation to
+ * {@link Sha256Digest} (which creates a fresh digest per call) and
+ * performs no shared mutable state.</p>
  *
  * @since 0.1.0
  */
@@ -138,20 +135,15 @@ public final class AliasGenerator {
     /**
      * Computes the SHA-256 digest of the given input string.
      *
-     * <p>A new {@link MessageDigest} instance is created per call to ensure
-     * thread safety, since {@code MessageDigest} is not thread-safe.</p>
+     * <p>Delegates to {@link Sha256Digest}, which creates a new
+     * {@code MessageDigest} instance per call to ensure thread safety.</p>
      *
      * @param input the input string
      * @return the 32-byte SHA-256 digest
-     * @throws java.lang.InternalError if SHA-256 is not available (should never happen)
+     * @throws IllegalStateException if SHA-256 is not available (should never happen)
      */
     private byte[] sha256(String input) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            return md.digest(input.getBytes(StandardCharsets.UTF_8));
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 algorithm not available", e);
-        }
+        return Sha256Digest.sha256(input);
     }
 
     /**

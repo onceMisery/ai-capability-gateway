@@ -117,7 +117,7 @@ public class SaTokenAuthConfiguration {
 
     /**
      * The Sa-Token {@link AuthorizationPort} implementation (capability-level
-     * ACL, initial-release degradation enabled).
+     * ACL, fail-closed when ACL data is empty or unavailable).
      *
      * <p>Injects the {@link AclRepository} to load capability ACL entries
      * from PostgreSQL on startup and support runtime refresh.</p>
@@ -127,6 +127,6 @@ public class SaTokenAuthConfiguration {
      */
     @Bean
     public AuthorizationPort authorizationPort(AclRepository aclRepository) {
-        return new SaTokenAuthorizationAdapter(true, aclRepository);
+        return new SaTokenAuthorizationAdapter(false, aclRepository);
     }
 }

@@ -13,9 +13,12 @@ import java.util.Set;
  * <p>The canonical state graph is:</p>
  * <pre>
  * DRAFT -&gt; VALIDATED -&gt; APPROVED -&gt; PUBLISHED -&gt; SUSPENDED -&gt; RETIRED
- * | | |
- * +--------&gt; REJECTED &lt--+
+ *                 |                              |
+ *                 +--&gt; REJECTED                  +--&gt; VALIDATED
  * </pre>
+ * <p>Precisely: DRAFT may only validate; only VALIDATED may be rejected;
+ * REJECTED is terminal; and SUSPENDED must return through VALIDATED rather
+ * than directly to PUBLISHED.</p>
  *
  * <p>Only {@link CapabilityLifecycle#PUBLISHED} capabilities may enter the
  * candidate set for natural-language routing (Section 9). Write operations
@@ -23,10 +26,9 @@ import java.util.Set;
  * at confirm time.</p>
  *
  * <p>Restoration of a {@code SUSPENDED} capability requires re-validation and
- * a new snapshot; it must not be done in-place on the original snapshot
- *. The transition from {@code SUSPENDED} back to
- * {@code PUBLISHED} is therefore allowed only after re-validation has
- * succeeded — the caller is responsible for ensuring that precondition.</p>
+ * a new approval and snapshot; it must not be done in-place on the original
+ * snapshot. The only restoration path starts with
+ * {@code SUSPENDED -> VALIDATED}.</p>
  *
  * <p>{@code RETIRED} and {@code REJECTED} are terminal states: no further
  * transitions are permitted.</p>
@@ -46,24 +48,18 @@ public final class LifecycleStateMachine {
      * have no allowed outgoing transitions.</p>
      */
     private static final Map<CapabilityLifecycle, Set<CapabilityLifecycle>> TRANSITIONS = Map.of(
-            CapabilityLifecycle.DRAFT, Set.of(
-                    CapabilityLifecycle.VALIDATED,
-                    CapabilityLifecycle.REJECTED
-            ),
+            CapabilityLifecycle.DRAFT, Set.of(CapabilityLifecycle.VALIDATED),
             CapabilityLifecycle.VALIDATED, Set.of(
                     CapabilityLifecycle.APPROVED,
                     CapabilityLifecycle.REJECTED
             ),
-            CapabilityLifecycle.APPROVED, Set.of(
-                    CapabilityLifecycle.PUBLISHED,
-                    CapabilityLifecycle.REJECTED
-            ),
+            CapabilityLifecycle.APPROVED, Set.of(CapabilityLifecycle.PUBLISHED),
             CapabilityLifecycle.PUBLISHED, Set.of(
                     CapabilityLifecycle.SUSPENDED,
                     CapabilityLifecycle.RETIRED
             ),
             CapabilityLifecycle.SUSPENDED, Set.of(
-                    CapabilityLifecycle.PUBLISHED,
+                    CapabilityLifecycle.VALIDATED,
                     CapabilityLifecycle.RETIRED
             )
     );

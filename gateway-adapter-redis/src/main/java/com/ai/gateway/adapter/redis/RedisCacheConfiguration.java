@@ -11,8 +11,8 @@ import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
@@ -27,7 +27,7 @@ import org.springframework.context.annotation.Primary;
  *
  * <p>Provides the three milestone-M2 building blocks from the
  * tech-selection doc §4: the pub/sub {@link SnapshotNotifier}, the
- * Write-Through {@link CatalogPort} cache decorator (Redis L2 + Caffeine L1),
+ * after-commit {@link CatalogPort} cache decorator (Redis L2 + Caffeine L1),
  * and the {@link SnapshotCacheListener} that hot-reloads snapshots on
  * notification. The same {@link RedissonClient} is reused by milestone M4
  * (distributed locks).</p>
@@ -36,6 +36,7 @@ import org.springframework.context.annotation.Primary;
  */
 @Configuration
 @ConditionalOnProperty(name = "gateway.cache.provider", havingValue = "redis")
+@EnableConfigurationProperties(RedisGatewayProperties.class)
 public class RedisCacheConfiguration {
 
     /**
@@ -48,16 +49,14 @@ public class RedisCacheConfiguration {
      * @return the Redisson client
      */
     @Bean(destroyMethod = "shutdown")
-    public RedissonClient redissonClient(
-            @Value("${gateway.redis.address:redis://127.0.0.1:6379}") String address,
-            @Value("${gateway.redis.password:}") String password,
-            @Value("${gateway.redis.database:0}") int database) {
+    public RedissonClient redissonClient(RedisGatewayProperties properties) {
+        RedisGatewayProperties.Redis redis = properties.getRedis();
         Config config = new Config();
         var serverConfig = config.useSingleServer()
-                .setAddress(address)
-                .setDatabase(database);
-        if (password != null && !password.isBlank()) {
-            serverConfig.setPassword(password);
+                .setAddress(redis.getAddress())
+                .setDatabase(redis.getDatabase());
+        if (redis.getPassword() != null && !redis.getPassword().isBlank()) {
+            serverConfig.setPassword(redis.getPassword());
         }
         return Redisson.create(config);
     }
@@ -85,7 +84,7 @@ public class RedisCacheConfiguration {
     }
 
     /**
-     * The Write-Through {@link CatalogPort} cache decorator wrapping the
+     * The after-commit {@link CatalogPort} cache decorator wrapping the
      * PostgreSQL catalog port.
      *
      * @param postgresCatalogPort the PostgreSQL catalog port (qualified)
@@ -100,9 +99,10 @@ public class RedisCacheConfiguration {
             @Qualifier("postgresCatalogPort") CatalogPort postgresCatalogPort,
             RedissonClient redissonClient,
             ObjectMapper redisSnapshotObjectMapper,
-            @Value("${gateway.redis.snapshot.local-ttl-seconds:30}") long localTtlSeconds) {
+            RedisGatewayProperties properties) {
         return new RedisCatalogPortDecorator(
-                postgresCatalogPort, redissonClient, redisSnapshotObjectMapper, localTtlSeconds);
+                postgresCatalogPort, redissonClient, redisSnapshotObjectMapper,
+                properties.getRedis().getSnapshot().getLocalTtlSeconds());
     }
 
     /**
@@ -120,9 +120,9 @@ public class RedisCacheConfiguration {
             RedissonClient redissonClient,
             InMemoryCatalogManager catalogManager,
             LuceneCandidateRetriever candidateRetriever,
-            @Value("${gateway.environment:production}") String environment) {
+            RedisGatewayProperties properties) {
         return new SnapshotCacheListener(
-                redissonClient, catalogManager, candidateRetriever, environment);
+                redissonClient, catalogManager, candidateRetriever, properties.getEnvironment());
     }
 
     /**

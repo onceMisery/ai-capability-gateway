@@ -17,7 +17,10 @@ import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
 import com.ai.gateway.application.controlplane.ManifestApprovalUseCase;
 import com.ai.gateway.application.controlplane.ManifestImportUseCase;
+import com.ai.gateway.application.controlplane.ManifestValidationUseCase;
+import com.ai.gateway.application.controlplane.CatalogSnapshotQueryUseCase;
 import com.ai.gateway.application.operation.OperationConfirmUseCase;
+import com.ai.gateway.application.operation.OperationCancelUseCase;
 import com.ai.gateway.application.operation.OperationPrepareUseCase;
 import com.ai.gateway.application.operation.OperationStatusUseCase;
 import com.ai.gateway.application.resilience.BulkheadManager;
@@ -30,12 +33,13 @@ import com.ai.gateway.bootstrap.telemetry.MicrometerTelemetryAdapter;
 import com.ai.gateway.application.runtime.ClarificationUseCase;
 import com.ai.gateway.application.runtime.DeterministicExecutionUseCase;
 import com.ai.gateway.application.runtime.NaturalLanguageQueryUseCase;
+import com.ai.gateway.application.runtime.StructuredInvocationUseCase;
+import com.ai.gateway.application.runtime.HealthReadinessUseCase;
 import com.ai.gateway.domain.model.CacheStatus;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ConverterType;
 import com.ai.gateway.domain.model.GatewayConfig;
 import com.ai.gateway.domain.model.Principal;
-import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.AclRepository;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuditPort;
@@ -44,11 +48,10 @@ import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.ArgumentPayloadCodec;
 import com.ai.gateway.domain.port.CandidateRetriever;
 import com.ai.gateway.domain.port.CatalogPort;
-import com.ai.gateway.domain.port.ConfirmationTokenCodec;
 import com.ai.gateway.domain.port.CompatibilityTestPort;
+import com.ai.gateway.domain.port.ConfirmationTokenCodec;
 import com.ai.gateway.domain.port.EncryptionPort;
 import com.ai.gateway.domain.port.EnvelopeProfileRegistry;
-import com.ai.gateway.domain.port.IdempotencyKeyGenerator;
 import com.ai.gateway.domain.port.InteractionRepository;
 import com.ai.gateway.domain.port.InvocationAdapter;
 import com.ai.gateway.domain.port.LlmRouterPort;
@@ -60,6 +63,7 @@ import com.ai.gateway.domain.port.StatsQueryPort;
 import com.ai.gateway.domain.port.SnapshotNotifier;
 import com.ai.gateway.domain.port.TokenIssuerPort;
 import com.ai.gateway.domain.port.TelemetryPort;
+import com.ai.gateway.domain.port.TransactionPort;
 import com.ai.gateway.domain.port.TypeConverterRegistry;
 import com.ai.gateway.domain.service.AliasGenerator;
 import com.ai.gateway.domain.service.DeadlineBudgetManager;
@@ -79,10 +83,8 @@ import com.ai.gateway.adapter.dubbo.DubboInvocationAdapter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 
-import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
-import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -147,13 +149,13 @@ public class BeanConfig {
             CompatibilityTestPort compatibilityTestPort,
             CatalogPort catalogPort,
             EnvelopeProfileRegistry envelopeProfileRegistry,
-            @Value("${gateway.environment:production}") String environment) {
+            GatewayProperties gatewayProperties) {
         return new ManifestValidator(
                 schemaValidator,
                 compatibilityTestPort,
                 catalogPort,
                 envelopeProfileRegistry,
-                environment);
+                gatewayProperties.getEnvironment());
     }
 
     /**
@@ -205,13 +207,14 @@ public class BeanConfig {
             InMemoryCatalogManager catalogManager,
             com.ai.gateway.application.catalog.LuceneCandidateRetriever candidateRetriever,
             com.ai.gateway.adapter.dubbo.DubboReferenceManager dubboReferenceManager,
+            GatewayProperties gatewayProperties,
             @org.springframework.beans.factory.annotation.Value("${dubbo.registry.address:nacos://nacos.dev.com:8848}") String dubboRegistryAddress) {
         return args -> {
             // Register the Dubbo registry address for manifest registryRef resolution
             dubboReferenceManager.registerRegistryAddress("nacos-main", dubboRegistryAddress);
 
             log.info("Loading catalog snapshot on startup...");
-            boolean loaded = catalogManager.loadAndActivate("production");
+            boolean loaded = catalogManager.loadAndActivate(gatewayProperties.getEnvironment());
             if (loaded) {
                 log.info("Catalog snapshot loaded successfully on startup: version={}",
                         catalogManager.getCurrentSnapshotVersion());
@@ -230,54 +233,9 @@ public class BeanConfig {
     // Stub Port Implementations (Ports without dedicated adapters)
     // ======================================================================
     //
-    // AuthenticationPort and AuthorizationPort stubs moved to
-    // StubAuthConfiguration (conditional on gateway.auth.provider). Selecting
-    // gateway.auth.provider=sa-token activates the Sa-Token adapter instead.
-
-    /**
-     * Stub {@link EncryptionPort} for development and testing.
-     *
-     * <p>: production uses KMS-managed envelope encryption.
-     * This stub uses Base64 encoding — it is NOT secure and must be replaced
-     * with a real KMS adapter (e.g., AWS KMS, HashiCorp Vault Transit)
-     * before production deployment.</p>
-     */
-    @Bean
-    public EncryptionPort encryptionPort() {
-        return new EncryptionPort() {
-            private final Base64.Encoder encoder = Base64.getEncoder();
-            private final Base64.Decoder decoder = Base64.getDecoder();
-
-            @Override
-            public String encrypt(String plaintext) {
-                if (plaintext == null) {
-                    throw new IllegalArgumentException("plaintext must not be null");
-                }
-                return encoder.encodeToString(plaintext.getBytes(StandardCharsets.UTF_8));
-            }
-
-            @Override
-            public String decrypt(String ciphertext) {
-                if (ciphertext == null) {
-                    throw new IllegalArgumentException("ciphertext must not be null");
-                }
-                byte[] decoded = decoder.decode(ciphertext);
-                return new String(decoded, StandardCharsets.UTF_8);
-            }
-        };
-    }
-
-    /**
-     * Stub {@link IdempotencyKeyGenerator} using UUID.
-     *
-     * <p>Generates a deterministic idempotency key combining the capability
-     * ID, operation ID, and a random UUID component.</p>
-     */
-    @Bean
-    public IdempotencyKeyGenerator idempotencyKeyGenerator() {
-        return (capabilityId, operationId) ->
-                capabilityId + ":" + operationId + ":" + UUID.randomUUID();
-    }
+    // AuthenticationPort/AuthorizationPort stubs live in StubAuthConfiguration
+    // (conditional on gateway.auth.provider). EncryptionPort/CompatibilityTestPort
+    // stubs live in StubAdaptersConfiguration with a production fail-fast guard.
 
     /**
      * {@link TypeConverterRegistry} implementing the three built-in
@@ -324,23 +282,6 @@ public class BeanConfig {
         };
     }
 
-    /**
-     * Stub {@link CompatibilityTestPort} that returns success.
-     *
-     * <p>Production should invoke the target Provider in the test environment.
-     * This stub always returns a valid report with no errors or warnings.</p>
-     */
-    @Bean
-    public CompatibilityTestPort compatibilityTestPort() {
-        return (manifest, testEnvironment) -> {
-            log.info("Compatibility test (stub): capabilityId={}, version={}, env={}",
-                    manifest != null ? manifest.metadata().id() : "null",
-                    manifest != null ? manifest.metadata().version() : "null",
-                    testEnvironment);
-            return ValidationReport.success();
-        };
-    }
-
     // ======================================================================
     // LLM HTTP Adapter
     // ======================================================================
@@ -356,12 +297,7 @@ public class BeanConfig {
      */
     @Bean
     public LlmRouterPort llmRouterPort(
-            @Value("${gateway.llm.endpoint}") String endpoint,
-            @Value("${gateway.llm.api-key}") String apiKey,
-            @Value("${gateway.llm.model:gpt-4}") String model,
-            @Value("${gateway.llm.temperature:0.1}") double temperature,
-            @Value("${gateway.llm.max-tokens:4096}") int maxTokens,
-            @Value("${gateway.max-response-bytes:1048576}") int maxResponseBytes,
+            GatewayProperties gatewayProperties,
             LlmRequestBuilder requestBuilder,
             LlmResponseParser responseParser,
             PromptTemplateRegistry templateRegistry,
@@ -370,15 +306,15 @@ public class BeanConfig {
             BulkheadManager bulkheadManager,
             TelemetryPort telemetryPort) {
         LlmRouterPort raw = new HttpLlmRouterAdapter(
-                endpoint,
-                apiKey,
-                model,
-                temperature,
-                maxTokens,
+                gatewayProperties.getLlm().getEndpoint(),
+                gatewayProperties.getLlm().getApiKey(),
+                gatewayProperties.getLlm().getModel(),
+                gatewayProperties.getLlm().getTemperature(),
+                gatewayProperties.getLlm().getMaxTokens(),
                 requestBuilder,
                 responseParser,
                 templateRegistry,
-                maxResponseBytes);
+                (int) gatewayProperties.getMaxResponseBytes());
         return new ResilientLlmRouter(raw, rateLimiterManager, circuitBreakerManager,
                 bulkheadManager, telemetryPort);
     }
@@ -479,6 +415,18 @@ public class BeanConfig {
                 compatibilityTestPort);
     }
 
+    @Bean
+    public ManifestValidationUseCase manifestValidationUseCase(
+            ManifestRepository manifestRepository,
+            ManifestValidator manifestValidator) {
+        return new ManifestValidationUseCase(manifestRepository, manifestValidator);
+    }
+
+    @Bean
+    public CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase(CatalogPort catalogPort) {
+        return new CatalogSnapshotQueryUseCase(catalogPort);
+    }
+
     /**
      * Manifest approval use case — lifecycle state transition
      */
@@ -498,11 +446,15 @@ public class BeanConfig {
     public CatalogPublishUseCase catalogPublishUseCase(
             ManifestRepository manifestRepository,
             CatalogPort catalogPort,
-            SnapshotNotifier snapshotNotifier) {
+            SnapshotNotifier snapshotNotifier,
+            LifecycleStateMachine lifecycleStateMachine,
+            TransactionPort transactionPort) {
         return new CatalogPublishUseCase(
                 manifestRepository,
                 catalogPort,
-                snapshotNotifier);
+                snapshotNotifier,
+                lifecycleStateMachine,
+                transactionPort);
     }
 
     /**
@@ -511,10 +463,12 @@ public class BeanConfig {
     @Bean
     public CatalogRollbackUseCase catalogRollbackUseCase(
             CatalogPort catalogPort,
-            SnapshotNotifier snapshotNotifier) {
+            SnapshotNotifier snapshotNotifier,
+            TransactionPort transactionPort) {
         return new CatalogRollbackUseCase(
                 catalogPort,
-                snapshotNotifier);
+                snapshotNotifier,
+                transactionPort);
     }
 
     /**
@@ -525,8 +479,11 @@ public class BeanConfig {
             ManifestRepository manifestRepository,
             CatalogPort catalogPort,
             SnapshotNotifier snapshotNotifier,
-            @Value("${gateway.environment:production}") String environment) {
-        return new CapabilitySuspendUseCase(manifestRepository, catalogPort, snapshotNotifier, environment);
+            LifecycleStateMachine lifecycleStateMachine,
+            GatewayProperties gatewayProperties,
+            TransactionPort transactionPort) {
+        return new CapabilitySuspendUseCase(manifestRepository, catalogPort, snapshotNotifier,
+                gatewayProperties.getEnvironment(), lifecycleStateMachine, transactionPort);
     }
 
     // ======================================================================
@@ -552,7 +509,7 @@ public class BeanConfig {
             DeadlineBudgetManager deadlineBudgetManager,
             InteractionRepository interactionRepository,
             DeterministicExecutionUseCase deterministicExecutionUseCase,
-            @Value("${gateway.environment:production}") String environment) {
+            GatewayProperties gatewayProperties) {
         return new NaturalLanguageQueryUseCase(
                 authenticationPort,
                 authorizationPort,
@@ -569,7 +526,7 @@ public class BeanConfig {
                 new TextNormalizer(),
                 interactionRepository,
                 deterministicExecutionUseCase,
-                environment);
+                gatewayProperties.getEnvironment());
     }
 
     /**
@@ -595,6 +552,31 @@ public class BeanConfig {
                 deadlineBudgetManager);
     }
 
+    /** Structured tool invocation shares the same deterministic execution kernel as NL. */
+    @Bean
+    public StructuredInvocationUseCase structuredInvocationUseCase(
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            CatalogPort catalogPort,
+            SchemaValidator schemaValidator,
+            TypeConverterRegistry typeConverterRegistry,
+            DeterministicExecutionUseCase deterministicExecutionUseCase,
+            GatewayProperties gatewayProperties) {
+        return new StructuredInvocationUseCase(authenticationPort, authorizationPort,
+                catalogPort, schemaValidator, typeConverterRegistry,
+                deterministicExecutionUseCase, gatewayProperties.getEnvironment());
+    }
+
+    @Bean
+    public HealthReadinessUseCase healthReadinessUseCase(
+            ManifestRepository manifestRepository,
+            CatalogPort catalogPort,
+            com.ai.gateway.domain.port.SecretManager secretManager,
+            GatewayProperties gatewayProperties) {
+        return new HealthReadinessUseCase(manifestRepository, catalogPort, secretManager,
+                gatewayProperties.getEnvironment());
+    }
+
     /**
      * Clarification use case — multi-turn parameter disambiguation
      */
@@ -606,8 +588,10 @@ public class BeanConfig {
             AliasGenerator aliasGenerator,
             ThresholdEvaluator thresholdEvaluator,
             CatalogPort catalogPort,
-            @Value("${gateway.environment:production}") String environment) {
-        return new ClarificationUseCase(interactionRepository, candidateRetriever, llmRouterPort, aliasGenerator, thresholdEvaluator, catalogPort, environment);
+            GatewayProperties gatewayProperties) {
+        return new ClarificationUseCase(interactionRepository, candidateRetriever, llmRouterPort,
+                aliasGenerator, thresholdEvaluator, catalogPort,
+                gatewayProperties.getEnvironment());
     }
 
     // ======================================================================
@@ -625,7 +609,6 @@ public class BeanConfig {
             AuthorizationPort authorizationPort,
             EncryptionPort encryptionPort,
             OperationRepository operationRepository,
-            IdempotencyKeyGenerator idempotencyKeyGenerator,
             CatalogPort catalogPort,
             AuthenticationPort authenticationPort,
             ConfirmationTokenCodec confirmationTokenCodec,
@@ -637,7 +620,6 @@ public class BeanConfig {
                 authorizationPort,
                 encryptionPort,
                 operationRepository,
-                idempotencyKeyGenerator,
                 catalogPort,
                 authenticationPort,
                 confirmationTokenCodec,
@@ -656,7 +638,8 @@ public class BeanConfig {
             EncryptionPort encryptionPort,
             ConfirmationTokenCodec confirmationTokenCodec,
             ArgumentPayloadCodec argumentPayloadCodec,
-            CatalogPort catalogPort) {
+            CatalogPort catalogPort,
+            OperationStateMachine operationStateMachine) {
         return new OperationConfirmUseCase(
                 operationRepository,
                 invocationAdapter,
@@ -665,7 +648,19 @@ public class BeanConfig {
                 encryptionPort,
                 confirmationTokenCodec,
                 argumentPayloadCodec,
-                catalogPort);
+                catalogPort,
+                operationStateMachine);
+    }
+
+    /**
+     * Operation cancel use case — the sole owner of PREPARED -> CANCELLED.
+     */
+    @Bean
+    public OperationCancelUseCase operationCancelUseCase(
+            OperationRepository operationRepository,
+            com.ai.gateway.domain.port.AuditPort auditPort,
+            OperationStateMachine operationStateMachine) {
+        return new OperationCancelUseCase(operationRepository, auditPort, operationStateMachine);
     }
 
     /**
@@ -688,8 +683,11 @@ public class BeanConfig {
     public ConsoleAuthUseCase consoleAuthUseCase(
             TokenIssuerPort tokenIssuerPort,
             AuditPort auditPort,
-            @Value("${gateway.auth.provider:stub}") String authMode) {
-        return new ConsoleAuthUseCase(tokenIssuerPort, auditPort, authMode);
+            GatewayProperties gatewayProperties) {
+        return new ConsoleAuthUseCase(tokenIssuerPort, auditPort,
+                gatewayProperties.getAuth().getProvider(),
+                gatewayProperties.getAuth().getConsoleAdmin().getUsername(),
+                gatewayProperties.getAuth().getConsoleAdmin().getPassword());
     }
 
     /**
@@ -722,8 +720,9 @@ public class BeanConfig {
      * ACL manage use case — admin console ACL/role/permission management.
      */
     @Bean
-    public AclManageUseCase aclManageUseCase(AclRepository aclRepository) {
-        return new AclManageUseCase(aclRepository);
+    public AclManageUseCase aclManageUseCase(AclRepository aclRepository,
+                                             ManifestRepository manifestRepository) {
+        return new AclManageUseCase(aclRepository, manifestRepository);
     }
 
     /**
@@ -732,24 +731,29 @@ public class BeanConfig {
     @Bean
     public ConfigQueryUseCase configQueryUseCase(
             SentinelRuleAdminService sentinelRuleAdminService,
-            @Value("${gateway.environment:production}") String environment,
-            @Value("${gateway.auth.provider:stub}") String authProvider,
-            @Value("${gateway.cache.provider:stub}") String cacheProvider,
-            @Value("${gateway.ratelimit.provider:stub}") String ratelimitProvider) {
+            InMemoryCatalogManager catalogManager,
+            GatewayProperties gatewayProperties) {
         GatewayConfig config = new GatewayConfig(
-                environment,
-                authProvider,
-                                cacheProvider,  // cache provider
-                ratelimitProvider, // ratelimit provider
-                1048576, // max request size 1MB
-                10485760L, // max response size 10MB
-                30000,   // default timeout 30s
+                gatewayProperties.getEnvironment(),
+                gatewayProperties.getAuth().getProvider(),
+                gatewayProperties.getCache().getProvider(),
+                gatewayProperties.getRatelimit().getProvider(),
+                gatewayProperties.getMaxRequestSizeBytes(),
+                gatewayProperties.getMaxResponseBytes(),
+                gatewayProperties.getDefaultTimeoutMs(),
                 Map.of(),
-                Map.of("batchSize", 50, "flushIntervalMs", 200),
-                Map.of("digestAlgorithm", "SHA-256"),
+                Map.of("batchSize", gatewayProperties.getAudit().getBatchSize(),
+                        "batchWaitMillis", gatewayProperties.getAudit().getBatchWaitMillis()),
+                Map.of("maxLagMillis", gatewayProperties.getSnapshot().getMaxLagMillis()),
                 Map.of("baselineRules", sentinelRuleAdminService.listRules().size())
         );
-        CacheStatus cacheStatus = new CacheStatus("stub", "n/a", 60, 0L, 0L);
+        String cacheProvider = gatewayProperties.getCache().getProvider();
+        CacheStatus cacheStatus = new CacheStatus(
+                cacheProvider,
+                "redis".equalsIgnoreCase(cacheProvider) ? "configured" : "n/a",
+                gatewayProperties.getRedis().getSnapshot().getLocalTtlSeconds(),
+                catalogManager.getCurrentSnapshotVersion(),
+                0L);
         return new ConfigQueryUseCase(config, cacheStatus, sentinelRuleAdminService.listRules());
     }
 }

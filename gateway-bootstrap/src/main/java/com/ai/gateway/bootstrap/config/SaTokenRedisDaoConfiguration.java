@@ -5,7 +5,7 @@ import cn.dev33.satoken.dao.SaTokenDaoRedissonJackson;
 import org.redisson.api.RedissonClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,8 +28,7 @@ import org.springframework.context.annotation.Configuration;
  * @since 0.1.0
  */
 @Configuration
-@ConditionalOnProperty(name = "gateway.auth.provider", havingValue = "sa-token")
-
+@ConditionalOnExpression("'${gateway.auth.provider}' == 'sa-token' && '${gateway.cache.provider}' == 'redis'")
 public class SaTokenRedisDaoConfiguration {
 
     private static final Logger log = LoggerFactory.getLogger(SaTokenRedisDaoConfiguration.class);

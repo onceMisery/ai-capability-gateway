@@ -8,8 +8,7 @@ import java.util.List;
  * allowed to invoke it.
  *
  * <p>Used by the admin console to configure capability-level authorization.
- * The entry aggregates all allowed roles for a given capability (across
- * versions) into a single view.</p>
+ * Each entry is scoped to exactly one capability ID and version.</p>
  *
  * @param capabilityId the capability identifier
  * @param capabilityVersion the capability version

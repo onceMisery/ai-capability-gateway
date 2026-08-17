@@ -91,14 +91,18 @@ export const gatewayApi = {
     }),
 
   aclPolicy: () => get<AclPolicy>('/admin/v1/acl/policy'),
-  aclEntries: () => get<CapabilityAclEntry[]>('/admin/v1/acl/entries'),
   saveAcl: (entry: Pick<CapabilityAclEntry, 'capabilityId' | 'capabilityVersion' | 'allowedRoles'>, updatedBy: string) =>
     put<{ message: string }>(
-      `/admin/v1/acl/entries/${encodeURIComponent(entry.capabilityId)}/${encodeURIComponent(entry.capabilityVersion)}`,
-      { allowedRoles: entry.allowedRoles, updatedBy }
+      '/admin/v1/acl/capabilities',
+      {
+        capabilityId: entry.capabilityId,
+        version: entry.capabilityVersion,
+        allowedRoles: entry.allowedRoles,
+        updatedBy
+      }
     ),
   deleteAcl: (capabilityId: string, version: string) =>
-    remove<{ message: string }>(`/admin/v1/acl/entries/${encodeURIComponent(capabilityId)}/${encodeURIComponent(version)}`),
+    remove<{ message: string }>(`/admin/v1/acl/capabilities/${encodeURIComponent(capabilityId)}/${encodeURIComponent(version)}`),
   roles: () => get<Role[]>('/admin/v1/roles'),
   saveRole: (role: Pick<Role, 'name' | 'description' | 'permissions'>, update = false) =>
     update

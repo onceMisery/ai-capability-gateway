@@ -35,7 +35,7 @@ public class JdbcInteractionRepository implements InteractionRepository {
     private static final String SQL_INSERT =
             "INSERT INTO nl_interaction (interaction_id, principal_digest, snapshot_version, " +
             "candidates, confirmed_params, pending_fields, expires_at) " +
-            "VALUES (?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?) " +
+            "VALUES (CAST(? AS UUID), ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?) " +
             "ON CONFLICT (interaction_id) DO UPDATE SET " +
             "principal_digest = EXCLUDED.principal_digest, " +
             "snapshot_version = EXCLUDED.snapshot_version, " +
@@ -47,10 +47,10 @@ public class JdbcInteractionRepository implements InteractionRepository {
     private static final String SQL_FIND_BY_ID =
             "SELECT interaction_id, principal_digest, snapshot_version, candidates, " +
             "confirmed_params, pending_fields, expires_at " +
-            "FROM nl_interaction WHERE interaction_id = ?";
+            "FROM nl_interaction WHERE interaction_id = CAST(? AS UUID)";
 
     private static final String SQL_DELETE_BY_ID =
-            "DELETE FROM nl_interaction WHERE interaction_id = ?";
+            "DELETE FROM nl_interaction WHERE interaction_id = CAST(? AS UUID)";
 
     private static final TypeReference<List<String>> STRING_LIST =
             new TypeReference<>() {};

@@ -3,6 +3,7 @@ package com.ai.gateway.adapter.postgresql.repository;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.service.ManifestDigest;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,8 +35,9 @@ class JdbcCatalogPortTest {
         when(manifest.metadata()).thenReturn(metadata);
         when(metadata.id()).thenReturn("order.detail.query");
         when(metadata.version()).thenReturn("1.0.0");
+        String digest = ManifestDigest.sha256(manifest);
         when(jdbc.queryForObject(contains("sha256_digest"), eq(String.class),
-                eq("order.detail.query"), eq("1.0.0"))).thenReturn("abc123");
+                eq("order.detail.query"), eq("1.0.0"))).thenReturn(digest);
         when(jdbc.update(anyString(), any(Object[].class))).thenReturn(1);
 
         JdbcCatalogPort port = new JdbcCatalogPort(jdbc);
@@ -43,8 +45,22 @@ class JdbcCatalogPortTest {
 
         assertThat(JdbcCatalogPort.class.getMethod("saveSnapshot", CatalogSnapshot.class)
                 .isAnnotationPresent(Transactional.class)).isTrue();
+        verify(jdbc).queryForObject(contains("pg_advisory_xact_lock"),
+                eq(Integer.class), eq("production"));
         verify(jdbc).update(contains("catalog_snapshot_item"),
-                eq(7L), eq("order.detail.query"), eq("1.0.0"), eq("abc123"), eq("policy-v1"));
+                eq(7L), eq("order.detail.query"), eq("1.0.0"), eq(digest), eq("policy-v1"));
+        verify(jdbc, org.mockito.Mockito.never()).update(contains("audit_event"), any(Object[].class));
+    }
+
+    @Test
+    void publicationEventIsExplicitAndSeparateFromSnapshotPersistence() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        JdbcCatalogPort port = new JdbcCatalogPort(jdbc);
+        CatalogSnapshot snapshot = new CatalogSnapshot(7L, "production", List.of(), "policy-v1", "digest");
+
+        port.recordSnapshotPublication(snapshot, "MANIFEST_PUBLISHED");
+
         verify(jdbc).update(contains("audit_event"), any(Object[].class));
+        verify(jdbc).update(contains("ON CONFLICT DO NOTHING"), any(Object[].class));
     }
 }

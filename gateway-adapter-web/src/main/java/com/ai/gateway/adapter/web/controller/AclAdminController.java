@@ -2,6 +2,7 @@ package com.ai.gateway.adapter.web.controller;
 
 import com.ai.gateway.application.console.AclManageUseCase;
 import com.ai.gateway.domain.model.AdminAction;
+import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityAclEntry;
 import com.ai.gateway.domain.model.Permission;
 import com.ai.gateway.domain.model.Role;
@@ -66,15 +67,7 @@ public class AclAdminController {
     // ================================================================
 
     /**
-     * GET /admin/v1/acl/entries — list all ACL entries (legacy path)
-     */
-    @GetMapping("/acl/entries")
-    public ResponseEntity<List<CapabilityAclEntry>> listAclEntries() {
-        return ResponseEntity.ok(aclManageUseCase.listAclEntries());
-    }
-
-    /**
-     * GET /admin/v1/acl/capabilities — list all ACL entries (spec path)
+     * GET /admin/v1/acl/capabilities — list all ACL entries
      */
     @GetMapping("/acl/capabilities")
     public ResponseEntity<List<CapabilityAclEntry>> listAclCapabilities() {
@@ -82,9 +75,9 @@ public class AclAdminController {
     }
 
     /**
-     * GET /admin/v1/acl/entries/{capabilityId}/{version}
+     * GET /admin/v1/acl/capabilities/{capabilityId}/{version}
      */
-    @GetMapping("/acl/entries/{capabilityId}/{version}")
+    @GetMapping("/acl/capabilities/{capabilityId}/{version}")
     public ResponseEntity<CapabilityAclEntry> getAclEntry(
             @PathVariable String capabilityId,
             @PathVariable String version) {
@@ -94,19 +87,7 @@ public class AclAdminController {
     }
 
     /**
-     * PUT /admin/v1/acl/entries/{capabilityId}/{version} — legacy path
-     */
-    @PutMapping("/acl/entries/{capabilityId}/{version}")
-    public ResponseEntity<Map<String, Object>> saveAclEntry(
-            @PathVariable String capabilityId,
-            @PathVariable String version,
-            @RequestBody Map<String, Object> body) {
-        SecurityHelper.requireAdmin(authenticationPort, authorizationPort, AdminAction.MANAGE_ACL);
-        return doSaveAclEntry(capabilityId, version, body);
-    }
-
-    /**
-     * PUT /admin/v1/acl/capabilities — spec path, capabilityId/version in body
+     * PUT /admin/v1/acl/capabilities — capabilityId/version in body
      */
     @PutMapping("/acl/capabilities")
     public ResponseEntity<Map<String, Object>> saveAclCapability(
@@ -125,7 +106,11 @@ public class AclAdminController {
         List<CapabilityAclEntry> entries = aclManageUseCase.listAclEntries();
         List<Role> roles = aclManageUseCase.listRoles();
         List<Permission> permissions = aclManageUseCase.listPermissions();
+        AclPolicyStatus status = authorizationPort.aclPolicyStatus();
         return ResponseEntity.ok(Map.of(
+                "aclLoadHealthy", status.loadHealthy(),
+                "aclEntryCount", status.loadedEntryCount(),
+                "emptyAclDecision", status.emptyAclDecision(),
                 "aclEntries", entries,
                 "roles", roles,
                 "permissions", permissions
@@ -144,9 +129,9 @@ public class AclAdminController {
     }
 
     /**
-     * DELETE /admin/v1/acl/entries/{capabilityId}/{version}
+     * DELETE /admin/v1/acl/capabilities/{capabilityId}/{version}
      */
-    @DeleteMapping("/acl/entries/{capabilityId}/{version}")
+    @DeleteMapping("/acl/capabilities/{capabilityId}/{version}")
     public ResponseEntity<Map<String, Object>> deleteAclEntry(
             @PathVariable String capabilityId,
             @PathVariable String version) {

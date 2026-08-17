@@ -13,18 +13,16 @@ import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.ConfirmationTokenCodec;
 import com.ai.gateway.domain.port.EncryptionPort;
-import com.ai.gateway.domain.port.IdempotencyKeyGenerator;
 import com.ai.gateway.domain.port.OperationRepository;
 import com.ai.gateway.domain.port.SchemaValidator;
 import com.ai.gateway.domain.port.TypeConverterRegistry;
 import com.ai.gateway.domain.service.ArgumentBinder;
+import com.ai.gateway.domain.service.ManifestDigest;
+import com.ai.gateway.domain.service.Sha256Digest;
 import com.ai.gateway.application.runtime.NaturalLanguageQueryUseCase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
@@ -73,7 +71,6 @@ public final class OperationPrepareUseCase {
     private final AuthorizationPort authorizationPort;
     private final EncryptionPort encryptionPort;
     private final OperationRepository operationRepository;
-    private final IdempotencyKeyGenerator idempotencyKeyGenerator;
     private final CatalogPort catalogPort;
     private final AuthenticationPort authenticationPort;
     private final ConfirmationTokenCodec confirmationTokenCodec;
@@ -102,7 +99,6 @@ public final class OperationPrepareUseCase {
                                     AuthorizationPort authorizationPort,
                                     EncryptionPort encryptionPort,
                                     OperationRepository operationRepository,
-                                    IdempotencyKeyGenerator idempotencyKeyGenerator,
                                     CatalogPort catalogPort,
                                     AuthenticationPort authenticationPort,
                                     ConfirmationTokenCodec confirmationTokenCodec,
@@ -119,8 +115,6 @@ public final class OperationPrepareUseCase {
                 "encryptionPort must not be null");
         this.operationRepository = Objects.requireNonNull(operationRepository,
                 "operationRepository must not be null");
-        this.idempotencyKeyGenerator = Objects.requireNonNull(idempotencyKeyGenerator,
-                "idempotencyKeyGenerator must not be null");
         this.catalogPort = Objects.requireNonNull(catalogPort,
                 "catalogPort must not be null");
         this.authenticationPort = Objects.requireNonNull(authenticationPort,
@@ -142,11 +136,13 @@ public final class OperationPrepareUseCase {
      * @return the prepare result containing the operation ID and confirmation token
      * @throws NullPointerException if any argument is null
      */
-    public PrepareResult prepare(RequestContext requestContext, String text, String locale, String timezone) {
+    public PrepareResult prepare(RequestContext requestContext, String text, String locale,
+                                 String timezone, String clientIdempotencyKey) {
         Objects.requireNonNull(requestContext, "requestContext must not be null");
         Objects.requireNonNull(text, "text must not be null");
         Objects.requireNonNull(locale, "locale must not be null");
         Objects.requireNonNull(timezone, "timezone must not be null");
+        validateClientIdempotencyKey(clientIdempotencyKey);
         log.info("Prepare phase started for write operation");
 
         // Step 1: Complete NL routing but don't invoke write interface
@@ -217,19 +213,21 @@ public final class OperationPrepareUseCase {
         // Step 4: Generate user-understandable redacted summary
         String redactedSummary = generateRedactedSummary(manifest, modelArguments);
 
-        // Step 5: Generate server-side idempotency key and parameter digest
+        // Step 5: Bind the client idempotency key to the authenticated request,
+        // selected capability and frozen argument digest. The resulting value
+        // is stable across retries and remains bounded for the database index.
         String operationId = UUID.randomUUID().toString();
-        String idempotencyKey = idempotencyKeyGenerator.generate(capabilityId, operationId);
         String serializedArguments = argumentPayloadCodec.encode(boundArguments);
         String argumentsDigest = computeDigest(serializedArguments);
         String principalDigest = computeDigest(principal.subject());
+        String idempotencyKey = buildIdempotencyKey(clientIdempotencyKey, principalDigest,
+                capabilityId, capabilityVersion, argumentsDigest);
 
         // Encrypt the arguments at rest
         String encryptedArguments = encryptionPort.encrypt(serializedArguments);
 
         // Generate manifest digest
-        String manifestDigest = computeDigest(manifest.metadata().id()
-                + manifest.metadata().version());
+        String manifestDigest = ManifestDigest.sha256(manifest);
 
         // Step 6: Persist immutable operation record
         Instant expiresAt = Instant.now().plusSeconds(CONFIRMATION_TOKEN_TTL_SECONDS);
@@ -264,17 +262,20 @@ public final class OperationPrepareUseCase {
                 0L // initial optimistic concurrency version
         );
 
-        operationRepository.save(record);
-        log.info("Operation record persisted: operationId={}, capability={}",
-                operationId, capabilityId);
+        OperationRecord persisted = operationRepository.saveOrGetByIdempotencyKey(record);
+        log.info("Operation record persisted: operationId={}, capability={}, replay={}",
+                persisted.operationId(), capabilityId, !persisted.operationId().equals(operationId));
 
         // Step 7: Return short-lived confirmation token and expiry time
         ConfirmationToken token = confirmationTokenCodec.issue(
-                operationId, principalDigest, principal.orgId(), argumentsDigest, expiresAt);
+                persisted.operationId(), persisted.principalDigest(), persisted.orgId(),
+                persisted.argumentsDigest(), persisted.expiresAt());
 
-        log.info("Prepare phase complete: operationId={}, expiresAt={}", operationId, expiresAt);
+        log.info("Prepare phase complete: operationId={}, expiresAt={}",
+                persisted.operationId(), persisted.expiresAt());
 
-        return new PrepareResult(true, operationId, token, redactedSummary, expiresAt, null);
+        return new PrepareResult(true, persisted.operationId(), token, redactedSummary,
+                persisted.expiresAt(), null);
     }
 
     /**
@@ -309,17 +310,21 @@ public final class OperationPrepareUseCase {
      * @return the hex-encoded digest
      */
     private String computeDigest(String content) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 algorithm not available", e);
+        return Sha256Digest.sha256Hex(content);
+    }
+
+    static String buildIdempotencyKey(String clientKey, String principalDigest,
+                                      String capabilityId, String capabilityVersion,
+                                      String argumentsDigest) {
+        return Sha256Digest.sha256Hex(String.join("\n", clientKey, principalDigest,
+                capabilityId, capabilityVersion, argumentsDigest));
+    }
+
+    private static void validateClientIdempotencyKey(String clientKey) {
+        if (clientKey == null || clientKey.isBlank() || clientKey.length() > 128
+                || clientKey.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException(
+                    "Idempotency-Key is required, must be <= 128 characters, and contain no control characters");
         }
     }
 

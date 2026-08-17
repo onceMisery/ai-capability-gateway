@@ -368,6 +368,21 @@
         </pluginManagement>
 
         <plugins>
+            <!-- Integration tests are an explicit verify gate. Testcontainers/
+                 external-provider tests use the *IT naming convention. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>integration-tests</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <!-- Maven Enforcer - dependency governance -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

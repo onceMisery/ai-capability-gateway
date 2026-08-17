@@ -9,6 +9,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.util.List;
 
@@ -94,14 +96,50 @@ class RedisCatalogPortDecoratorTest {
     }
 
     @Test
-    @DisplayName("save is write-through: PostgreSQL then Redis")
-    void saveIsWriteThrough() {
+    @DisplayName("save does not write Redis before the database transaction commits")
+    void saveDoesNotWriteBeforeCommit() {
         CatalogSnapshot snapshot = snapshot(11);
 
         decorator.saveSnapshot(snapshot);
 
         verify(delegate, times(1)).saveSnapshot(snapshot);
+        verify(bucket, never()).set(anyString());
+    }
+
+    @Test
+    void publicationLockIsDelegatedToPostgresql() {
+        decorator.lockEnvironmentForPublication(ENV);
+
+        verify(delegate).lockEnvironmentForPublication(ENV);
+    }
+
+    @Test
+    @DisplayName("publication event updates Redis after a committed transaction")
+    void publicationEventUpdatesRedis() {
+        CatalogSnapshot snapshot = snapshot(12);
+
+        decorator.recordSnapshotPublication(snapshot, "MANIFEST_PUBLISHED");
+
+        verify(delegate, times(1)).recordSnapshotPublication(snapshot, "MANIFEST_PUBLISHED");
         verify(bucket, times(1)).set(anyString());
+    }
+
+    @Test
+    @DisplayName("publication cache write is deferred until after commit")
+    void publicationCacheWriteIsDeferredUntilCommit() {
+        CatalogSnapshot snapshot = snapshot(13);
+        TransactionSynchronizationManager.initSynchronization();
+        try {
+            decorator.recordSnapshotPublication(snapshot, "MANIFEST_PUBLISHED");
+            verify(bucket, never()).set(anyString());
+
+            TransactionSynchronization synchronization =
+                    TransactionSynchronizationManager.getSynchronizations().get(0);
+            synchronization.afterCommit();
+            verify(bucket, times(1)).set(anyString());
+        } finally {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
     }
 
     @Test

@@ -27,18 +27,16 @@ import com.ai.gateway.domain.service.ArgumentBinder;
 import com.ai.gateway.domain.service.DeadlineBudgetManager;
 import com.ai.gateway.domain.service.RedactionService;
 import com.ai.gateway.domain.service.ResultNormalizer;
+import com.ai.gateway.domain.service.Sha256Digest;
+import com.ai.gateway.domain.service.ManifestDigest;
 import com.ai.gateway.domain.service.TextNormalizer;
 import com.ai.gateway.domain.service.ThresholdEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -488,8 +486,7 @@ public final class NaturalLanguageQueryUseCase {
         String executionId = UUID.randomUUID().toString();
         String principalDigest = computePrincipalDigest(principal);
         // Compute manifest digest from id + version (content digest not stored in Metadata)
-        String manifestDigest = computeManifestDigest(
-                manifest.metadata().id(), manifest.metadata().version());
+        String manifestDigest = ManifestDigest.sha256(manifest);
 
         // Build resolved protocol arguments using ArgumentBinder (resolves PRINCIPAL, MODEL, CONSTANT)
         SystemContext bindContext = new SystemContext(
@@ -674,8 +671,7 @@ public final class NaturalLanguageQueryUseCase {
                 subjectDigest, orgId, requestId, null,
                 manifest == null ? null : manifest.metadata().id(),
                 manifest == null ? null : manifest.metadata().version(),
-                manifest == null ? null : computeManifestDigest(
-                        manifest.metadata().id(), manifest.metadata().version()),
+                manifest == null ? null : ManifestDigest.sha256(manifest),
                 snapshotVersion, null, null, resultCode,
                 System.currentTimeMillis() - startTime, "{}"));
         return result;
@@ -700,31 +696,7 @@ public final class NaturalLanguageQueryUseCase {
      * @return the hex-encoded SHA-256 digest
      */
     private String computePrincipalDigest(Principal principal) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(principal.subject().getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 not available", e);
-        }
-    }
-
-    /**
-     * Computes a SHA-256 digest of the manifest identity.
-     *
-     * @param capabilityId the capability identifier
-     * @param version the capability version
-     * @return the hex-encoded SHA-256 digest
-     */
-    private String computeManifestDigest(String capabilityId, String version) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            String identity = capabilityId + ":" + version;
-            byte[] digest = md.digest(identity.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 not available", e);
-        }
+        return Sha256Digest.sha256Hex(principal.subject());
     }
 
     /**

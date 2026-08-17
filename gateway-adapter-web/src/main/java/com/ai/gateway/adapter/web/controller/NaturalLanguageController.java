@@ -21,10 +21,7 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
+import com.ai.gateway.domain.service.Sha256Digest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -300,13 +297,7 @@ public class NaturalLanguageController {
      * @return the hex-encoded SHA-256 digest
      */
     private String computePrincipalDigest(String subject) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(subject.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 not available", e);
-        }
+        return Sha256Digest.sha256Hex(subject);
     }
 
     /**

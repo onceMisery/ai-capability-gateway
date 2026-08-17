@@ -6,9 +6,11 @@ package com.ai.gateway.domain.model;
  * <p>The state machine is:</p>
  * <pre>
  * DRAFT -&gt; VALIDATED -&gt; APPROVED -&gt; PUBLISHED -&gt; SUSPENDED -&gt; RETIRED
- * | | |
- * +--------&gt; REJECTED &lt--+
+ *                 |                              |
+ *                 +--&gt; REJECTED                  +--&gt; VALIDATED
  * </pre>
+ * <p>Precisely: only VALIDATED may transition to terminal REJECTED, and a
+ * SUSPENDED version must be re-validated before approval and publication.</p>
  *
  * <p>Only {@code PUBLISHED} capabilities may enter the candidate set for
  * natural-language routing (Section 9). Write operations must be rejected
@@ -54,8 +56,8 @@ public enum CapabilityLifecycle {
     RETIRED,
 
     /**
-     * Validation or confirmation was rejected. The manifest may be
-     * edited and re-submitted.
+     * Validation or approval was rejected. This version is terminal;
+     * correction requires importing a new manifest version.
      */
     REJECTED
 }

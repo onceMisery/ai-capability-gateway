@@ -5,8 +5,13 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ModelDecision;
+import com.ai.gateway.domain.model.OutputContract;
+import com.ai.gateway.domain.model.OutputMode;
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.Protocol;
+import com.ai.gateway.domain.model.ProtocolBinding;
 import com.ai.gateway.domain.model.RequestContext;
+import com.ai.gateway.domain.model.ResiliencePolicy;
 import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.*;
@@ -145,23 +150,13 @@ class NaturalLanguageAuditTest {
         private final AliasGenerator aliases = mock(AliasGenerator.class);
         private final AuditPort audit = mock(AuditPort.class);
         private final InteractionRepository interactions = mock(InteractionRepository.class);
-        private final CapabilityManifest manifest = mock(CapabilityManifest.class, RETURNS_DEEP_STUBS);
+        private final CapabilityManifest manifest = manifest();
         private boolean clarificationRequired;
 
         private NaturalLanguageQueryUseCase useCase() {
             Principal principal = new Principal("user-1", 7L, List.of("user"), List.of(),
                     Instant.now(), "JWT");
-            Map<String, Object> schema = Map.of("type", "object");
             when(authentication.authenticate(any())).thenReturn(principal);
-            when(manifest.metadata().id()).thenReturn("order.query");
-            when(manifest.metadata().version()).thenReturn("1.0.0");
-            when(manifest.spec().risk()).thenReturn(RiskLevel.READ_ONLY);
-            when(manifest.spec().displayName()).thenReturn("Order query");
-            when(manifest.spec().description()).thenReturn("Query an order");
-            when(manifest.spec().examples().positive()).thenReturn(List.of("find order"));
-            when(manifest.spec().examples().negative()).thenReturn(List.of());
-            when(manifest.spec().examples().synonyms()).thenReturn(List.of("order"));
-            when(manifest.spec().inputSchema()).thenReturn(schema);
             when(catalog.loadCurrentSnapshot("production"))
                     .thenReturn(new CatalogSnapshot(3L, "production", List.of(manifest),
                             "policy-1", "digest"));
@@ -186,6 +181,25 @@ class NaturalLanguageAuditTest {
                     new RedactionService(), audit, new ThresholdEvaluator(),
                     new DeadlineBudgetManager(), new TextNormalizer(), interactions,
                     mock(DeterministicExecutionUseCase.class), "production");
+        }
+
+        private static CapabilityManifest manifest() {
+            CapabilityManifest.Metadata metadata = new CapabilityManifest.Metadata(
+                    "order.query", "1.0.0",
+                    new CapabilityManifest.Owner("orders", "orders@example.com"),
+                    List.of("orders", "read"));
+            ProtocolBinding invocation = new ProtocolBinding(
+                    Protocol.DUBBO, "main", "com.example.OrderService", null, "1.0.0",
+                    "query", List.of("java.lang.String"), "hessian2", List.of(), Map.of());
+            OutputContract output = new OutputContract(
+                    OutputMode.DIRECT, null, List.of(), Map.of(), List.of(), 4096);
+            CapabilityManifest.Spec spec = new CapabilityManifest.Spec(
+                    "Order query", "Query an order",
+                    new CapabilityManifest.Examples(
+                            List.of("find order"), List.of(), List.of("order")),
+                    RiskLevel.READ_ONLY, Map.of("type", "object"), null,
+                    invocation, output, new ResiliencePolicy(1000L, 0, 1, false));
+            return new CapabilityManifest("gateway.ai/v1", "Capability", metadata, spec);
         }
     }
 }

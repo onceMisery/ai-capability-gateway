@@ -41,17 +41,26 @@ public class JdbcOperationRepository implements OperationRepository {
             "capability_id, capability_version, manifest_digest, snapshot_version, " +
             "encrypted_arguments, arguments_digest, idempotency_key, policy_decision_id, " +
             "confirmation_summary, expires_at, version) " +
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)";
+            "VALUES (CAST(? AS UUID), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)";
+
+    private static final String SQL_INSERT_IF_ABSENT =
+            SQL_INSERT + " ON CONFLICT (idempotency_key) DO NOTHING";
 
     private static final String SQL_FIND_BY_ID =
             "SELECT operation_id, state, principal_digest, org_id, capability_id, " +
             "capability_version, manifest_digest, snapshot_version, encrypted_arguments, " +
             "arguments_digest, idempotency_key, policy_decision_id, confirmation_summary, " +
-            "expires_at, version FROM operation_record WHERE operation_id = ?";
+            "expires_at, version FROM operation_record WHERE operation_id = CAST(? AS UUID)";
+
+    private static final String SQL_FIND_BY_IDEMPOTENCY_KEY =
+            "SELECT operation_id, state, principal_digest, org_id, capability_id, " +
+            "capability_version, manifest_digest, snapshot_version, encrypted_arguments, " +
+            "arguments_digest, idempotency_key, policy_decision_id, confirmation_summary, " +
+            "expires_at, version FROM operation_record WHERE idempotency_key = ?";
 
     private static final String SQL_CAS_UPDATE_STATE =
             "UPDATE operation_record SET state = ?, version = version + 1, " +
-            "updated_at = CURRENT_TIMESTAMP WHERE operation_id = ? AND state = ? AND version = ?";
+            "updated_at = CURRENT_TIMESTAMP WHERE operation_id = CAST(? AS UUID) AND state = ? AND version = ?";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -68,27 +77,43 @@ public class JdbcOperationRepository implements OperationRepository {
     public void save(OperationRecord record) {
         Objects.requireNonNull(record, "record must not be null");
 
-        jdbcTemplate.update(SQL_INSERT, ps -> {
-            ps.setString(1, record.operationId());
-            ps.setString(2, record.state().name());
-            ps.setString(3, record.principalDigest());
-            ps.setLong(4, record.orgId());
-            ps.setString(5, record.capabilityId());
-            ps.setString(6, record.capabilityVersion());
-            ps.setString(7, record.manifestDigest());
-            ps.setLong(8, record.snapshotVersion());
-            ps.setString(9, record.encryptedArguments());
-            ps.setString(10, record.argumentsDigest());
-            ps.setString(11, record.idempotencyKey());
-            if (record.policyDecisionId() != null) {
-                ps.setString(12, record.policyDecisionId());
-            } else {
-                ps.setNull(12, Types.VARCHAR);
-            }
-            JsonbSupport.setJsonbObject(ps, 13, record.confirmationSummary());
-            ps.setTimestamp(14, Timestamp.from(record.expiresAt()));
-            ps.setLong(15, record.version());
-        });
+        jdbcTemplate.update(SQL_INSERT, ps -> bindRecord(ps, record));
+    }
+
+    @Override
+    public OperationRecord saveOrGetByIdempotencyKey(OperationRecord record) {
+        Objects.requireNonNull(record, "record must not be null");
+        int inserted = jdbcTemplate.update(
+                SQL_INSERT_IF_ABSENT, ps -> bindRecord(ps, record));
+        if (inserted == 1) {
+            return record;
+        }
+        return findByIdempotencyKey(record.idempotencyKey())
+                .orElseThrow(() -> new IllegalStateException(
+                        "idempotency key conflict without an existing operation"));
+    }
+
+    private static void bindRecord(java.sql.PreparedStatement ps, OperationRecord record)
+            throws java.sql.SQLException {
+        ps.setString(1, record.operationId());
+        ps.setString(2, record.state().name());
+        ps.setString(3, record.principalDigest());
+        ps.setLong(4, record.orgId());
+        ps.setString(5, record.capabilityId());
+        ps.setString(6, record.capabilityVersion());
+        ps.setString(7, record.manifestDigest());
+        ps.setLong(8, record.snapshotVersion());
+        ps.setString(9, record.encryptedArguments());
+        ps.setString(10, record.argumentsDigest());
+        ps.setString(11, record.idempotencyKey());
+        if (record.policyDecisionId() != null) {
+            ps.setString(12, record.policyDecisionId());
+        } else {
+            ps.setNull(12, Types.VARCHAR);
+        }
+        JsonbSupport.setJsonbObject(ps, 13, record.confirmationSummary());
+        ps.setTimestamp(14, Timestamp.from(record.expiresAt()));
+        ps.setLong(15, record.version());
     }
 
     @Override
@@ -99,6 +124,14 @@ public class JdbcOperationRepository implements OperationRepository {
                 SQL_FIND_BY_ID,
                 operationRowMapper(),
                 operationId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
+    }
+
+    @Override
+    public Optional<OperationRecord> findByIdempotencyKey(String idempotencyKey) {
+        Objects.requireNonNull(idempotencyKey, "idempotencyKey must not be null");
+        List<OperationRecord> results = jdbcTemplate.query(
+                SQL_FIND_BY_IDEMPOTENCY_KEY, operationRowMapper(), idempotencyKey);
         return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 

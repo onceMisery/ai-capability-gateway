@@ -4,12 +4,11 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.SnapshotNotifier;
+import com.ai.gateway.domain.port.TransactionPort;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 /**
@@ -44,6 +43,7 @@ public final class CatalogRollbackUseCase {
 
     private final CatalogPort catalogPort;
     private final SnapshotNotifier snapshotNotifier;
+    private final TransactionPort transactionPort;
 
     /**
      * Constructs a new CatalogRollbackUseCase with the required dependencies.
@@ -53,11 +53,14 @@ public final class CatalogRollbackUseCase {
      * @throws NullPointerException if any argument is null
      */
     public CatalogRollbackUseCase(CatalogPort catalogPort,
-                                   SnapshotNotifier snapshotNotifier) {
+                                   SnapshotNotifier snapshotNotifier,
+                                   TransactionPort transactionPort) {
         this.catalogPort = java.util.Objects.requireNonNull(
                 catalogPort, "catalogPort must not be null");
         this.snapshotNotifier = java.util.Objects.requireNonNull(
                 snapshotNotifier, "snapshotNotifier must not be null");
+        this.transactionPort = java.util.Objects.requireNonNull(
+                transactionPort, "transactionPort must not be null");
     }
 
     /**
@@ -77,68 +80,52 @@ public final class CatalogRollbackUseCase {
         log.info("Rolling back catalog to snapshot version {} for environment {}",
                 targetSnapshotVersion, environment);
 
-        // Step 1: Load the historical snapshot
-        CatalogSnapshot historicalSnapshot;
+        // Lock before loading history or allocating a replacement version.
+        CatalogSnapshot rollbackSnapshot;
         try {
-            historicalSnapshot = catalogPort.loadSnapshot(targetSnapshotVersion);
+            rollbackSnapshot = transactionPort.inTransaction(() -> {
+                catalogPort.lockEnvironmentForPublication(environment);
+                CatalogSnapshot historicalSnapshot = catalogPort.loadSnapshot(targetSnapshotVersion);
+                if (historicalSnapshot == null) {
+                    throw new IllegalArgumentException(
+                            "Historical snapshot version " + targetSnapshotVersion + " not found");
+                }
+                if (!environment.equals(historicalSnapshot.environment())) {
+                    throw new IllegalArgumentException(
+                            "Historical snapshot belongs to environment "
+                                    + historicalSnapshot.environment());
+                }
+                long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
+                String newPolicyRef = historicalSnapshot.policyRef()
+                        + "-rollback-" + newSnapshotVersion;
+                String newDigest = computeRollbackDigest(
+                        historicalSnapshot.capabilities(), environment,
+                        newSnapshotVersion, newPolicyRef);
+                CatalogSnapshot snapshot = new CatalogSnapshot(
+                        newSnapshotVersion, environment, historicalSnapshot.capabilities(),
+                        newPolicyRef, newDigest);
+                catalogPort.saveSnapshot(snapshot);
+                catalogPort.recordSnapshotPublication(snapshot, "CATALOG_ROLLED_BACK");
+                return snapshot;
+            });
         } catch (Exception e) {
-            log.error("Failed to load historical snapshot version {}: {}",
+            log.error("Failed to roll back snapshot version {}: {}",
                     targetSnapshotVersion, e.getMessage());
-            return new RollbackResult(false, 0,
-                    "Failed to load historical snapshot: " + e.getMessage());
+            return new RollbackResult(false, 0, e.getMessage());
         }
-
-        if (historicalSnapshot == null) {
-            return new RollbackResult(false, 0,
-                    "Historical snapshot version " + targetSnapshotVersion + " not found");
-        }
-
-        // Step 2: Determine the new snapshot version (monotonically increasing)
-        long currentVersion = 0;
-        try {
-            CatalogSnapshot current = catalogPort.loadCurrentSnapshot(environment);
-            if (current != null) {
-                currentVersion = current.snapshotVersion();
-            }
-        } catch (Exception e) {
-            log.warn("Could not load current snapshot: {}", e.getMessage());
-        }
-        long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
-
-        // Step 3: Copy historical content as a new snapshot, reapplying
-        // revocation list and authorization policy
-        // The capabilities from the historical snapshot are frozen into the
-        // new snapshot. The policy reference is inherited and versioned.
-        String newPolicyRef = historicalSnapshot.policyRef() + "-rollback-" + newSnapshotVersion;
-
-        // Compute a new digest for the rollback snapshot
-        String newDigest = computeRollbackDigest(
-                historicalSnapshot.capabilities(),
-                environment,
-                newSnapshotVersion,
-                newPolicyRef
-        );
-
-        CatalogSnapshot rollbackSnapshot = new CatalogSnapshot(
-                newSnapshotVersion,
-                environment,
-                historicalSnapshot.capabilities(),
-                newPolicyRef,
-                newDigest);
-        catalogPort.saveSnapshot(rollbackSnapshot);
 
         // The new snapshot carries the historical capabilities with a new
         // version number and fresh digest
         log.info("Created rollback snapshot version {} from historical version {} for environment {}",
-                newSnapshotVersion, targetSnapshotVersion, environment);
+                rollbackSnapshot.snapshotVersion(), targetSnapshotVersion, environment);
 
         // Step 4: Notify runtime instances of the new snapshot
-        snapshotNotifier.notifySnapshotPublished(newSnapshotVersion);
+        snapshotNotifier.notifySnapshotPublished(rollbackSnapshot.snapshotVersion());
 
         log.info("Catalog rolled back successfully: environment={}, newSnapshotVersion={}, fromHistorical={}",
-                environment, newSnapshotVersion, targetSnapshotVersion);
+                environment, rollbackSnapshot.snapshotVersion(), targetSnapshotVersion);
 
-        return new RollbackResult(true, newSnapshotVersion, null);
+        return new RollbackResult(true, rollbackSnapshot.snapshotVersion(), null);
     }
 
     /**
@@ -154,29 +141,7 @@ public final class CatalogRollbackUseCase {
                                           String environment,
                                           long snapshotVersion,
                                           String policyRef) {
-        try {
-            StringBuilder content = new StringBuilder();
-            content.append(snapshotVersion).append('\n');
-            content.append(environment).append('\n');
-            content.append(policyRef).append('\n');
-            for (CapabilityManifest manifest : capabilities) {
-                content.append(manifest.metadata().id())
-                        .append(':')
-                        .append(manifest.metadata().version())
-                        .append('\n');
-            }
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available", e);
-            return "DIGEST_ERROR";
-        }
+        return CatalogSnapshotDigest.sha256(snapshotVersion, environment, policyRef, capabilities);
     }
 
     /**

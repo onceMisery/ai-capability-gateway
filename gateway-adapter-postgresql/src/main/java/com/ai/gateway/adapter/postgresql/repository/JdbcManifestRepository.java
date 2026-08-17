@@ -157,7 +157,7 @@ public class JdbcManifestRepository implements ManifestRepository {
         if (report.valid()) {
             int updated = jdbcTemplate.update(
                     "UPDATE capability_manifest SET lifecycle = 'VALIDATED', updated_at = CURRENT_TIMESTAMP " +
-                    "WHERE id = ? AND version = ? AND lifecycle IN ('DRAFT', 'REJECTED', 'VALIDATED')",
+                    "WHERE id = ? AND version = ? AND lifecycle IN ('DRAFT', 'VALIDATED', 'SUSPENDED')",
                     id, version);
             requireSingleRow(updated, id, version, "validation");
         }

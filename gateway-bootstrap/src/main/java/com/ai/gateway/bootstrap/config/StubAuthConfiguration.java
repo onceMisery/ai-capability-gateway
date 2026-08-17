@@ -1,6 +1,7 @@
 package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.domain.model.AdminAction;
+import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
@@ -8,7 +9,6 @@ import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.SnapshotNotifier;
 import com.ai.gateway.domain.port.TokenIssuerPort;
-import org.springframework.beans.factory.annotation.Value;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -30,10 +30,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * configuration instead — this is the pluggability seam described in
  * {@code docs/extensibility-tech-selection.md}.</p>
  *
- * <p>The stubs follow the spec's initial-release degradation rules:
- * authentication accepts any non-blank Bearer token; authorization is
- * optional (all authenticated callers may access all capabilities and
- * admin actions).</p>
+ * <p>The stubs are development-only: authentication accepts any non-blank
+ * Bearer token and authorization allows all authenticated calls. Production
+ * must use the configured Sa-Token and ACL adapters.</p>
  *
  * @since 0.1.0
  */
@@ -46,9 +45,8 @@ public class StubAuthConfiguration {
     private static final String BEARER_PREFIX = "Bearer ";
     private final StubTokenService tokenService = new StubTokenService();
 
-    public StubAuthConfiguration(
-            @Value("${gateway.environment:development}") String environment) {
-        assertStubAllowed(environment);
+    public StubAuthConfiguration(GatewayProperties properties) {
+        assertStubAllowed(properties.getEnvironment());
     }
 
     static void assertStubAllowed(String environment) {
@@ -79,7 +77,7 @@ public class StubAuthConfiguration {
     }
 
     /**
-     * Stub {@link AuthorizationPort} for the initial release.
+     * Development-only stub {@link AuthorizationPort}.
      *
      * <p>"In the initial release, authorization is optional. All
      * authenticated users may call all published read-only capabilities.
@@ -110,6 +108,11 @@ public class StubAuthConfiguration {
             public boolean authorizeAdmin(Principal principal, AdminAction action) {
                 // Initial release: allow all authenticated users
                 return true;
+            }
+
+            @Override
+            public AclPolicyStatus aclPolicyStatus() {
+                return new AclPolicyStatus(true, 0, "ALLOW");
             }
         };
     }

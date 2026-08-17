@@ -1,9 +1,11 @@
 package com.ai.gateway.application.console;
 
 import com.ai.gateway.domain.model.CapabilityAclEntry;
+import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.Permission;
 import com.ai.gateway.domain.model.Role;
 import com.ai.gateway.domain.port.AclRepository;
+import com.ai.gateway.domain.port.ManifestRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,6 +13,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 /**
  * Use case for managing capability ACL entries, roles, and permissions
@@ -35,16 +38,22 @@ import java.util.Optional;
 public final class AclManageUseCase {
 
     private static final Logger log = LoggerFactory.getLogger(AclManageUseCase.class);
+    private static final Pattern PERMISSION_NAME = Pattern.compile(
+            "^[a-z][a-z0-9]*(:[a-z][a-z0-9]*){2}$");
 
     private final AclRepository aclRepository;
+    private final ManifestRepository manifestRepository;
 
     /**
      * Constructs a new AclManageUseCase.
      *
      * @param aclRepository the ACL repository
+     * @param manifestRepository the authoritative Manifest repository
      */
-    public AclManageUseCase(AclRepository aclRepository) {
+    public AclManageUseCase(AclRepository aclRepository,
+                            ManifestRepository manifestRepository) {
         this.aclRepository = Objects.requireNonNull(aclRepository);
+        this.manifestRepository = Objects.requireNonNull(manifestRepository);
     }
 
     // ================================================================
@@ -83,9 +92,21 @@ public final class AclManageUseCase {
                               List<String> allowedRoles, String updatedBy) {
         Objects.requireNonNull(capabilityId, "capabilityId must not be null");
         Objects.requireNonNull(capabilityVersion, "capabilityVersion must not be null");
+        if (allowedRoles == null || allowedRoles.isEmpty()
+                || allowedRoles.stream().anyMatch(role -> role == null || role.isBlank())) {
+            throw new IllegalArgumentException(
+                    "allowedRoles must contain at least one non-blank role");
+        }
 
+        CapabilityManifest manifest = manifestRepository
+                .findByIdAndVersion(capabilityId, capabilityVersion)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Capability Manifest not found: " + capabilityId + ":" + capabilityVersion));
+        List<String> requiredPermissions = manifest.spec().authorization() == null
+                ? List.of()
+                : manifest.spec().authorization().permissions();
         CapabilityAclEntry entry = new CapabilityAclEntry(
-                capabilityId, capabilityVersion, allowedRoles, List.of(),
+                capabilityId, capabilityVersion, allowedRoles, requiredPermissions,
                 Instant.now(), updatedBy != null ? updatedBy : "system"
         );
         aclRepository.saveAclEntry(entry);
@@ -136,6 +157,11 @@ public final class AclManageUseCase {
     public void saveRole(String name, String description, List<String> permissions) {
         Objects.requireNonNull(name, "name must not be null");
         Objects.requireNonNull(description, "description must not be null");
+        if (permissions == null || permissions.stream().anyMatch(permission ->
+                permission == null || !PERMISSION_NAME.matcher(permission).matches())) {
+            throw new IllegalArgumentException(
+                    "role permissions must use domain:resource:action names");
+        }
 
         Instant now = Instant.now();
         Role role = new Role(name, description, permissions, now, now);

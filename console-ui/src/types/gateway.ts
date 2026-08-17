@@ -190,6 +190,9 @@ export interface CapabilityAclEntry {
 }
 
 export interface AclPolicy {
+  aclLoadHealthy: boolean
+  aclEntryCount: number
+  emptyAclDecision: 'ALLOW' | 'DENY'
   aclEntries: CapabilityAclEntry[]
   roles: Role[]
   permissions: Permission[]

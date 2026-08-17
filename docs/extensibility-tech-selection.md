@@ -412,7 +412,7 @@ ai-capability-gateway/
 ├── gateway-adapter-dubbo/            (已有：Dubbo 泛化调用)
 ├── gateway-adapter-llm-http/         (已有：LLM 调用)
 ├── gateway-bootstrap/                (启动装配 + Sentinel 限流实现)
-├── gateway-test-provider/            (已有：E2E 测试 Provider)
+├── gateway-example/test-provider/    (已有：E2E 测试 Provider)
 └── ...
 ```
 
@@ -444,7 +444,7 @@ gateway-bootstrap/src/main/java/com/ai/gateway/bootstrap/ratelimit/
 | **M5** | 集成测试 | E2E 自动化（含多实例场景） | 2 天 | 🟡 测试已就绪（Testcontainers，执行需 Docker/CI） |
 
 > **实现说明（2026-08-01）**：
-> - 三个可插拔开关：`gateway.auth.provider`（stub|sa-token）、`gateway.cache.provider`（stub|redis）、`gateway.ratelimit.provider`（stub|sentinel），默认均为 stub，不影响存量行为。
+> - 三个可插拔开关：`gateway.auth.provider`（stub|sa-token）、`gateway.cache.provider`（stub|redis）、`gateway.ratelimit.provider`（stub|sentinel）均无默认值，必须显式配置；生产环境禁止 stub，开发环境才可显式选择 stub。
 > - §9 表中 Sa-Token Redis 工件名修正为 `sa-token-redisson-jackson`（`sa-token-dao-redisson` 在 1.39.0 不存在，系早期命名）。
 > - M1 认证主路径采用无状态 JWT 验签（符合决策 #2）；Sa-Token 会话经 `SaTokenRedisDaoConfiguration` 持久化到共享 Redis（符合决策 #1），在 sa-token + redis 同时启用时生效。
 > - Redisson 实际引入 `redisson`（编程式 `Config` + 手动 `RedissonClient` Bean）而非 `redisson-spring-boot-starter`，以遵循“最小侵入、避免自动配置侵入”原则；Redis 为唯一新增中间件（约束 #5）。

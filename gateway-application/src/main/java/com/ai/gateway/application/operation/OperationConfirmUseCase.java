@@ -17,12 +17,11 @@ import com.ai.gateway.domain.port.ConfirmationTokenCodec;
 import com.ai.gateway.domain.port.EncryptionPort;
 import com.ai.gateway.domain.port.InvocationAdapter;
 import com.ai.gateway.domain.port.OperationRepository;
+import com.ai.gateway.domain.service.OperationStateMachine;
+import com.ai.gateway.domain.service.Sha256Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +69,7 @@ public final class OperationConfirmUseCase {
     private final ConfirmationTokenCodec confirmationTokenCodec;
     private final ArgumentPayloadCodec argumentPayloadCodec;
     private final CatalogPort catalogPort;
+    private final OperationStateMachine operationStateMachine;
 
     /**
      * Constructs a new OperationConfirmUseCase with the required dependencies.
@@ -88,7 +88,8 @@ public final class OperationConfirmUseCase {
                                     EncryptionPort encryptionPort,
                                     ConfirmationTokenCodec confirmationTokenCodec,
                                     ArgumentPayloadCodec argumentPayloadCodec,
-                                    CatalogPort catalogPort) {
+                                    CatalogPort catalogPort,
+                                    OperationStateMachine operationStateMachine) {
         this.operationRepository = Objects.requireNonNull(operationRepository,
                 "operationRepository must not be null");
         this.invocationAdapter = Objects.requireNonNull(invocationAdapter,
@@ -105,6 +106,8 @@ public final class OperationConfirmUseCase {
                 "argumentPayloadCodec must not be null");
         this.catalogPort = Objects.requireNonNull(catalogPort,
                 "catalogPort must not be null");
+        this.operationStateMachine = Objects.requireNonNull(operationStateMachine,
+                "operationStateMachine must not be null");
     }
 
     /**
@@ -170,7 +173,7 @@ public final class OperationConfirmUseCase {
                 || !verifiedToken.expiresAt().equals(record.expiresAt())) {
             log.warn("Token expired for operation {}", operationId);
             // Transition to EXPIRED
-            operationRepository.casUpdateState(operationId,
+            casTransition(operationId,
                     OperationState.PREPARED, OperationState.EXPIRED, record.version());
             recordRejected(record, "CONFIRM_EXPIRED", ErrorCode.ARGUMENT_VALIDATION_FAILED,
                     "token_expired");
@@ -240,7 +243,7 @@ public final class OperationConfirmUseCase {
         }
 
         // Step 6: CAS atomic acquire execution right (PREPARED -> EXECUTING)
-        boolean casSuccess = operationRepository.casUpdateState(
+        boolean casSuccess = casTransition(
                 operationId,
                 OperationState.PREPARED,
                 OperationState.EXECUTING,
@@ -330,12 +333,12 @@ public final class OperationConfirmUseCase {
                 ? OperationState.SUCCEEDED
                 : OperationState.FAILED;
 
-        boolean finalStatePersisted = operationRepository.casUpdateState(operationId,
+        boolean finalStatePersisted = casTransition(operationId,
                 OperationState.EXECUTING, finalState,
                 record.version() + 1);
 
         if (!finalStatePersisted) {
-            operationRepository.casUpdateState(operationId,
+            casTransition(operationId,
                     OperationState.EXECUTING, OperationState.UNKNOWN,
                     record.version() + 1);
             auditPort.recordTerminal(operationId,
@@ -382,15 +385,31 @@ public final class OperationConfirmUseCase {
     }
 
     private OperationState persistExecutionFailure(OperationRecord record) {
-        if (operationRepository.casUpdateState(record.operationId(),
+        if (casTransition(record.operationId(),
                 OperationState.EXECUTING, OperationState.FAILED,
                 record.version() + 1)) {
             return OperationState.FAILED;
         }
-        operationRepository.casUpdateState(record.operationId(),
+        casTransition(record.operationId(),
                 OperationState.EXECUTING, OperationState.UNKNOWN,
                 record.version() + 1);
         return OperationState.UNKNOWN;
+    }
+
+    /**
+     * CAS state transition gated by the operation state machine.
+     *
+     * <p>Every persisted operation state change must first pass
+     * {@link OperationStateMachine#validateTransition}. This makes the state
+     * machine rules mandatory instead of advisory: an invalid transition is a
+     * programming error and fails fast rather than silently returning
+     * {@code false}.</p>
+     */
+    private boolean casTransition(String operationId, OperationState expectedState,
+                                  OperationState newState, long expectedVersion) {
+        operationStateMachine.validateTransition(expectedState, newState);
+        return operationRepository.casUpdateState(
+                operationId, expectedState, newState, expectedVersion);
     }
 
     /**
@@ -400,18 +419,7 @@ public final class OperationConfirmUseCase {
      * @return the hex-encoded digest
      */
     private String computeDigest(String content) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 algorithm not available", e);
-        }
+        return Sha256Digest.sha256Hex(content);
     }
 
     /**

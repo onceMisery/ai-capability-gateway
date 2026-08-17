@@ -3,12 +3,10 @@ package com.ai.gateway.application.catalog;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -95,19 +93,25 @@ public final class InMemoryCatalogManager {
             log.warn("No snapshot returned for environment: {}", environment);
             return false;
         }
+        if (!environment.equals(newSnapshot.environment()) || newSnapshot.snapshotVersion() <= 0
+                || newSnapshot.capabilities().isEmpty()) {
+            log.warn("Snapshot is not ready for activation: expectedEnvironment={}, actualEnvironment={}, version={}, capabilities={}",
+                    environment, newSnapshot.environment(), newSnapshot.snapshotVersion(),
+                    newSnapshot.capabilities().size());
+            return false;
+        }
 
-        // Verify the snapshot digest for integrity (skip if stored digest is empty)
+        // Verify the snapshot digest for integrity. Missing digests fail closed.
         String storedDigest = newSnapshot.digest();
-        if (storedDigest != null && !storedDigest.isEmpty()) {
-            String computedDigest = computeSnapshotDigest(newSnapshot);
-            if (!computedDigest.equals(storedDigest)) {
-                log.error("Snapshot digest verification failed for version {}: expected={}, computed={}",
-                        newSnapshot.snapshotVersion(), storedDigest, computedDigest);
-                return false;
-            }
-        } else {
-            log.warn("Snapshot version {} has no stored digest, skipping integrity check",
-                    newSnapshot.snapshotVersion());
+        if (storedDigest == null || storedDigest.isBlank()) {
+            log.error("Snapshot version {} has no stored digest", newSnapshot.snapshotVersion());
+            return false;
+        }
+        String computedDigest = computeSnapshotDigest(newSnapshot);
+        if (!computedDigest.equals(storedDigest)) {
+            log.error("Snapshot digest verification failed for version {}: expected={}, computed={}",
+                    newSnapshot.snapshotVersion(), storedDigest, computedDigest);
+            return false;
         }
 
         // Build the capability lookup index
@@ -194,28 +198,6 @@ public final class InMemoryCatalogManager {
      * @return the hex-encoded SHA-256 digest
      */
     private String computeSnapshotDigest(CatalogSnapshot snapshot) {
-        try {
-            StringBuilder content = new StringBuilder();
-            content.append(snapshot.snapshotVersion()).append('\n');
-            content.append(snapshot.environment()).append('\n');
-            content.append(snapshot.policyRef()).append('\n');
-            for (CapabilityManifest manifest : snapshot.capabilities()) {
-                content.append(manifest.metadata().id())
-                        .append(':')
-                        .append(manifest.metadata().version())
-                        .append('\n');
-            }
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available", e);
-            return "DIGEST_ERROR";
-        }
+        return CatalogSnapshotDigest.sha256(snapshot);
     }
 }

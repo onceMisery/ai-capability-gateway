@@ -10,8 +10,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HmacConfirmationTokenCodecTest {
 
-    private final HmacConfirmationTokenCodec codec = new HmacConfirmationTokenCodec(
-            "0123456789abcdef0123456789abcdef", "test");
+    private final HmacConfirmationTokenCodec codec = new HmacConfirmationTokenCodec(properties(
+            "0123456789abcdef0123456789abcdef", "test"));
 
     @Test
     void roundTripsBoundClaims() {
@@ -39,7 +39,14 @@ class HmacConfirmationTokenCodecTest {
 
     @Test
     void productionRequiresConfiguredSecret() {
-        assertThatThrownBy(() -> new HmacConfirmationTokenCodec("", "production"))
+        assertThatThrownBy(() -> new HmacConfirmationTokenCodec(properties("", "production")))
                 .isInstanceOf(IllegalStateException.class);
+    }
+
+    private static GatewayProperties properties(String secret, String environment) {
+        GatewayProperties properties = new GatewayProperties();
+        properties.setEnvironment(environment);
+        properties.getOperation().setConfirmationSecret(secret);
+        return properties;
     }
 }

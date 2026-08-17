@@ -7,12 +7,10 @@ import com.ai.gateway.domain.port.CompatibilityTestPort;
 import com.ai.gateway.domain.port.ManifestRepository;
 import com.ai.gateway.domain.port.SchemaValidator;
 import com.ai.gateway.domain.service.ManifestValidator;
+import com.ai.gateway.domain.service.ManifestDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -147,61 +145,7 @@ public final class ManifestImportUseCase {
      * @return the hex-encoded SHA-256 digest, or {@code null} if generation fails
      */
     private String generateContentDigest(CapabilityManifest manifest) {
-        try {
-            String content = manifestToCanonicalString(manifest);
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.getBytes(StandardCharsets.UTF_8));
-            return bytesToHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available", e);
-            return null;
-        }
-    }
-
-    /**
-     * Converts the manifest to a canonical string representation for digest
-     * computation.
-     *
-     * @param manifest the manifest
-     * @return the canonical string
-     */
-    private String manifestToCanonicalString(CapabilityManifest manifest) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(manifest.apiVersion()).append('\n');
-        sb.append(manifest.kind()).append('\n');
-
-        CapabilityManifest.Metadata meta = manifest.metadata();
-        sb.append(meta.id()).append('\n');
-        sb.append(meta.version()).append('\n');
-        if (meta.owner() != null) {
-            sb.append(meta.owner().team()).append('\n');
-            sb.append(meta.owner().contact()).append('\n');
-        }
-        if (meta.tags() != null) {
-            sb.append(String.join(",", meta.tags())).append('\n');
-        }
-
-        CapabilityManifest.Spec spec = manifest.spec();
-        sb.append(spec.displayName()).append('\n');
-        sb.append(spec.description()).append('\n');
-        sb.append(spec.risk()).append('\n');
-
-        return sb.toString();
-    }
-
-    /**
-     * Converts a byte array to a lowercase hex string.
-     *
-     * @param bytes the bytes
-     * @return the hex string
-     */
-    private String bytesToHex(byte[] bytes) {
-        StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-            sb.append(Character.forDigit(b & 0xF, 16));
-        }
-        return sb.toString();
+        return ManifestDigest.sha256(manifest);
     }
 
     /**

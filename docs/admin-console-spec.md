@@ -9,6 +9,8 @@
 
 ## 1. 文档目的与范围
 
+> **实现基线（2026-08-16）**：本文中的认证、缓存、限流 Provider 均无默认值，必须显式配置；生产环境禁止 stub。项目未上线，数据库只执行唯一空库迁移 `V1__gateway_schema.sql`，ACL/console 表已合并在该 V1 中。端点、Use Case 和实现状态以当前源码为准；下文标记为草案或 NOT_IMPLEMENTED 的内容不构成已交付契约。
+
 本文档定义 AI 能力网关（ai-capability-gateway）**管理后台**（Admin Console）的完整规格：产品能力、技术选型、认证集成链路、页面与交互设计、API 兼容层契约、数据模型扩展、里程碑与验收标准。
 
 管理后台是网关的**控制面图形化入口**，覆盖以下六大基础管理能力：
@@ -40,13 +42,13 @@
 | 六边形架构 | adapter / bootstrap → application → domain，依赖单向，ArchUnit 强制校验 |
 | 控制面 API | `gateway-adapter-web` 的 `AdminController`，前缀 `/admin/v1` |
 | 运行面 API | `NaturalLanguageController`（前缀 `/api/v1/natural-language`）与 `OperationController` |
-| 认证可插拔 | `gateway.auth.provider=stub`（默认）\| `sa-token`，由 `StubAuthConfiguration` / `SaTokenAuthConfiguration` 条件装配 |
-| 授权可插拔 | `AuthorizationPort`：`filterVisibleCapabilities` / `authorizeExecution` / `authorizeAdmin`；`AdminAction` 枚举：IMPORT / APPROVE / PUBLISH / ROLLBACK / SUSPEND |
+| 认证可插拔 | `gateway.auth.provider` 必须显式配置；开发可选 `stub`，生产必须为 `sa-token`，由 `StubAuthConfiguration` / `SaTokenAuthConfiguration` 条件装配 |
+| 授权可插拔 | `AuthorizationPort`：`filterVisibleCapabilities` / `authorizeExecution` / `authorizeAdmin`；生产 ACL 加载失败或空 ACL 均 fail-closed |
 | 快照模型 | 不可变 `CatalogSnapshot`，`catalog_snapshot` + `catalog_snapshot_item` 表，单调递增 snapshot_version |
-| 持久化 | PostgreSQL 15+ + Flyway（V1~V3 已存在） |
-| 审计 | `audit_event` 表（三检查点）、`execution_record` 表；Micro-batching 写入；`GET /admin/v1/audits` 当前为 NOT_IMPLEMENTED 骨架 |
-| 限流 | Sentinel Core 编程式 API，`gateway.ratelimit.provider=stub`（默认）\| `sentinel`；规则硬编码于 `SentinelRuleInitializer` |
-| 缓存 | `gateway.cache.provider=stub`（默认）\| `redis`（Redisson + Caffeine L1） |
+| 持久化 | PostgreSQL 15+ + Flyway；未上线阶段仅保留唯一空库基线 `V1__gateway_schema.sql`，ACL/console 表已包含在该 V1 中 |
+| 审计 | `audit_event`/`execution_record` 表与 Outbox 已落地；端点和 Use Case 状态以当前源码为准，未实现端点不作为可用契约 |
+| 限流 | Sentinel Core 编程式 API；`gateway.ratelimit.provider` 必须显式选择，生产必须为 `sentinel`，开发才可选择 `stub` |
+| 缓存 | `gateway.cache.provider` 必须显式选择，生产必须为 `redis`，开发才可选择 `stub`（Redisson + Caffeine L1） |
 | 配置 | `gateway-bootstrap/src/main/resources/application.yml`，`gateway.*` 前缀 |
 
 ### 2.2 现有 API 事实清单（管理后台复用的基础）
@@ -60,14 +62,14 @@
 | POST | `/admin/v1/releases:rollback` | 回滚（body：`{targetSnapshotVersion, environment}`） | ✅ 已有 |
 | POST | `/admin/v1/capabilities/{id}:suspend` | 紧急停用（body：`{reason, operator}`） | ✅ 已有 |
 | GET | `/admin/v1/releases/{snapshotVersion}` | 快照详情 | ✅ 已有 |
-| GET | `/admin/v1/audits` | 审计查询 | 🟡 骨架（NOT_IMPLEMENTED） |
+| GET | `/admin/v1/audits` | 审计查询（`MonitorQueryController` → `AuditQueryUseCase` → `JdbcAuditQueryAdapter`） | ✅ 已有 |
 | POST | `/api/v1/natural-language/queries` | 自然语言查询 | ✅ 已有 |
 | POST | `/api/v1/natural-language/interactions/{id}/messages` | 澄清会话 | ✅ 已有 |
 | GET | `/health/readiness` | 就绪探针 | ✅ 已有 |
 | GET | `/health/liveness` | 存活探针 | ✅ 已有 |
 | GET | `/actuator/health` `/actuator/metrics` `/actuator/prometheus` | Spring Boot Actuator | ✅ 已有 |
 
-> **重要差异提示**：`gateway-example/README.md` 中的 curl 示例使用 `POST /api/v1/admin/manifests`（YAML body），但实际 `AdminController` 的导入端点为 `POST /admin/v1/manifests:import`（JSON body）。管理后台**以实际代码为准**，采用 `/admin/v1/...` + JSON 契约。
+> 管理后台以当前 Controller 实现为准：管理 API 统一使用 `/admin/v1/...`，Manifest 导入使用 JSON body 的 `POST /admin/v1/manifests:import`。
 
 ### 2.3 安全模型约束（必须遵循）
 
@@ -158,7 +160,7 @@ ai-capability-gateway/
 │
 ├── gateway-adapter-web/              ← 扩展：新增 4 个 Controller + CORS 配置（§6）
 ├── gateway-domain/                   ← 扩展：新增 Port 与模型（§6.2）
-├── gateway-adapter-postgresql/       ← 扩展：V4 迁移（ACL 表）+ 审计查询实现（§7）
+├── gateway-adapter-postgresql/       ← PostgreSQL 唯一 V1 基线 + ACL/审计查询实现（§7）
 └── gateway-bootstrap/                ← 扩展：Sentinel 规则管理服务、控制台管理员配置
 ```
 
@@ -316,7 +318,7 @@ ai-capability-gateway/
 - 支持两种输入：**YAML 文件上传**（`<input type=file>`，js-yaml 解析为 JSON 后预览）与 **在线编辑**（CodeMirror 6 YAML 模式）。
 - 编辑流程：YAML 编辑 → 实时 js-yaml 解析（语法错误行内提示）→ "解析并预览"（JSON 树 + 与 `gateway-contract-schema` 的 JSON Schema 做前端预校验提示，最终以网关校验为准）→ 提交 `POST /admin/v1/manifests:import`（body 为转换后的 JSON `CapabilityManifest`）。
 - 提交后展示校验结果：成功（IMPORTED + validationReport）→ 跳转详情页；失败（REJECTED + errors 列表）→ 回到编辑器并定位错误。
-- 编辑已有 DRAFT/REJECTED 版本：拉取原始 Manifest → 编辑 → 以新版本号提交（**内容不可覆盖**，id+version 唯一）。
+- 编辑已有 DRAFT 版本：拉取原始 Manifest → 编辑 → 以新版本号提交（**内容不可覆盖**，id+version 唯一）；REJECTED 为终态，修复必须导入新的 id+version。
 
 #### 5.1.2 状态流转与操作规则
 
@@ -326,18 +328,18 @@ ai-capability-gateway/
 DRAFT → IMPORTED → VALIDATED → APPROVED → PUBLISHED → SUSPENDED
                       ↑            │          │            │
                       │            │          ▼            │
-                      │            └──→ REJECTED ←─────────┘
-                      └──→（编辑后重新校验）                  （恢复需重新校验+新快照）
+                      │            └──→ REJECTED
+                      └──→（SUSPENDED 重新校验）               （恢复需重新校验+新快照）
 ```
 
 | 状态 | 可用操作（按钮按此渲染） |
 |------|------------------------|
 | DRAFT / IMPORTED | 编辑、提交校验 |
-| VALIDATED | 审批（approve）、驳回（本里程碑以"编辑后重提"代替显式驳回） |
+| VALIDATED | 审批（approve）、驳回（reject 后当前版本终止） |
 | APPROVED | 发布（publish） |
 | PUBLISHED | 停用（suspend）、查看快照归属 |
 | SUSPENDED | 查看（恢复需重新走 校验→审批→发布 流程） |
-| REJECTED | 编辑后重新提交 |
+| REJECTED | 仅查看；导入新的 id+version |
 | RETIRED | 仅查看 |
 
 操作交互约定：审批需二次确认弹窗（显示确认摘要：capabilityId、version、risk）；发布需二次确认（显示将生成的快照说明）；停用必须填写 reason（必填）；回滚需从快照列表选择目标版本并二次确认（§5.2）。
@@ -435,15 +437,15 @@ DRAFT → IMPORTED → VALIDATED → APPROVED → PUBLISHED → SUSPENDED
 **授权策略总览（/acl）**：
 
 - 展示"角色 → 权限 → 能力"的关联视图（三层 drill-down），说明当前生效策略。
-- 展示 `allowAllIfAclEmpty` 当前取值与提示（ACL 为空时默认放行的降级规则，见 §2.3/§5.5）。
+- 展示 ACL 当前加载状态与条数；生产 ACL 为空或加载失败时必须拒绝执行，不提供默认放行提示。单条 ACL 也必须至少绑定一个角色，空角色列表由后端拒绝。权限词和角色权限关联由后端再次校验三段式格式，禁止 `*` 通配权限。
 
 #### 5.4.2 实现方案（网关侧）
 
-当前 `SaTokenAuthorizationAdapter` 的 ACL 为**内存实现**（`loadAcl()` 空实现，`grant()` 可编程注册）。本里程碑：
+当前 `SaTokenAuthorizationAdapter` 使用进程内不可变快照，生产启动和刷新均从 PostgreSQL ACL Repository 加载；`grant()` 仅保留给开发测试显式构造。生产空 ACL 和加载失败均为拒绝。当前实现：
 
-1. **新增数据库表**（`V4` 迁移，§7）：`role`、`permission`、`role_permission`、`capability_acl`（capabilityId → 允许角色集合，含 policy_version）。
+1. **使用唯一数据库基线**（`V1__gateway_schema.sql`，§7）：`gateway_role`、`gateway_permission`、`capability_acl`、`console_setting`（capabilityId + version → 允许角色集合）。
 2. **新增 Domain Port `AclRepository`**：`listRoles/listPermissions/upsertCapabilityAcl/...`；`gateway-adapter-postgresql` 提供 `JdbcAclRepository`。
-3. **改造 `SaTokenAuthorizationAdapter`**：新增构造重载注入 `AclRepository`（保持无参构造可用，兼容既有装配）；`loadAcl()` 改为从数据库加载并缓存（`ConcurrentHashMap`，支持运行时刷新）；新增 `refreshAcl()` 供 ACL 变更后调用。
+3. **改造 `SaTokenAuthorizationAdapter`**：生产构造注入 `AclRepository`，从 PostgreSQL 加载 ACL 到进程内不可变快照；刷新成功后原子替换，加载失败保留上一快照但整体 fail-closed；`refreshAcl()` 由 ACL 变更后调用。无参构造仅保留给显式开发测试，默认拒绝空 ACL。
 4. **新增管理端点**：`/admin/v1/acl/capabilities`（GET 列表 / PUT 更新）、`/admin/v1/roles`、`/admin/v1/permissions`（CRUD，§6.2.6）。
 5. **差距项修复**（贯穿全章节）：`AdminController` 现有 6 个变更端点与新增管理端点统一在 Use Case 入口执行 `authorizeAdmin`；stub 模式下由 `StubAuthorizationPort` 保持"全放行"语义不变，sa-token 模式下严格执行 admin 角色 / `*` 权限。
 
@@ -731,19 +733,21 @@ Query 参数：capabilityId、status、from、to、page、size
 | POST | `/admin/v1/permissions` | 创建权限词（名称正则 `^[a-z][a-z0-9]*(:[a-z][a-z0-9]*){2}$`，禁止 `*`） |
 | DELETE | `/admin/v1/permissions/{name}` | 删除权限词（被角色引用时 409） |
 | GET | `/admin/v1/acl/capabilities` | 能力 ACL 列表（capabilityId、allowedRoles、requiredPermissions） |
-| PUT | `/admin/v1/acl/capabilities/{id}` | 更新能力授权角色（body：`{roles[]}`），成功后触发 `SaTokenAuthorizationAdapter.refreshAcl()` |
-| GET | `/admin/v1/acl/policy` | 授权策略总览（`allowAllIfAclEmpty` 取值、ACL 条数、生效版本） |
+| PUT | `/admin/v1/acl/capabilities` | 更新能力授权角色（body：`{capabilityId, version, allowedRoles[], updatedBy}`），权限要求从 Manifest 权威声明读取，成功后触发 `refreshAcl()` |
+| DELETE | `/admin/v1/acl/capabilities/{capabilityId}/{version}` | 删除能力 ACL；删除后该能力在默认拒绝策略下不可执行 |
+| GET | `/admin/v1/acl/policy` | 授权策略总览（直返 JSON：`aclLoadHealthy`、`aclEntryCount`、`emptyAclDecision`、`aclEntries`、`roles`、`permissions`） |
 
 ```json
-// GET /admin/v1/acl/capabilities → 200
+// GET /admin/v1/acl/policy → 200
 {
-  "status": "OK",
-  "data": {
-    "allowAllIfAclEmpty": true,
-    "items": [
-      { "capabilityId": "order.detail.query", "allowedRoles": ["order-analyst", "admin"], "requiredPermissions": ["order:detail:read"] }
-    ]
-  }
+  "aclLoadHealthy": true,
+  "aclEntryCount": 1,
+  "emptyAclDecision": "DENY",
+  "aclEntries": [
+    { "capabilityId": "order.detail.query", "capabilityVersion": "1.0.0", "allowedRoles": ["order-analyst", "admin"], "requiredPermissions": ["order:detail:read"] }
+  ],
+  "roles": [],
+  "permissions": []
 }
 ```
 
@@ -809,7 +813,7 @@ Query 参数：capabilityId、status、from、to、page、size
 | 新增文件（gateway-adapter-postgresql） | 说明 |
 |----------------------------------------|------|
 | `JdbcAuditQueryAdapter`、`JdbcStatsQueryAdapter`、`JdbcAclRepository` | 查询/权限落地实现 |
-| `db/migration/V4__acl_and_console.sql` | §7 迁移 |
+| ACL/console 表 | 已合并在唯一基线 `db/migration/V1__gateway_schema.sql`；未上线阶段不维护并行迁移 |
 
 | 新增文件（gateway-bootstrap） | 说明 |
 |------------------------------|------|
@@ -833,56 +837,11 @@ Query 参数：capabilityId、status、from、to、page、size
 
 ---
 
-## 7. 数据模型扩展（V4 迁移）
+## 7. 数据模型扩展（唯一 V1 基线）
 
-新增 `V4__acl_and_console.sql`（`gateway-adapter-postgresql`），与现有 V1~V3 风格一致：
+项目未上线，数据库只保留一套完整的 `V1__gateway_schema.sql`，不存在并行版本或兼容迁移链：
 
-```sql
--- V4__acl_and_console.sql
--- Console/ACL support: roles, permission words, role-permission mapping,
--- capability ACL, and console settings.
-
-CREATE TABLE role (
-    name VARCHAR(64) PRIMARY KEY,
-    description VARCHAR(256) NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE permission (
-    name VARCHAR(128) PRIMARY KEY,      -- domain:resource:action 三段式
-    description VARCHAR(256) NOT NULL DEFAULT '',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE role_permission (
-    role_name VARCHAR(64) NOT NULL REFERENCES role(name),
-    permission_name VARCHAR(128) NOT NULL REFERENCES permission(name),
-    policy_version BIGINT NOT NULL DEFAULT 1,
-    PRIMARY KEY (role_name, permission_name)
-);
-
-CREATE TABLE capability_acl (
-    capability_id VARCHAR(256) NOT NULL,
-    capability_version VARCHAR(32) NOT NULL,
-    allowed_role VARCHAR(64) NOT NULL REFERENCES role(name),
-    policy_version BIGINT NOT NULL DEFAULT 1,
-    updated_by VARCHAR(64) NOT NULL DEFAULT 'SYSTEM',
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (capability_id, capability_version, allowed_role)
-);
-
-CREATE TABLE console_setting (
-    setting_key VARCHAR(64) PRIMARY KEY,
-    setting_value VARCHAR(512) NOT NULL,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-```
-
-要点：
-- `capability_acl` 以 (capabilityId, capabilityVersion) 为能力维度（与 `capability_manifest` 主键对齐）；`SaTokenAuthorizationAdapter` 运行时按 capabilityId 聚合（当前版本维度）。
-- `policy_version` 供后续策略快照/回滚演进预留（与授权映射关系模型设计对齐）。
-- `console_setting` 预留（本里程碑可空表，用于将来存储非敏感控制台偏好）。
+当前唯一基线已包含 `gateway_role`、`gateway_permission`、`capability_acl`、`console_setting` 等表，并为实体使用 identity 主键、为外部业务键保留唯一约束。ACL 按 capabilityId + version 读取，生产 Sa-Token 加载失败或空 ACL 均拒绝执行。任何结构变更在上线前直接修改这套空库基线；上线后才引入正式递增迁移。
 
 ---
 
@@ -922,7 +881,7 @@ CREATE TABLE console_setting (
 | M2 | 能力清单管理 | CatalogQueryController 查询端点、能力列表/详情/编辑器（YAML 上传+在线编辑）、生命周期操作闭环 | 3d |
 | M3 | 快照管理 | `CatalogPort.listSnapshots`、快照列表/详情/发布/回滚 | 1.5d |
 | M4 | 运行监控 | AuditQueryPort/StatsQueryPort + 适配器、审计查询页、统计看板（ECharts）、健康状态卡片 | 2.5d |
-| M5 | 权限管理 | V4 迁移、AclRepository、SaTokenAuthorizationAdapter 改造、ACL/角色/权限页、authorizeAdmin 差距修复 | 2d |
+| M5 | 权限管理 | 唯一 V1 基线、AclRepository、SaTokenAuthorizationAdapter 数据库加载与 fail-closed、ACL/角色/权限页、统一管理鉴权 | 已完成 |
 | M6 | 系统配置 | ConfigQueryUseCase、SentinelRuleAdminService、配置/限流/缓存页 | 1.5d |
 | M7 | 联调验收 | stub/sa-token 双模式 E2E、文档完善、Nginx 部署示例验证 | 1.5d |
 
@@ -941,7 +900,7 @@ CREATE TABLE console_setting (
 2. **能力生命周期闭环**：上传 order-detail-query.yaml → 解析预览 → 导入（IMPORTED + 校验报告）→ 重新校验（VALIDATED）→ 审批（APPROVED）→ 发布（快照 +1）→ 能力详情显示 PUBLISHED → 停用（填 reason）→ SUSPENDED → 恢复走重新校验/审批/发布 → 回滚到历史快照。
 3. **快照管理**：发布 3 个快照 → 列表显示当前 ACTIVE + 2 个 SUPERSEDED → 详情能力列表正确 → 回滚到 v1 → 新快照版本生成且内容与 v1 一致。
 4. **监控**：发起若干自然语言查询（含失败场景，如 ERROR/TIMEOUT 订单号）→ 统计看板数据更新（30s 内）→ 审计查询按 eventType/resultCode/时间过滤正确。
-5. **权限管理**：创建角色 `order-analyst` → 授权 `order.detail.query` → 用带该角色的 JWT（SaTokenIssuer 签发）查询 → 可见该能力；未授权能力不可见（先授权后暴露）。ACL 为空时默认放行提示正确展示。
+5. **权限管理**：创建角色 `order-analyst` → 授权 `order.detail.query` → 用带该角色的 JWT（SaTokenIssuer 签发）查询 → 可见该能力；未授权能力不可见（先授权后暴露）。ACL 为空或加载失败时执行必须拒绝。
 6. **限流规则**：sentinel 模式下新增能力级 QPS=1 规则 → 连续调用触发 429 → 删除规则恢复；stub 模式下操作规则返回 `RATELIMIT_DISABLED`。
 7. **配置查看**：非敏感配置正确展示；敏感字段（secret/api-key）确认不出现。
 
@@ -957,9 +916,9 @@ CREATE TABLE console_setting (
 
 | # | 风险/问题 | 影响 | 应对/决策 |
 |---|-----------|------|----------|
-| 1 | 既有 `AdminController` 变更端点未执行 `authorizeAdmin` | 管理操作无鉴权（stub 模式当前可接受，sa-token 模式必须修复） | M5 强制修复：Use Case 入口统一门禁；修复前管理后台仅允许 stub 模式联调管理操作 |
+| 1 | 既有管理端点的授权门禁 | 当前已由 Controller/Use Case 统一执行 `authorizeAdmin`，需持续回归 | 保留管理端点安全契约测试；生产禁止 stub |
 | 2 | Sentinel 规则为运行时内存态 | 重启回落到硬编码基线，运行时修改丢失 | 界面显著标注；Nacos DataSource 演进（技术选型决策 #3 预留） |
-| 3 | ACL 数据库实现与 `SaTokenAuthorizationAdapter` 内存实现的改造耦合 | 影响现有 sa-token 装配 | 保持无参构造兼容，新增注入重载；`refreshAcl()` 幂等 |
+| 3 | ACL 数据库加载与进程缓存一致性 | 刷新失败可能导致能力暂时不可执行 | 保持 fail-closed；刷新成功后原子替换缓存并保留集成测试 |
 | 4 | Token 存 localStorage 的 XSS 风险 | 令牌被盗 | 界面提示；生产 HTTPS；httpOnly Cookie 方案列为后续 |
 | 5 | 审计 `subjectDigest` 为哈希 | 界面无法展示用户名 | 本里程碑展示摘要前缀；如需明文需新增主体映射表（后续） |
 | 6 | 统计端点基于 `execution_record` | 数据量增长后聚合变慢 | 30s 缓存 + 分页限制；后续可加物化视图/时序库 |
@@ -972,5 +931,5 @@ CREATE TABLE console_setting (
 
 - `docs/extensibility-tech-selection.md` — 可插拔认证/缓存/限流选型与决策
 - `docs/workflow-and-integration-guide.md` — 控制面/运行面工作流与 API 参考
-- `gateway-example/README.md` — 示例与认证集成场景（stub / sa-token / custom）
+- `README.md`、`gateway-example/test-client/src/main/resources/manifests/` — 示例与认证集成场景
 - `README.md` — 网关架构与核心设计原则

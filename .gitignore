@@ -1,2 +1,13 @@
 /target/
+**/node_modules/
+*.log
+dependency-tree.txt
+.playwright/
+test-results/
+playwright-report/
 .idea
+
+# Local configuration overlays — contain real credentials. NEVER commit.
+# Use application-local.yml.example as the template instead.
+application-local.yml
+application-*.local.yml

@@ -3,7 +3,6 @@ package com.ai.gateway.bootstrap.config;
 import com.ai.gateway.bootstrap.ratelimit.SentinelRateLimiterAdapter;
 import com.ai.gateway.bootstrap.ratelimit.SentinelRuleInitializer;
 import com.ai.gateway.domain.port.RateLimiterPort;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -48,9 +47,9 @@ public class SentinelRateLimitConfiguration {
      */
     @Bean
     public SentinelRuleInitializer sentinelRuleInitializer(
-            @Value("${gateway.sentinel.global-qps:2000}") double globalQps,
-            @Value("${gateway.sentinel.llm-qps:20}") double llmQps,
-            @Value("${gateway.sentinel.llm-max-queueing-ms:2000}") int llmMaxQueueingMs) {
-        return new SentinelRuleInitializer(globalQps, llmQps, llmMaxQueueingMs, List.of());
+            GatewayProperties properties) {
+        GatewayProperties.Sentinel sentinel = properties.getSentinel();
+        return new SentinelRuleInitializer(sentinel.getGlobalQps(), sentinel.getLlmQps(),
+                sentinel.getLlmMaxQueueingMs(), List.of());
     }
 }

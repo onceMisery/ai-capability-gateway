@@ -37,6 +37,9 @@ public enum ErrorCode {
      */
     PERMISSION_DENIED(false),
 
+    /** A write capability must use the Prepare/Confirm protocol. */
+    CONFIRMATION_REQUIRED(false),
+
     /**
      * No capability matched the natural-language request after retrieval
      * and threshold filtering. Not retryable.

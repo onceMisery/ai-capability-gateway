@@ -2,7 +2,6 @@ package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.domain.model.ConfirmationToken;
 import com.ai.gateway.domain.port.ConfirmationTokenCodec;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Mac;
@@ -26,8 +25,9 @@ public final class HmacConfirmationTokenCodec implements ConfirmationTokenCodec 
     private final byte[] secret;
 
     public HmacConfirmationTokenCodec(
-            @Value("${gateway.operation.confirmation-secret:}") String configuredSecret,
-            @Value("${gateway.environment:development}") String environment) {
+            GatewayProperties properties) {
+        String configuredSecret = properties.getOperation().getConfirmationSecret();
+        String environment = properties.getEnvironment();
         if (configuredSecret == null || configuredSecret.isBlank()) {
             if ("production".equalsIgnoreCase(environment)) {
                 throw new IllegalStateException(

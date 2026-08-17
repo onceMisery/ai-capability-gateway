@@ -10,6 +10,7 @@ import com.ai.gateway.bootstrap.config.WebAdaptersConfiguration;
 import cn.dev33.satoken.dao.SaTokenDaoRedissonJackson;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -42,6 +43,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication(exclude = SaTokenDaoRedissonJackson.class)
 @EnableScheduling
+@EnableConfigurationProperties(com.ai.gateway.bootstrap.config.GatewayProperties.class)
 @Import({
         // --- Pluggable provider wiring (auth / catalog / rate limiting) ---
         // Each provider group contains mutually exclusive implementations

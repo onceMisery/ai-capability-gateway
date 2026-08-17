@@ -1,17 +1,17 @@
 package com.ai.gateway.application.controlplane;
 
+import com.ai.gateway.domain.model.CapabilityLifecycle;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.ManifestRepository;
 import com.ai.gateway.domain.port.SnapshotNotifier;
+import com.ai.gateway.domain.port.TransactionPort;
+import com.ai.gateway.domain.service.LifecycleStateMachine;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -49,6 +49,8 @@ public final class CatalogPublishUseCase {
     private final ManifestRepository manifestRepository;
     private final CatalogPort catalogPort;
     private final SnapshotNotifier snapshotNotifier;
+    private final LifecycleStateMachine lifecycleStateMachine;
+    private final TransactionPort transactionPort;
 
     /**
      * Constructs a new CatalogPublishUseCase with the required dependencies.
@@ -56,17 +58,25 @@ public final class CatalogPublishUseCase {
      * @param manifestRepository the repository for querying manifest lifecycle states
      * @param catalogPort        the port for loading and creating catalog snapshots
      * @param snapshotNotifier   the notifier for propagating snapshot changes to instances
+     * @param lifecycleStateMachine the lifecycle state machine guarding manifest transitions
+     * @param transactionPort    the transaction boundary for atomic multi-repository publish
      * @throws NullPointerException if any argument is null
      */
     public CatalogPublishUseCase(ManifestRepository manifestRepository,
                                  CatalogPort catalogPort,
-                                 SnapshotNotifier snapshotNotifier) {
+                                 SnapshotNotifier snapshotNotifier,
+                                 LifecycleStateMachine lifecycleStateMachine,
+                                 TransactionPort transactionPort) {
         this.manifestRepository = java.util.Objects.requireNonNull(
                 manifestRepository, "manifestRepository must not be null");
         this.catalogPort = java.util.Objects.requireNonNull(
                 catalogPort, "catalogPort must not be null");
         this.snapshotNotifier = java.util.Objects.requireNonNull(
                 snapshotNotifier, "snapshotNotifier must not be null");
+        this.lifecycleStateMachine = java.util.Objects.requireNonNull(
+                lifecycleStateMachine, "lifecycleStateMachine must not be null");
+        this.transactionPort = java.util.Objects.requireNonNull(
+                transactionPort, "transactionPort must not be null");
     }
 
     /**
@@ -112,70 +122,57 @@ public final class CatalogPublishUseCase {
         log.info("Publishing catalog to environment: {}, selected={}",
                 environment, selectedCapabilities.size());
 
-        // Step 1: Validate target versions are APPROVED
-        List<ManifestRepository.ManifestDetail> allManifests =
-                manifestRepository.findAllWithDetails();
-        List<CapabilityManifest> approvedManifests = new ArrayList<>();
+        // Acquire the environment lock before reading manifests or allocating
+        // a version, so concurrent publishers cannot plan duplicate work.
+        PublishResult result = transactionPort.inTransaction(() -> {
+            catalogPort.lockEnvironmentForPublication(environment);
 
-        for (ManifestRepository.ManifestDetail detail : allManifests) {
-            if (detail.lifecycle() == com.ai.gateway.domain.model.CapabilityLifecycle.APPROVED) {
-                approvedManifests.add(detail.manifest());
-            }
-        }
-
-        if (!selectedCapabilities.isEmpty()) {
-            approvedManifests = approvedManifests.stream()
+            List<CapabilityManifest> approvedManifests = manifestRepository.findAllWithDetails()
+                    .stream()
+                    .filter(detail -> detail.lifecycle() == CapabilityLifecycle.APPROVED)
+                    .map(ManifestRepository.ManifestDetail::manifest)
+                    .collect(Collectors.toList());
+            List<CapabilityManifest> manifestsToPublish = selectedCapabilities.isEmpty()
+                    ? approvedManifests
+                    : approvedManifests.stream()
                     .filter(m -> selectedCapabilities.stream().anyMatch(
                             s -> s.capabilityId().equals(m.metadata().id())
                                     && s.version().equals(m.metadata().version())))
                     .collect(Collectors.toList());
-        }
 
-        if (approvedManifests.isEmpty()) {
+            if (manifestsToPublish.isEmpty()) {
+                return new PublishResult(false, 0, "No approved manifests to publish");
+            }
+            for (CapabilityManifest manifest : manifestsToPublish) {
+                lifecycleStateMachine.validateTransition(
+                        CapabilityLifecycle.APPROVED, CapabilityLifecycle.PUBLISHED);
+            }
+
+            long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
+            String policyRef = "policy-v" + newSnapshotVersion;
+            String digest = computeSnapshotDigest(manifestsToPublish, environment,
+                    newSnapshotVersion, policyRef);
+            CatalogSnapshot newSnapshot = new CatalogSnapshot(
+                    newSnapshotVersion, environment, manifestsToPublish, policyRef, digest);
+
+            catalogPort.saveSnapshot(newSnapshot);
+            for (CapabilityManifest manifest : manifestsToPublish) {
+                manifestRepository.updateLifecycle(
+                        manifest.metadata().id(), manifest.metadata().version(),
+                        CapabilityLifecycle.PUBLISHED);
+            }
+            catalogPort.recordSnapshotPublication(newSnapshot, "MANIFEST_PUBLISHED");
+            return new PublishResult(true, newSnapshotVersion, null);
+        });
+
+        if (!result.success()) {
             log.warn("No approved manifests found for publication to {}", environment);
-            return new PublishResult(false, 0, "No approved manifests to publish");
+            return result;
         }
-
-        // Step 2: Generate a new monotonically increasing snapshot version
-        long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
-
-        // Step 3: Freeze all active capabilities and policy references
-        // The snapshot is immutable once created; capabilities are frozen
-        // by copying them into the snapshot
-        String policyRef = "policy-v" + newSnapshotVersion;
-
-        // Compute the content digest for integrity verification
-        String digest = computeSnapshotDigest(approvedManifests, environment,
-                newSnapshotVersion, policyRef);
-
-        CatalogSnapshot newSnapshot = new CatalogSnapshot(
-                newSnapshotVersion,
-                environment,
-                approvedManifests,
-                policyRef,
-                digest
-        );
-
-        // Step 4: Mark the new snapshot as current
-        // In a full implementation, this would be a database transaction
-        // that atomically marks the old snapshot as non-current and the new
-        // one as current. The CatalogPort adapter handles this.
-        catalogPort.saveSnapshot(newSnapshot);
-        for (CapabilityManifest manifest : approvedManifests) {
-            manifestRepository.updateLifecycle(
-                    manifest.metadata().id(), manifest.metadata().version(),
-                    com.ai.gateway.domain.model.CapabilityLifecycle.PUBLISHED);
-        }
-        log.info("Created snapshot version {} for environment {} with {} capabilities",
-                newSnapshotVersion, environment, approvedManifests.size());
-
-        // Step 5: Write publish audit and notification event
-        snapshotNotifier.notifySnapshotPublished(newSnapshotVersion);
-
-        log.info("Catalog published successfully: environment={}, snapshotVersion={}, capabilities={}",
-                environment, newSnapshotVersion, approvedManifests.size());
-
-        return new PublishResult(true, newSnapshotVersion, null);
+        snapshotNotifier.notifySnapshotPublished(result.snapshotVersion());
+        log.info("Catalog published successfully: environment={}, snapshotVersion={}",
+                environment, result.snapshotVersion());
+        return result;
     }
 
     /**
@@ -192,29 +189,7 @@ public final class CatalogPublishUseCase {
                                          String environment,
                                          long snapshotVersion,
                                          String policyRef) {
-        try {
-            StringBuilder content = new StringBuilder();
-            content.append(snapshotVersion).append('\n');
-            content.append(environment).append('\n');
-            content.append(policyRef).append('\n');
-            for (CapabilityManifest manifest : capabilities) {
-                content.append(manifest.metadata().id())
-                        .append(':')
-                        .append(manifest.metadata().version())
-                        .append('\n');
-            }
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.toString().getBytes(StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available", e);
-            return "DIGEST_ERROR";
-        }
+        return CatalogSnapshotDigest.sha256(snapshotVersion, environment, policyRef, capabilities);
     }
 
     /**

@@ -1,8 +1,6 @@
 package com.ai.gateway.adapter.web.controller;
 
-import com.ai.gateway.domain.port.CatalogPort;
-import com.ai.gateway.domain.port.ManifestRepository;
-import com.ai.gateway.domain.port.SecretManager;
+import com.ai.gateway.application.runtime.HealthReadinessUseCase;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,21 +11,11 @@ class HealthControllerTest {
 
     @Test
     void missingRequiredSecretMakesReadinessUnavailable() throws Exception {
-        CatalogPort catalog = mock(CatalogPort.class);
-        ManifestRepository manifests = mock(ManifestRepository.class);
-        SecretManager secrets = key -> { throw new IllegalStateException("missing"); };
-        when(manifests.findAll()).thenReturn(java.util.List.of());
-        when(catalog.loadCurrentSnapshot("production"))
-                .thenReturn(mock(com.ai.gateway.domain.model.CatalogSnapshot.class));
-
-        var constructor = java.util.Arrays.stream(HealthController.class.getConstructors())
-                .filter(candidate -> java.util.Arrays.equals(candidate.getParameterTypes(),
-                        new Class<?>[]{CatalogPort.class, ManifestRepository.class,
-                                SecretManager.class, String.class}))
-                .findFirst().orElse(null);
-        assertThat(constructor).isNotNull();
-        HealthController controller = (HealthController) constructor.newInstance(
-                catalog, manifests, secrets, "production");
+        HealthReadinessUseCase readiness = mock(HealthReadinessUseCase.class);
+        when(readiness.check()).thenReturn(new HealthReadinessUseCase.Result(false,
+                java.util.Map.of("database", "UP", "activeSnapshot", "UP",
+                        "requiredSecrets", "DOWN", "adapterInitialization", "UP")));
+        HealthController controller = new HealthController(readiness);
         var response = controller.readiness();
 
         assertThat(response.getStatusCode().value()).isEqualTo(503);

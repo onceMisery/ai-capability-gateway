@@ -1,6 +1,7 @@
 package com.ai.gateway.adapter.web.controller;
 
 import com.ai.gateway.application.operation.OperationConfirmUseCase;
+import com.ai.gateway.application.operation.OperationCancelUseCase;
 import com.ai.gateway.application.operation.OperationPrepareUseCase;
 import com.ai.gateway.application.operation.OperationStatusUseCase;
 import com.ai.gateway.adapter.web.support.RequestContextFactory;
@@ -9,7 +10,6 @@ import com.ai.gateway.domain.model.OperationState;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.port.AuthenticationPort;
-import com.ai.gateway.domain.port.OperationRepository;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
@@ -26,13 +26,10 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.ai.gateway.domain.service.Sha256Digest;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 
 /**
  * REST controller for the write-operation API.
@@ -66,9 +63,9 @@ public class OperationController {
 
     private final OperationPrepareUseCase prepareUseCase;
     private final OperationConfirmUseCase confirmUseCase;
+    private final OperationCancelUseCase cancelUseCase;
     private final OperationStatusUseCase statusUseCase;
     private final AuthenticationPort authenticationPort;
-    private final OperationRepository operationRepository;
     private final RequestContextFactory requestContextFactory;
 
     /**
@@ -85,20 +82,20 @@ public class OperationController {
      */
     public OperationController(OperationPrepareUseCase prepareUseCase,
                                 OperationConfirmUseCase confirmUseCase,
+                                OperationCancelUseCase cancelUseCase,
                                 OperationStatusUseCase statusUseCase,
                                 AuthenticationPort authenticationPort,
-                                OperationRepository operationRepository,
                                 RequestContextFactory requestContextFactory) {
         this.prepareUseCase = Objects.requireNonNull(prepareUseCase,
                 "prepareUseCase must not be null");
         this.confirmUseCase = Objects.requireNonNull(confirmUseCase,
                 "confirmUseCase must not be null");
+        this.cancelUseCase = Objects.requireNonNull(cancelUseCase,
+                "cancelUseCase must not be null");
         this.statusUseCase = Objects.requireNonNull(statusUseCase,
                 "statusUseCase must not be null");
         this.authenticationPort = Objects.requireNonNull(authenticationPort,
                 "authenticationPort must not be null");
-        this.operationRepository = Objects.requireNonNull(operationRepository,
-                "operationRepository must not be null");
         this.requestContextFactory = Objects.requireNonNull(requestContextFactory,
                 "requestContextFactory must not be null");
     }
@@ -115,6 +112,7 @@ public class OperationController {
     @PostMapping("/natural-language/actions:prepare")
     public ResponseEntity<Map<String, Object>> prepare(
             @RequestBody @Valid PrepareRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = true) String idempotencyKey,
             @RequestHeader(value = AUTH_HEADER, required = false) String authHeader,
             HttpServletRequest servletRequest) {
 
@@ -124,7 +122,8 @@ public class OperationController {
         OperationPrepareUseCase.PrepareResult result =
                 prepareUseCase.prepare(requestContext, request.text(),
                         request.locale() != null ? request.locale() : "zh-CN",
-                        request.timezone() != null ? request.timezone() : "UTC");
+                        request.timezone() != null ? request.timezone() : "UTC",
+                        idempotencyKey);
 
         Map<String, Object> body = new LinkedHashMap<>();
 
@@ -210,43 +209,17 @@ public class OperationController {
             return authenticationFailed();
         }
 
-        OperationRecord record = statusUseCase.query(operationId);
-
         Map<String, Object> body = new LinkedHashMap<>();
-
-        if (record == null) {
-            body.put("status", "NOT_FOUND");
-            body.put("message", "Operation not found");
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
-        }
-
-        if (!isOwner(record, principal)) {
-            body.put("status", "NOT_FOUND");
-            body.put("message", "Operation not found");
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
-        }
-
-        if (record.state() != OperationState.PREPARED) {
-            body.put("status", record.state().name());
-            body.put("message", "Operation cannot be cancelled in state: " + record.state());
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
-        }
-
-        boolean cancelled = operationRepository.casUpdateState(
-                operationId, OperationState.PREPARED, OperationState.CANCELLED,
-                record.version());
-
-        if (cancelled) {
-            body.put("status", "CANCELLED");
-            body.put("operationId", operationId);
+        OperationCancelUseCase.CancelResult result = cancelUseCase.cancel(operationId, principal);
+        body.put("status", result.state());
+        body.put("operationId", operationId);
+        body.put("message", result.message());
+        if (result.success()) {
             return ResponseEntity.ok(body);
-        } else {
-            // CAS failed — another request may have confirmed or expired it
-            OperationRecord current = statusUseCase.query(operationId);
-            body.put("status", current != null ? current.state().name() : "UNKNOWN");
-            body.put("message", "Operation state changed concurrently");
-            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
         }
+        HttpStatus status = "NOT_FOUND".equals(result.state())
+                ? HttpStatus.NOT_FOUND : HttpStatus.CONFLICT;
+        return ResponseEntity.status(status).body(body);
     }
 
     /**
@@ -317,13 +290,7 @@ public class OperationController {
     }
 
     private String subjectDigest(String subject) {
-        try {
-            byte[] digest = MessageDigest.getInstance("SHA-256")
-                    .digest(subject.getBytes(StandardCharsets.UTF_8));
-            return HexFormat.of().formatHex(digest);
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 is unavailable", e);
-        }
+        return Sha256Digest.sha256Hex(subject);
     }
 
     /**

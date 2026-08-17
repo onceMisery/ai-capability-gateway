@@ -15,6 +15,16 @@
       <article class="stat-card"><div class="stat-label"><el-icon><Lock /></el-icon> 当前主体</div><div class="stat-value strategy-user">{{ auth.username || '-' }}</div><div class="stat-meta">本次修改将记录为该主体</div></article>
     </section>
 
+    <el-alert
+      v-if="policyStatus"
+      :type="policyStatus.aclLoadHealthy ? 'success' : 'error'"
+      :title="policyStatus.aclLoadHealthy ? '策略已加载，空 ACL 默认拒绝' : '策略加载失败，当前执行全部拒绝'"
+      :description="`当前缓存 ${policyStatus.aclEntryCount} 条 ACL；空 ACL 决策：${policyStatus.emptyAclDecision}`"
+      show-icon
+      :closable="false"
+      class="policy-status"
+    />
+
     <section class="surface strategy-surface">
       <el-tabs v-model="activeTab" class="strategy-tabs">
         <el-tab-pane name="roles">
@@ -38,7 +48,7 @@
             <el-table-column label="Manifest 权限" min-width="220"><template #default="{ row }"><div class="tag-list"><el-tag v-for="permission in row.requiredPermissions" :key="permission" size="small" effect="plain">{{ permission }}</el-tag><span v-if="!row.requiredPermissions.length" class="muted">无额外权限</span></div></template></el-table-column>
             <el-table-column label="更新" width="190"><template #default="{ row }"><span>{{ formatDateTime(row.updatedAt) }}</span><small class="muted">{{ row.updatedBy }}</small></template></el-table-column>
             <el-table-column label="操作" width="150"><template #default="{ row }"><el-button text type="primary" @click="openAclDialog(row)">编辑</el-button><el-button text type="danger" @click="deleteAcl(row)">删除</el-button></template></el-table-column>
-          </el-table><div v-else class="empty-state"><div><strong>暂无 ACL 条目</strong><span>当前初始策略会允许所有已认证调用者，请尽快配置能力级边界。</span></div></div></div>
+          </el-table><div v-else class="empty-state"><div><strong>暂无 ACL 条目</strong><span>当前执行默认拒绝；配置能力级 ACL 后，只有匹配角色和权限的主体可以调用。</span></div></div></div>
         </el-tab-pane>
 
         <el-tab-pane name="permissions">
@@ -66,7 +76,7 @@
     <el-dialog v-model="aclDialogOpen" title="配置能力 ACL" width="min(560px, calc(100vw - 24px))">
       <el-form ref="aclFormRef" :model="aclForm" :rules="aclRules" label-position="top">
         <el-form-item label="能力" prop="capabilityKey"><el-select v-model="aclForm.capabilityKey" filterable :disabled="!!editingAcl" style="width: 100%" placeholder="选择能力版本"><el-option v-for="capability in capabilities" :key="`${capability.capabilityId}@${capability.version}`" :label="`${capability.displayName} · ${capability.capabilityId} v${capability.version}`" :value="`${capability.capabilityId}@${capability.version}`" /></el-select></el-form-item>
-        <el-form-item label="允许角色" prop="allowedRoles"><el-select v-model="aclForm.allowedRoles" multiple filterable collapse-tags style="width: 100%" placeholder="选择允许调用的角色"><el-option v-for="role in roles" :key="role.name" :label="role.name" :value="role.name" /></el-select><div class="form-helper">后端的空角色列表表示不限制角色；控制台要求至少选择一个角色，避免意外扩大访问面。</div></el-form-item>
+          <el-form-item label="允许角色" prop="allowedRoles"><el-select v-model="aclForm.allowedRoles" multiple filterable collapse-tags style="width: 100%" placeholder="选择允许调用的角色"><el-option v-for="role in roles" :key="role.name" :label="role.name" :value="role.name" /></el-select><div class="form-helper">至少选择一个角色；空角色 ACL 会被后端拒绝，避免意外扩大访问面。</div></el-form-item>
       </el-form>
       <template #footer><el-button @click="aclDialogOpen = false">取消</el-button><el-button type="primary" :loading="dialogLoading" @click="saveAcl">保存 ACL</el-button></template>
     </el-dialog>
@@ -88,7 +98,7 @@ import { Key, List, Lock, Plus, Refresh, Search, UserFilled } from '@element-plu
 import { gatewayApi } from '@/api/gateway'
 import { useAuthStore } from '@/stores/auth'
 import { apiErrorMessage, formatDateTime } from '@/utils/format'
-import type { CapabilityAclEntry, CapabilitySummary, Permission, Role } from '@/types/gateway'
+import type { AclPolicy, CapabilityAclEntry, CapabilitySummary, Permission, Role } from '@/types/gateway'
 
 const auth = useAuthStore()
 const loading = ref(false)
@@ -98,6 +108,7 @@ const roles = ref<Role[]>([])
 const permissions = ref<Permission[]>([])
 const aclEntries = ref<CapabilityAclEntry[]>([])
 const capabilities = ref<CapabilitySummary[]>([])
+const policyStatus = ref<Pick<AclPolicy, 'aclLoadHealthy' | 'aclEntryCount' | 'emptyAclDecision'>>()
 const roleSearch = ref('')
 const aclSearch = ref('')
 const permissionSearch = ref('')
@@ -129,11 +140,15 @@ function filterBy<T>(rows: T[], query: string, fields: (row: T) => string[]) {
 
 async function loadAll() {
   loading.value = true
-  const results = await Promise.allSettled([gatewayApi.roles(), gatewayApi.permissions(), gatewayApi.aclEntries(), gatewayApi.capabilities()])
-  if (results[0].status === 'fulfilled') roles.value = results[0].value
-  if (results[1].status === 'fulfilled') permissions.value = results[1].value
-  if (results[2].status === 'fulfilled') aclEntries.value = results[2].value
-  if (results[3].status === 'fulfilled') capabilities.value = results[3].value
+  const results = await Promise.allSettled([gatewayApi.aclPolicy(), gatewayApi.capabilities()])
+  if (results[0].status === 'fulfilled') {
+    const policy = results[0].value
+    policyStatus.value = policy
+    roles.value = policy.roles
+    permissions.value = policy.permissions
+    aclEntries.value = policy.aclEntries
+  }
+  if (results[1].status === 'fulfilled') capabilities.value = results[1].value
   const firstError = results.find((item) => item.status === 'rejected')
   if (firstError?.status === 'rejected') ElMessage.error(apiErrorMessage(firstError.reason))
   loading.value = false
@@ -186,7 +201,7 @@ async function saveAcl() {
 }
 
 async function deleteAcl(entry: CapabilityAclEntry) {
-  try { await ElMessageBox.confirm(`确认删除 ${entry.capabilityId} v${entry.capabilityVersion} 的 ACL？删除后请确认默认授权策略。`, '删除 ACL', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }) }
+  try { await ElMessageBox.confirm(`确认删除 ${entry.capabilityId} v${entry.capabilityVersion} 的 ACL？删除后该能力将按默认拒绝策略执行。`, '删除 ACL', { type: 'warning', confirmButtonText: '确认删除', cancelButtonText: '取消' }) }
   catch { return }
   try { await gatewayApi.deleteAcl(entry.capabilityId, entry.capabilityVersion); ElMessage.success('ACL 已删除'); await loadAll() }
   catch (error) { ElMessage.error(apiErrorMessage(error)) }
@@ -223,6 +238,10 @@ async function deletePermission(permission: Permission) {
 }
 
 .strategy-surface {
+  margin-top: 16px;
+}
+
+.policy-status {
   margin-top: 16px;
 }
 

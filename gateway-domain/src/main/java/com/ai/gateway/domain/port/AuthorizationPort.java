@@ -1,6 +1,7 @@
 package com.ai.gateway.domain.port;
 
 import com.ai.gateway.domain.model.AdminAction;
+import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.Principal;
 
@@ -30,12 +31,9 @@ import java.util.List;
  * in coordination with the catalog snapshot to ensure permissions and
  * capabilities are consistent at runtime.</p>
  *
- * <p>In the initial release, authorization is optional:
- * all authenticated users may call all published read-only capabilities.
- * Visibility authorization degrades to authentication status check;
- * execution authorization degrades to Schema validation and Principal
- * parameter injection. This design is preserved for when the capability
- * surface grows or write operations are enabled.</p>
+ * <p>A development-only stub may allow authenticated users to call published
+ * read-only capabilities. Production adapters must load an explicit policy;
+ * missing or unhealthy ACL data is fail-closed.</p>
  *
  * <p>Adapters implementing this port query the authorization data source
  * (e.g., an RBAC/ABAC/ReBAC engine or a capability-role ACL table). The
@@ -93,6 +91,9 @@ public interface AuthorizationPort {
      * @return {@code true} if the action is authorized; {@code false} otherwise
      */
     boolean authorizeAdmin(Principal principal, AdminAction action);
+
+    /** Returns the currently active capability ACL cache status. */
+    AclPolicyStatus aclPolicyStatus();
 
     /**
      * 刷新 ACL 缓存

@@ -4,14 +4,11 @@ import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.port.AuditPort;
 import com.ai.gateway.domain.port.TokenIssuerPort;
 import com.ai.gateway.domain.model.AuditEvent;
+import com.ai.gateway.domain.service.Sha256Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -36,6 +33,8 @@ public final class ConsoleAuthUseCase {
     private final TokenIssuerPort tokenIssuerPort;
     private final AuditPort auditPort;
     private final String authMode;
+    private final String adminUsername;
+    private final String adminPassword;
 
     /**
      * 构造 ConsoleAuthUseCase
@@ -47,9 +46,19 @@ public final class ConsoleAuthUseCase {
     public ConsoleAuthUseCase(TokenIssuerPort tokenIssuerPort,
                                AuditPort auditPort,
                                String authMode) {
+        this(tokenIssuerPort, auditPort, authMode, "", "");
+    }
+
+    public ConsoleAuthUseCase(TokenIssuerPort tokenIssuerPort,
+                               AuditPort auditPort,
+                               String authMode,
+                               String adminUsername,
+                               String adminPassword) {
         this.tokenIssuerPort = Objects.requireNonNull(tokenIssuerPort);
         this.auditPort = Objects.requireNonNull(auditPort);
         this.authMode = Objects.requireNonNull(authMode);
+        this.adminUsername = adminUsername == null ? "" : adminUsername;
+        this.adminPassword = adminPassword == null ? "" : adminPassword;
     }
 
     /**
@@ -73,7 +82,18 @@ public final class ConsoleAuthUseCase {
      * @return 包含 token、expiresInSeconds、principal 的映射
      */
     public Map<String, Object> login(String username) {
+        return login(username, null);
+    }
+
+    /** Validates console credentials at the application boundary before issuing tokens. */
+    public Map<String, Object> login(String username, String password) {
         Objects.requireNonNull(username, "username must not be null");
+        if (!"stub".equals(authMode)
+                && (!constantTimeEquals(adminUsername, username)
+                || !constantTimeEquals(adminPassword, password))) {
+            recordLoginFailure(username);
+            throw new SecurityException("invalid credentials");
+        }
         Map<String, Object> claims = Map.of(
                 "orgId", 0L,
                 "roles", List.of("admin"),
@@ -107,6 +127,15 @@ public final class ConsoleAuthUseCase {
                         "principal", principal
                 )
         );
+    }
+
+    private boolean constantTimeEquals(String expected, String actual) {
+        if (expected == null || actual == null) {
+            return false;
+        }
+        return java.security.MessageDigest.isEqual(
+                expected.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                actual.getBytes(java.nio.charset.StandardCharsets.UTF_8));
     }
 
     /** Rotates a valid refresh token and returns a new token pair. */
@@ -208,12 +237,6 @@ public final class ConsoleAuthUseCase {
     }
 
     private String digestSubject(String subject) {
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(
-                    subject.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 not available", e);
-        }
+        return Sha256Digest.sha256Hex(subject);
     }
 }

@@ -13,14 +13,15 @@ class LifecycleStateMachineTest {
     @ParameterizedTest
     @CsvSource({
             "DRAFT, VALIDATED, true",
-            "DRAFT, REJECTED, true",
+            "DRAFT, REJECTED, false",
             "VALIDATED, APPROVED, true",
             "VALIDATED, REJECTED, true",
             "APPROVED, PUBLISHED, true",
-            "APPROVED, REJECTED, true",
+            "APPROVED, REJECTED, false",
             "PUBLISHED, SUSPENDED, true",
             "PUBLISHED, RETIRED, true",
-            "SUSPENDED, PUBLISHED, true",
+            "SUSPENDED, PUBLISHED, false",
+            "SUSPENDED, VALIDATED, true",
             "SUSPENDED, RETIRED, true",
             "DRAFT, PUBLISHED, false",
             "DRAFT, APPROVED, false",
@@ -54,7 +55,7 @@ class LifecycleStateMachineTest {
     @Test
     void shouldReturnAllowedTransitions() {
         assertThat(sm.allowedTransitions(CapabilityLifecycle.DRAFT))
-                .containsExactlyInAnyOrder(CapabilityLifecycle.VALIDATED, CapabilityLifecycle.REJECTED);
+                .containsExactly(CapabilityLifecycle.VALIDATED);
     }
 
     @Test

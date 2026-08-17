@@ -124,8 +124,8 @@ cap_<base32(sha256(snapshotVersion + capabilityId + version))[0:16]>
 
 ```
 DRAFT → VALIDATED → APPROVED → PUBLISHED → SUSPENDED → RETIRED
-  │         │            │
-  └──────→ REJECTED ←────┘
+              │                            │
+              └────→ REJECTED              └────→ VALIDATED
 ```
 
 | 状态 | 含义 | 允许操作 |
@@ -136,7 +136,7 @@ DRAFT → VALIDATED → APPROVED → PUBLISHED → SUSPENDED → RETIRED
 | PUBLISHED | 进入活动快照 | 停用、新版本 |
 | SUSPENDED | 紧急停用 | 恢复（需重新校验） |
 | RETIRED | 永久退出 | 无 |
-| REJECTED | 校验/确认拒绝 | 修改后重新提交 |
+| REJECTED | 校验/确认拒绝，当前版本终止 | 导入新的 id+version |
 
 ### 3.2 导入与校验（10 步流水线）
 
@@ -558,21 +558,23 @@ java -jar gateway-manifest-cli.jar validate \
 #### 第三步：导入网关
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/admin/manifests \
+curl -X POST http://localhost:8080/admin/v1/manifests:import \
   -H "Authorization: Bearer <admin-token>" \
-  -H "Content-Type: application/x-yaml" \
-  --data-binary @order-detail-query.yaml
+  -H "Content-Type: application/json" \
+  --data-binary @order-detail-query.json
 ```
 
 #### 第四步：确认并发布
 
 ```bash
 # 确认
-curl -X POST http://localhost:8080/api/v1/admin/manifests/order.detail.query/1.0.0/approve \
-  -H "Authorization: Bearer <admin-token>"
+curl -X POST http://localhost:8080/admin/v1/capabilities/order.detail.query/versions/1.0.0:approve \
+  -H "Authorization: Bearer <admin-token>" \
+  -H "Content-Type: application/json" \
+  -d '{"approver":"admin"}'
 
 # 发布到 production
-curl -X POST http://localhost:8080/api/v1/admin/snapshots:publish \
+curl -X POST http://localhost:8080/admin/v1/releases:publish \
   -H "Authorization: Bearer <admin-token>" \
   -H "Content-Type: application/json" \
   -d '{"environment": "production"}'
@@ -615,11 +617,11 @@ curl -X POST http://localhost:8080/api/v1/natural-language/queries \
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| POST | `/api/v1/admin/manifests` | 导入 Manifest |
-| POST | `/api/v1/admin/manifests/{id}/{version}/approve` | 确认 |
-| POST | `/api/v1/admin/snapshots:publish` | 发布快照 |
-| POST | `/api/v1/admin/capabilities/{id}:suspend` | 紧急停用 |
-| POST | `/api/v1/admin/snapshots:rollback` | 回滚 |
+| POST | `/admin/v1/manifests:import` | 导入 JSON Manifest |
+| POST | `/admin/v1/capabilities/{id}/versions/{version}:approve` | 确认 |
+| POST | `/admin/v1/releases:publish` | 发布快照 |
+| POST | `/admin/v1/capabilities/{id}:suspend` | 紧急停用 |
+| POST | `/admin/v1/releases:rollback` | 回滚 |
 
 #### 健康检查
 

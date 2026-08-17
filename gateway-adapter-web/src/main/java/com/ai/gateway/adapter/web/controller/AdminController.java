@@ -5,14 +5,14 @@ import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
 import com.ai.gateway.application.controlplane.ManifestApprovalUseCase;
 import com.ai.gateway.application.controlplane.ManifestImportUseCase;
+import com.ai.gateway.application.controlplane.ManifestValidationUseCase;
+import com.ai.gateway.application.controlplane.CatalogSnapshotQueryUseCase;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
-import com.ai.gateway.domain.port.CatalogPort;
-import com.ai.gateway.domain.port.ManifestRepository;
-import com.ai.gateway.domain.service.ManifestValidator;
+import com.ai.gateway.domain.service.Sha256Digest;
 import com.ai.gateway.adapter.web.support.SecurityHelper;
 import com.ai.gateway.domain.model.AdminAction;
 import org.slf4j.Logger;
@@ -73,9 +73,8 @@ public class AdminController {
     private final CatalogPublishUseCase catalogPublishUseCase;
     private final CatalogRollbackUseCase catalogRollbackUseCase;
     private final CapabilitySuspendUseCase capabilitySuspendUseCase;
-    private final ManifestRepository manifestRepository;
-    private final ManifestValidator manifestValidator;
-    private final CatalogPort catalogPort;
+    private final ManifestValidationUseCase manifestValidationUseCase;
+    private final CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase;
     private final AuthenticationPort authenticationPort;
     private final AuthorizationPort authorizationPort;
 
@@ -97,9 +96,8 @@ public class AdminController {
                            CatalogPublishUseCase catalogPublishUseCase,
                            CatalogRollbackUseCase catalogRollbackUseCase,
                            CapabilitySuspendUseCase capabilitySuspendUseCase,
-                           ManifestRepository manifestRepository,
-                           ManifestValidator manifestValidator,
-                           CatalogPort catalogPort,
+                           ManifestValidationUseCase manifestValidationUseCase,
+                           CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase,
                            AuthenticationPort authenticationPort,
                            AuthorizationPort authorizationPort) {
         this.manifestImportUseCase = Objects.requireNonNull(manifestImportUseCase,
@@ -112,12 +110,10 @@ public class AdminController {
                 "catalogRollbackUseCase must not be null");
         this.capabilitySuspendUseCase = Objects.requireNonNull(capabilitySuspendUseCase,
                 "capabilitySuspendUseCase must not be null");
-        this.manifestRepository = Objects.requireNonNull(manifestRepository,
-                "manifestRepository must not be null");
-        this.manifestValidator = Objects.requireNonNull(manifestValidator,
-                "manifestValidator must not be null");
-        this.catalogPort = Objects.requireNonNull(catalogPort,
-                "catalogPort must not be null");
+        this.manifestValidationUseCase = Objects.requireNonNull(manifestValidationUseCase,
+                "manifestValidationUseCase must not be null");
+        this.catalogSnapshotQueryUseCase = Objects.requireNonNull(catalogSnapshotQueryUseCase,
+                "catalogSnapshotQueryUseCase must not be null");
         this.authenticationPort = Objects.requireNonNull(authenticationPort,
                 "authenticationPort must not be null");
         this.authorizationPort = Objects.requireNonNull(authorizationPort,
@@ -173,20 +169,17 @@ public class AdminController {
 
         log.info("Manifest validation requested: id={}, version={}", id, version);
 
-        var manifestOpt = manifestRepository.findByIdAndVersion(id, version);
-        if (manifestOpt.isEmpty()) {
+        ManifestValidationUseCase.Result result = manifestValidationUseCase.validate(id, version);
+        if (result.status() == ManifestValidationUseCase.Status.NOT_FOUND) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", "NOT_FOUND");
             body.put("message", "Manifest not found");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
         }
 
-        ValidationReport report = manifestValidator.validate(manifestOpt.get());
-        manifestRepository.recordValidation(id, version, report);
-
         Map<String, Object> body = new LinkedHashMap<>();
-        body.put("status", report.valid() ? "VALIDATED" : "INVALID");
-        body.put("validationReport", buildValidationReportBody(report));
+        body.put("status", result.status().name());
+        body.put("validationReport", buildValidationReportBody(result.report()));
         return ResponseEntity.ok(body);
     }
 
@@ -351,7 +344,7 @@ public class AdminController {
 
         log.debug("Snapshot query: version={}", snapshotVersion);
 
-        CatalogSnapshot snapshot = catalogPort.loadSnapshot(snapshotVersion);
+        CatalogSnapshot snapshot = catalogSnapshotQueryUseCase.find(snapshotVersion).orElse(null);
 
         Map<String, Object> body = new LinkedHashMap<>();
 
@@ -409,13 +402,7 @@ public class AdminController {
     }
 
     private String subjectDigest(String subject) {
-        try {
-            byte[] digest = java.security.MessageDigest.getInstance("SHA-256")
-                    .digest(subject.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return java.util.HexFormat.of().formatHex(digest);
-        } catch (java.security.NoSuchAlgorithmException e) {
-            throw new InternalError("SHA-256 is unavailable", e);
-        }
+        return Sha256Digest.sha256Hex(subject);
     }
 
     /**

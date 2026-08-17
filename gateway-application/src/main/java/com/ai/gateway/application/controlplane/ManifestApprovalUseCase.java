@@ -7,10 +7,10 @@ import com.ai.gateway.domain.model.ProjectionMapping;
 import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.port.ManifestRepository;
 import com.ai.gateway.domain.service.LifecycleStateMachine;
+import com.ai.gateway.domain.service.ManifestDigest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -98,12 +98,7 @@ public final class ManifestApprovalUseCase {
 
         CapabilityManifest manifest = manifestOpt.get();
 
-        CapabilityLifecycle currentLifecycle = manifestRepository.findAllWithDetails().stream()
-                .filter(detail -> detail.manifest().metadata().id().equals(id)
-                        && detail.manifest().metadata().version().equals(version))
-                .map(ManifestRepository.ManifestDetail::lifecycle)
-                .findFirst()
-                .orElse(null);
+        CapabilityLifecycle currentLifecycle = currentLifecycle(id, version);
         if (currentLifecycle != CapabilityLifecycle.VALIDATED) {
             return new ApprovalResult(false, null,
                     "Cannot approve manifest in lifecycle: " + currentLifecycle);
@@ -131,10 +126,10 @@ public final class ManifestApprovalUseCase {
     }
 
     /**
-     * Rejects a manifest that is in the VALIDATED or APPROVED state
+     * Rejects a manifest that is in the VALIDATED state
      *
-     * <p>The manifest transitions to REJECTED. The manifest may be edited
-     * and re-submitted after rejection.</p>
+     * <p>The manifest transitions to terminal REJECTED. Corrections require
+     * importing a new manifest version.</p>
      *
      * @param id the capability identifier
      * @param version the semantic version
@@ -156,11 +151,43 @@ public final class ManifestApprovalUseCase {
             return new ApprovalResult(false, null, "Manifest not found: id=" + id + ", version=" + version);
         }
 
-        // Transition to REJECTED (from VALIDATED or APPROVED per state machine)
+        // Enforce the state machine: only VALIDATED may transition to
+        // terminal REJECTED.
+        CapabilityLifecycle currentLifecycle = currentLifecycle(id, version);
+        if (currentLifecycle == null) {
+            return new ApprovalResult(false, null,
+                    "Cannot determine lifecycle state of manifest: id=" + id + ", version=" + version);
+        }
+        try {
+            lifecycleStateMachine.validateTransition(currentLifecycle, CapabilityLifecycle.REJECTED);
+        } catch (IllegalArgumentException e) {
+            log.warn("Invalid rejection transition for id={}, version={}: {}",
+                    id, version, e.getMessage());
+            return new ApprovalResult(false, null,
+                    "Cannot reject: " + e.getMessage());
+        }
+
+        // Transition to terminal REJECTED.
         manifestRepository.recordApproval(id, version, approver, "REJECTED", null);
         log.info("Manifest rejected: id={}, version={}", id, version);
 
         return new ApprovalResult(true, null, null);
+    }
+
+    /**
+     * Resolves the current persisted lifecycle state of a manifest.
+     *
+     * @param id the capability identifier
+     * @param version the semantic version
+     * @return the current lifecycle, or {@code null} if the manifest is unknown
+     */
+    private CapabilityLifecycle currentLifecycle(String id, String version) {
+        return manifestRepository.findAllWithDetails().stream()
+                .filter(detail -> detail.manifest().metadata().id().equals(id)
+                        && detail.manifest().metadata().version().equals(version))
+                .map(ManifestRepository.ManifestDetail::lifecycle)
+                .findFirst()
+                .orElse(null);
     }
 
     /**
@@ -301,26 +328,7 @@ public final class ManifestApprovalUseCase {
      * @return the hex-encoded digest
      */
     private String generateManifestDigest(CapabilityManifest manifest) {
-        try {
-            String content = manifest.apiVersion() + "\n"
-                    + manifest.kind() + "\n"
-                    + manifest.metadata().id() + "\n"
-                    + manifest.metadata().version() + "\n"
-                    + manifest.spec().displayName() + "\n"
-                    + manifest.spec().description() + "\n"
-                    + manifest.spec().risk() + "\n";
-            MessageDigest md = MessageDigest.getInstance("SHA-256");
-            byte[] digest = md.digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            StringBuilder sb = new StringBuilder(digest.length * 2);
-            for (byte b : digest) {
-                sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-                sb.append(Character.forDigit(b & 0xF, 16));
-            }
-            return sb.toString();
-        } catch (java.security.NoSuchAlgorithmException e) {
-            log.error("SHA-256 algorithm not available", e);
-            return "DIGEST_ERROR";
-        }
+        return ManifestDigest.sha256(manifest);
     }
 
     /**

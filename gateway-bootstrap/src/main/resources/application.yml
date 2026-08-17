@@ -6,8 +6,11 @@ server:
 spring:
   application:
     name: ai-capability-gateway
+  # No default profile: activation must be explicit (SPRING_PROFILES_ACTIVE).
+  # We must NOT default to `local` — application-local.yml holds real
+  # credentials and is git-ignored; it must be an opt-in overlay only.
   profiles:
-    active: local
+    active: ${SPRING_PROFILES_ACTIVE:}
   datasource:
     url: ${DB_URL:jdbc:postgresql://}
     username: ${DB_USERNAME:}
@@ -20,8 +23,9 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    baseline-on-migrate: true
-    baseline-version: 0
+    # The repository is pre-launch and owns a single empty-database baseline.
+    # Never silently baseline an existing schema and skip V1.
+    baseline-on-migrate: false
   jackson:
     default-property-inclusion: non_null
     serialization:
@@ -57,7 +61,9 @@ gateway:
   default-timeout-ms: 15000
   
   # Environment configuration (resolved from env)
-  environment: ${GATEWAY_ENV:development}
+  # Must be explicit in every deployment. Local development gets its default
+  # only from the opt-in application-local.yml overlay.
+  environment: ${GATEWAY_ENV:}
 
   # Authentication/Authorization provider selection (pluggable).
   #   stub     -> default initial-release stubs (no real verification)
@@ -67,32 +73,29 @@ gateway:
   # share the same jwt-secret-key. Set the env var GATEWAY_AUTH_JWT_SECRET
   # on both sides to an identical value.
   auth:
-    provider: ${GATEWAY_AUTH_PROVIDER:sa-token}
+    provider: ${GATEWAY_AUTH_PROVIDER:}
     sa-token:
       token-name: Authorization
       login-type: ${GATEWAY_AUTH_LOGIN_TYPE:login}
-      # CRITICAL in production: provide a real random secret via
-      # GATEWAY_AUTH_JWT_SECRET. A development default is provided so the
-      # gateway can boot without the env var; override it for any real deploy.
-      jwt-secret-key: ${GATEWAY_AUTH_JWT_SECRET:dev-only-insecure-secret-change-me}
+      jwt-secret-key: ${GATEWAY_AUTH_JWT_SECRET:}
       access-token-timeout-seconds: 7200    # 2h
       refresh-token-timeout-seconds: 604800 # 7d
 
     # Console admin credentials (used when gateway.auth.provider=sa-token)
     console-admin:
-      username: ${GATEWAY_CONSOLE_ADMIN_USERNAME:admin}
-      password: ${GATEWAY_CONSOLE_ADMIN_PASSWORD:admin}
+      username: ${GATEWAY_CONSOLE_ADMIN_USERNAME:}
+      password: ${GATEWAY_CONSOLE_ADMIN_PASSWORD:}
 
   # Distributed snapshot cache provider (pluggable, milestone M2).
   #   stub  -> logging SnapshotNotifier + direct PostgreSQL CatalogPort
-  #   redis -> Redis pub/sub notifier + Write-Through CatalogPort decorator
+  #   redis -> Redis pub/sub notifier + after-commit CatalogPort cache decorator
   cache:
-    provider: ${GATEWAY_CACHE_PROVIDER:redis}
+    provider: ${GATEWAY_CACHE_PROVIDER:}
 
   # Redis (Redisson) connection — used when gateway.cache.provider=redis
   # (and later by milestone M4 distributed locks).
   redis:
-    address: ${GATEWAY_REDIS_ADDRESS:redis://127.0.0.1:6379}
+    address: ${GATEWAY_REDIS_ADDRESS:}
     password: ${GATEWAY_REDIS_PASSWORD:}
     database: ${GATEWAY_REDIS_DATABASE:0}
     snapshot:
@@ -102,7 +105,7 @@ gateway:
   #   stub     -> always-allow (no limiting)
   #   sentinel -> Sentinel Core programmatic flow/degrade rules
   ratelimit:
-    provider: ${GATEWAY_RATELIMIT_PROVIDER:stub}
+    provider: ${GATEWAY_RATELIMIT_PROVIDER:}
 
   # Sentinel hardcoded rule thresholds (used when ratelimit.provider=sentinel)
   sentinel:
@@ -112,9 +115,9 @@ gateway:
   
   # LLM configuration
   llm:
-    endpoint: ${LLM_ENDPOINT:https://api.deepseek.com/chat/completions}
+    endpoint: ${LLM_ENDPOINT:}
     api-key: ${LLM_API_KEY:}
-    model: ${LLM_MODEL:deepseek-v4-flash}
+    model: ${LLM_MODEL:}
     temperature: 0.1
     max-tokens: 4096
     max-concurrent: 10
@@ -122,7 +125,7 @@ gateway:
   # Registry configuration
   registries:
     nacos-main:
-      address: ${NACOS_ADDRESS:nacos.local.com}
+      address: ${NACOS_ADDRESS:}
       port: ${NACOS_PORT:8848}
   
   # Audit batch writer
@@ -130,6 +133,9 @@ gateway:
     batch-size: 50
     batch-wait-millis: 5
     queue-capacity: 10000
+
+  operation:
+    confirmation-secret: ${GATEWAY_CONFIRMATION_SECRET:}
   
   # Rate limits
   rate-limits:
@@ -157,7 +163,7 @@ dubbo:
     register-mode: interface
     serialize-check-status: STRICT
   registry:
-    address: ${DUBBO_REGISTRY:nacos://nacos.local.com:8848}
+    address: ${DUBBO_REGISTRY:}
   protocol:
     name: dubbo
     port: -1

@@ -234,10 +234,8 @@ public record CapabilityManifest(
      * {@code /orgId} must be an integer and required). The gateway validates
      * these before parameter binding.</p>
      *
-     * <p>In the initial release, authorization is optional:
-     * all authenticated users may call all published read-only capabilities.
-     * This design is preserved for when the capability surface grows or
-     * write operations are enabled.</p>
+     * <p>Development stub mode may omit this block for read-only capabilities;
+     * production policy loading remains explicit and fail-closed.</p>
      *
      * @param permissions the required permission strings
      * @param principalClaims the required Principal claims keyed by JSON Pointer

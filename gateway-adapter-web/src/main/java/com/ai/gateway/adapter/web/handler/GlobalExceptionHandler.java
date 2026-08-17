@@ -146,6 +146,7 @@ public class GlobalExceptionHandler {
         return switch (errorCode) {
             case AUTHENTICATION_FAILED -> HttpStatus.UNAUTHORIZED;
             case PERMISSION_DENIED -> HttpStatus.FORBIDDEN;
+            case CONFIRMATION_REQUIRED -> HttpStatus.CONFLICT;
             case NO_CAPABILITY_MATCH -> HttpStatus.NOT_FOUND;
             case CLARIFICATION_REQUIRED -> HttpStatus.UNPROCESSABLE_ENTITY;
             case INVALID_MODEL_OUTPUT -> HttpStatus.UNPROCESSABLE_ENTITY;

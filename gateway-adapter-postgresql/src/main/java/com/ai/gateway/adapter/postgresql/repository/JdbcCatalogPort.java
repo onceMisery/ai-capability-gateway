@@ -5,6 +5,8 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.SnapshotSummary;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
+import com.ai.gateway.domain.service.ManifestDigest;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Primary;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -47,9 +49,12 @@ public class JdbcCatalogPort implements CatalogPort {
             "SELECT snapshot_version, environment, digest FROM catalog_snapshot " +
             "WHERE snapshot_version = ?";
 
-    private static final String SQL_FIND_SNAPSHOT_ITEMS =
-            "SELECT capability_id, capability_version, policy_ref " +
-            "FROM catalog_snapshot_item WHERE snapshot_version = ?";
+    private static final String SQL_FIND_SNAPSHOT_CONTENT =
+            "SELECT csi.capability_id, csi.capability_version, csi.manifest_digest, csi.policy_ref, cm.raw_content " +
+            "FROM catalog_snapshot_item csi " +
+            "LEFT JOIN capability_manifest cm " +
+            "  ON cm.id = csi.capability_id AND cm.version = csi.capability_version " +
+            "WHERE csi.snapshot_version = ?";
 
     private static final String SQL_FIND_MANIFEST =
             "SELECT raw_content FROM capability_manifest WHERE id = ? AND version = ?";
@@ -124,33 +129,47 @@ public class JdbcCatalogPort implements CatalogPort {
     }
 
     private CatalogSnapshot loadSnapshotInternal(SnapshotRow snapshot) {
-        List<ItemRow> items = jdbcTemplate.query(
-                SQL_FIND_SNAPSHOT_ITEMS,
-                itemRowMapper(),
+        // Single JOIN query fetches items and their manifest content together,
+        // avoiding the previous N+1 per-item manifest lookups.
+        List<ContentRow> rows = jdbcTemplate.query(
+                SQL_FIND_SNAPSHOT_CONTENT,
+                contentRowMapper(),
                 snapshot.snapshotVersion());
 
-        List<CapabilityManifest> capabilities = new ArrayList<>(items.size());
+        List<CapabilityManifest> capabilities = new ArrayList<>(rows.size());
         String policyRef = null;
 
-        for (ItemRow item : items) {
-            if (policyRef == null && item.policyRef() != null) {
-                policyRef = item.policyRef();
+        for (ContentRow row : rows) {
+            if (row.policyRef() != null) {
+                if (policyRef != null && !policyRef.equals(row.policyRef())) {
+                    throw new IllegalStateException("Snapshot policy reference is inconsistent: "
+                            + snapshot.snapshotVersion());
+                }
+                policyRef = row.policyRef();
             }
-            List<CapabilityManifest> manifests = jdbcTemplate.query(
-                    SQL_FIND_MANIFEST,
-                    manifestRowMapper(),
-                    item.capabilityId(), item.capabilityVersion());
-            if (!manifests.isEmpty()) {
-                capabilities.add(manifests.get(0));
+            if (row.rawContent() == null) {
+                throw new IllegalStateException("Snapshot Manifest content is missing: "
+                        + row.capabilityId() + ":" + row.capabilityVersion());
             }
+            CapabilityManifest manifest = JsonbSupport.fromJson(row.rawContent(), CapabilityManifest.class);
+            if (!Objects.equals(row.manifestDigest(), ManifestDigest.sha256(manifest))) {
+                throw new IllegalStateException("Manifest digest verification failed: "
+                        + row.capabilityId() + ":" + row.capabilityVersion());
+            }
+            capabilities.add(manifest);
         }
 
-        return new CatalogSnapshot(
+        CatalogSnapshot loaded = new CatalogSnapshot(
                 snapshot.snapshotVersion(),
                 snapshot.environment(),
                 List.copyOf(capabilities),
                 policyRef,
                 snapshot.digest());
+        if (!Objects.equals(CatalogSnapshotDigest.sha256(loaded), snapshot.digest())) {
+            throw new IllegalStateException("Snapshot digest verification failed: "
+                    + snapshot.snapshotVersion());
+        }
+        return loaded;
     }
 
     private static RowMapper<SnapshotRow> snapshotRowMapper() {
@@ -160,11 +179,13 @@ public class JdbcCatalogPort implements CatalogPort {
                 rs.getString("digest"));
     }
 
-    private static RowMapper<ItemRow> itemRowMapper() {
-        return (rs, rowNum) -> new ItemRow(
+    private static RowMapper<ContentRow> contentRowMapper() {
+        return (rs, rowNum) -> new ContentRow(
                 rs.getString("capability_id"),
                 rs.getString("capability_version"),
-                rs.getString("policy_ref"));
+                rs.getString("manifest_digest"),
+                rs.getString("policy_ref"),
+                rs.getString("raw_content"));
     }
 
     private static RowMapper<CapabilityManifest> manifestRowMapper() {
@@ -177,13 +198,28 @@ public class JdbcCatalogPort implements CatalogPort {
     private record SnapshotRow(long snapshotVersion, String environment, String digest) {
     }
 
-    private record ItemRow(String capabilityId, String capabilityVersion, String policyRef) {
+    private record ContentRow(String capabilityId, String capabilityVersion,
+                              String manifestDigest, String policyRef, String rawContent) {
+    }
+
+    @Override
+    public void lockEnvironmentForPublication(String environment) {
+        Objects.requireNonNull(environment, "environment must not be null");
+        jdbcTemplate.queryForObject(
+                "SELECT 1 FROM pg_advisory_xact_lock(hashtext(?))",
+                Integer.class,
+                environment);
     }
 
     @Override
     @Transactional
     public void saveSnapshot(CatalogSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");
+
+        // Keep a defensive lock here for direct adapter callers. Application
+        // use cases acquire the same transaction-scoped lock before reading
+        // manifests or allocating a snapshot version.
+        lockEnvironmentForPublication(snapshot.environment());
 
         // Mark previous ACTIVE snapshots as SUPERSEDED
         jdbcTemplate.update(
@@ -207,6 +243,10 @@ public class JdbcCatalogPort implements CatalogPort {
                 throw new IllegalStateException("Manifest digest not found: "
                         + manifest.metadata().id() + ":" + manifest.metadata().version());
             }
+            if (!manifestDigest.equals(ManifestDigest.sha256(manifest))) {
+                throw new IllegalStateException("Stored Manifest digest does not match content: "
+                        + manifest.metadata().id() + ":" + manifest.metadata().version());
+            }
             jdbcTemplate.update(
                     "INSERT INTO catalog_snapshot_item (snapshot_version, capability_id, capability_version, manifest_digest, policy_ref) VALUES (?, ?, ?, ?, ?)",
                     snapshot.snapshotVersion(),
@@ -214,20 +254,13 @@ public class JdbcCatalogPort implements CatalogPort {
                     manifest.metadata().version(),
                     manifestDigest,
                     snapshot.policyRef());
-            int lifecycleUpdated = jdbcTemplate.update(
-                    "UPDATE capability_manifest SET lifecycle = 'PUBLISHED', updated_at = CURRENT_TIMESTAMP " +
-                    "WHERE id = ? AND version = ? AND lifecycle IN ('APPROVED', 'PUBLISHED', 'SUSPENDED')",
-                    manifest.metadata().id(), manifest.metadata().version());
-            if (lifecycleUpdated != 1) {
-                throw new IllegalStateException("Manifest is not publishable: "
-                        + manifest.metadata().id() + ":" + manifest.metadata().version());
-            }
         }
-        appendPublishAudit(snapshot);
     }
 
-    private void appendPublishAudit(CatalogSnapshot snapshot) {
-        String eventType = "MANIFEST_PUBLISHED";
+    @Override
+    public void recordSnapshotPublication(CatalogSnapshot snapshot, String eventType) {
+        Objects.requireNonNull(snapshot, "snapshot must not be null");
+        Objects.requireNonNull(eventType, "eventType must not be null");
         String details = JsonbSupport.toJson(Map.of(
                 "snapshotVersion", snapshot.snapshotVersion(),
                 "environment", snapshot.environment(),
@@ -235,7 +268,8 @@ public class JdbcCatalogPort implements CatalogPort {
         jdbcTemplate.update(
                 "WITH inserted_audit AS (" +
                 "INSERT INTO audit_event (event_type, timestamp, snapshot_version, result_code, details) " +
-                "VALUES (?, CURRENT_TIMESTAMP, ?, 'PUBLISHED', ?::jsonb) RETURNING event_id) " +
+                "VALUES (?, CURRENT_TIMESTAMP, ?, 'PUBLISHED', ?::jsonb) " +
+                "ON CONFLICT DO NOTHING RETURNING event_id) " +
                 "INSERT INTO outbox_event (event_type, payload, audit_event_id) " +
                 "SELECT ?, ?::jsonb, event_id FROM inserted_audit",
                 eventType, snapshot.snapshotVersion(), details, eventType, details);

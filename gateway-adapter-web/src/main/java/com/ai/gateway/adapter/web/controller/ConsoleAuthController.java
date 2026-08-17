@@ -6,7 +6,6 @@ import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -32,23 +31,14 @@ public class ConsoleAuthController {
 
     private final ConsoleAuthUseCase consoleAuthUseCase;
     private final AuthenticationPort authenticationPort;
-    private final String authMode;
-
-    @Value("${gateway.auth.console-admin.username:admin}")
-    private String consoleAdminUsername;
-
-    @Value("${gateway.auth.console-admin.password:admin}")
-    private String consoleAdminPassword;
 
     /**
      * 构造 ConsoleAuthController
      */
     public ConsoleAuthController(ConsoleAuthUseCase consoleAuthUseCase,
-                                  AuthenticationPort authenticationPort,
-                                  @Value("${gateway.auth.provider:stub}") String authMode) {
+                                  AuthenticationPort authenticationPort) {
         this.consoleAuthUseCase = Objects.requireNonNull(consoleAuthUseCase);
         this.authenticationPort = Objects.requireNonNull(authenticationPort);
-        this.authMode = Objects.requireNonNull(authMode);
     }
 
     /**
@@ -81,20 +71,9 @@ public class ConsoleAuthController {
         }
 
         try {
-            if (!"stub".equals(authMode)
-                    && (!consoleAdminUsername.equals(username)
-                    || !consoleAdminPassword.equals(password))) {
-                consoleAuthUseCase.recordLoginFailure(username);
-                return ResponseEntity.status(401).body(Map.of(
-                        "status", "ERROR",
-                        "error", Map.of("errorCode", "AUTHENTICATION_FAILED", "message", "invalid credentials")
-                ));
-            }
-
-            return ResponseEntity.ok(consoleAuthUseCase.login(username));
+            return ResponseEntity.ok(consoleAuthUseCase.login(username, password));
         } catch (Exception e) {
             log.error("Login failed for user: {}", username, e);
-            consoleAuthUseCase.recordLoginFailure(username);
             return ResponseEntity.status(401).body(Map.of(
                     "status", "ERROR",
                     "error", Map.of("errorCode", "AUTHENTICATION_FAILED", "message", "authentication failed")

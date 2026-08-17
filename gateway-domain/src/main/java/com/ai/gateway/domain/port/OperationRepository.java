@@ -49,6 +49,15 @@ public interface OperationRepository {
     void save(OperationRecord record);
 
     /**
+     * Atomically persists the operation for its idempotency key or returns the
+     * operation that already owns that key.
+     *
+     * @param record candidate operation record
+     * @return the newly persisted or pre-existing operation
+     */
+    OperationRecord saveOrGetByIdempotencyKey(OperationRecord record);
+
+    /**
      * Finds an operation record by its operation ID.
      *
      * <p>Used by the Confirm phase to verify the operation
@@ -59,6 +68,11 @@ public interface OperationRepository {
      * @return the operation record, or empty if not found
      */
     Optional<OperationRecord> findById(String operationId);
+
+    /**
+     * Finds an operation by its stable request idempotency key.
+     */
+    Optional<OperationRecord> findByIdempotencyKey(String idempotencyKey);
 
     /**
      * Atomically transitions the operation state using Compare-And-Swap

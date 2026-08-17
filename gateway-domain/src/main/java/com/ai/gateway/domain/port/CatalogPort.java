@@ -32,6 +32,17 @@ import java.util.Optional;
 public interface CatalogPort {
 
     /**
+     * Serializes control-plane lifecycle changes for an environment.
+     * Persistent adapters acquire a transaction-scoped lock; test and
+     * in-memory adapters may keep the default no-op implementation.
+     *
+     * @param environment the environment being changed
+     */
+    default void lockEnvironmentForPublication(String environment) {
+        // No-op for adapters without a shared transactional store.
+    }
+
+    /**
      * Reserves the next globally unique snapshot version.
      *
      * <p>Persistent adapters must use a database sequence or an equivalent
@@ -84,11 +95,21 @@ public interface CatalogPort {
      * Persists a new catalog snapshot and marks it as ACTIVE.
      *
      * <p>Previous ACTIVE snapshots for the same environment are marked
-     * as SUPERSEDED. This operation must be atomic.</p>
+     * as SUPERSEDED. This operation only changes snapshot tables; lifecycle,
+     * audit and outbox side effects are explicit operations owned by the
+     * application transaction.</p>
      *
      * @param snapshot the snapshot to persist
      */
     void saveSnapshot(CatalogSnapshot snapshot);
+
+    /**
+     * Records the publication event associated with a persisted snapshot.
+     * The call is explicit so saving a snapshot has no hidden lifecycle,
+     * audit, or outbox side effects and can be composed by the application
+     * transaction owner.
+     */
+    void recordSnapshotPublication(CatalogSnapshot snapshot, String eventType);
 
     /**
      * Lists snapshot summaries for the given environment, ordered by version
