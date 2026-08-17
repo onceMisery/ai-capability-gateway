@@ -7,6 +7,7 @@ import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
 import com.ai.gateway.domain.model.ModelDecision;
 import com.ai.gateway.domain.model.NlInteraction;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.model.ResiliencePolicy;
@@ -29,6 +30,8 @@ import com.ai.gateway.domain.service.RedactionService;
 import com.ai.gateway.domain.service.ResultNormalizer;
 import com.ai.gateway.domain.service.Sha256Digest;
 import com.ai.gateway.domain.service.ManifestDigest;
+import com.ai.gateway.domain.service.PayloadTreeGuard;
+import com.ai.gateway.domain.service.PayloadLimitExceededException;
 import com.ai.gateway.domain.service.TextNormalizer;
 import com.ai.gateway.domain.service.ThresholdEvaluator;
 import org.slf4j.Logger;
@@ -129,6 +132,8 @@ public final class NaturalLanguageQueryUseCase {
     private final InteractionRepository interactionRepository;
     private final DeterministicExecutionUseCase deterministicExecutionUseCase;
     private final String environment;
+    private final PayloadLimits payloadLimits;
+    private final PayloadTreeGuard payloadTreeGuard;
 
     /**
      * Constructs a new NaturalLanguageQueryUseCase with the required
@@ -173,6 +178,51 @@ public final class NaturalLanguageQueryUseCase {
                                         InteractionRepository interactionRepository,
                                         DeterministicExecutionUseCase deterministicExecutionUseCase,
                                         String environment) {
+        this(authenticationPort, authorizationPort, catalogPort, candidateRetriever,
+                llmRouterPort, schemaValidator, aliasGenerator, typeConverterRegistry,
+                redactionService, auditPort, thresholdEvaluator, deadlineBudgetManager,
+                textNormalizer, interactionRepository, deterministicExecutionUseCase,
+                environment, PayloadLimits.defaults());
+    }
+
+    /**
+     * 使用统一 Payload 预算创建自然语言路由用例。
+     *
+     * @param authenticationPort 认证端口
+     * @param authorizationPort 授权端口
+     * @param catalogPort 能力目录端口
+     * @param candidateRetriever 候选检索器
+     * @param llmRouterPort LLM 路由端口
+     * @param schemaValidator Schema 校验器
+     * @param aliasGenerator 别名生成器
+     * @param typeConverterRegistry 类型转换器注册表
+     * @param redactionService 脱敏服务
+     * @param auditPort 审计端口
+     * @param thresholdEvaluator 阈值评估器
+     * @param deadlineBudgetManager 截止时间预算管理器
+     * @param textNormalizer 文本标准化器
+     * @param interactionRepository 澄清交互存储
+     * @param deterministicExecutionUseCase 确定性执行用例
+     * @param environment 运行环境
+     * @param payloadLimits 统一 Payload 预算
+     */
+    public NaturalLanguageQueryUseCase(AuthenticationPort authenticationPort,
+                                        AuthorizationPort authorizationPort,
+                                        CatalogPort catalogPort,
+                                        CandidateRetriever candidateRetriever,
+                                        LlmRouterPort llmRouterPort,
+                                        SchemaValidator schemaValidator,
+                                        AliasGenerator aliasGenerator,
+                                        TypeConverterRegistry typeConverterRegistry,
+                                        RedactionService redactionService,
+                                        AuditPort auditPort,
+                                        ThresholdEvaluator thresholdEvaluator,
+                                        DeadlineBudgetManager deadlineBudgetManager,
+                                        TextNormalizer textNormalizer,
+                                        InteractionRepository interactionRepository,
+                                        DeterministicExecutionUseCase deterministicExecutionUseCase,
+                                        String environment,
+                                        PayloadLimits payloadLimits) {
         this.authenticationPort = java.util.Objects.requireNonNull(authenticationPort,
                 "authenticationPort must not be null");
         this.authorizationPort = java.util.Objects.requireNonNull(authorizationPort,
@@ -205,6 +255,9 @@ public final class NaturalLanguageQueryUseCase {
                 "deterministicExecutionUseCase must not be null");
         this.environment = java.util.Objects.requireNonNull(environment,
                 "environment must not be null");
+        this.payloadLimits = java.util.Objects.requireNonNull(payloadLimits,
+                "payloadLimits must not be null");
+        this.payloadTreeGuard = new PayloadTreeGuard(this.payloadLimits);
     }
 
     /**
@@ -436,8 +489,14 @@ public final class NaturalLanguageQueryUseCase {
         // Validate model arguments against the input Schema
         com.ai.gateway.domain.model.ValidationReport schemaReport;
         try {
+            payloadTreeGuard.validateInput(select.arguments());
             schemaReport = schemaValidator.validate(
                     select.arguments(), manifest.spec().inputSchema());
+        } catch (PayloadLimitExceededException e) {
+            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
+                    snapshotVersion, ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
+                    "Model arguments exceed the configured payload budget"),
+                    principal, requestId, snapshotVersion, manifest, startTime);
         } catch (Exception e) {
             log.error("Model output schema validation failed: capability={}",
                     manifest.metadata().id());
@@ -494,7 +553,8 @@ public final class NaturalLanguageQueryUseCase {
         List<Object> resolvedArgs;
         try {
             ArgumentBinder argumentBinder = new ArgumentBinder(
-                    typeConverterRegistry, schemaValidator, principal, bindContext, manifest);
+                    typeConverterRegistry, schemaValidator, principal, bindContext, manifest,
+                    payloadLimits);
             resolvedArgs = argumentBinder.bind(select.arguments());
         } catch (Exception e) {
             log.warn("Resolved argument validation failed: capability={}",

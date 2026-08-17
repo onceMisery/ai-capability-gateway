@@ -5,6 +5,7 @@ import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.InvocationResult;
 import com.ai.gateway.domain.model.OutputContract;
 import com.ai.gateway.domain.model.OutputMode;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.ProjectionMapping;
 import com.ai.gateway.domain.model.RedactionRule;
 import com.ai.gateway.domain.port.SchemaValidator;
@@ -52,19 +53,10 @@ import java.util.Map;
  */
 public final class ResultNormalizer {
 
-    /**
-     * Maximum nesting depth for the response tree.
-     */
-    private static final int MAX_DEPTH = 32;
-
-    /**
-     * Maximum collection length in the response.
-     */
-    private static final int MAX_COLLECTION_LENGTH = 10_000;
-
     private final OutputContract outputContract;
     private final SchemaValidator schemaValidator;
     private final RedactionService redactionService;
+    private final PayloadTreeGuard payloadTreeGuard;
 
     /**
      * Constructs a new ResultNormalizer with the required dependencies.
@@ -79,12 +71,29 @@ public final class ResultNormalizer {
     public ResultNormalizer(OutputContract outputContract,
                             SchemaValidator schemaValidator,
                             RedactionService redactionService) {
+        this(outputContract, schemaValidator, redactionService, PayloadLimits.defaults());
+    }
+
+    /**
+     * 使用统一 Payload 预算创建结果归一化器。
+     *
+     * @param outputContract 输出契约
+     * @param schemaValidator 输出 Schema 校验器
+     * @param redactionService 脱敏服务
+     * @param payloadLimits 全局 Payload 预算
+     */
+    public ResultNormalizer(OutputContract outputContract,
+                            SchemaValidator schemaValidator,
+                            RedactionService redactionService,
+                            PayloadLimits payloadLimits) {
         this.outputContract = java.util.Objects.requireNonNull(
                 outputContract, "outputContract must not be null");
         this.schemaValidator = java.util.Objects.requireNonNull(
                 schemaValidator, "schemaValidator must not be null");
         this.redactionService = java.util.Objects.requireNonNull(
                 redactionService, "redactionService must not be null");
+        this.payloadTreeGuard = new PayloadTreeGuard(java.util.Objects.requireNonNull(
+                payloadLimits, "payloadLimits must not be null"));
     }
 
     /**
@@ -105,26 +114,26 @@ public final class ResultNormalizer {
     public Map<String, Object> normalize(InvocationResult result) {
         java.util.Objects.requireNonNull(result, "result must not be null");
 
+        // 在任何递归复制前执行预算，避免深层或超大 Provider 结果耗尽资源。
+        payloadTreeGuard.validateOutput(result.jsonData(), outputContract.maxBytes());
+
         // Step 1: Convert protocol result to JSON-compatible neutral tree
         Object neutralTree = toNeutralTree(result);
 
-        // Step 2: Check response byte size, depth, collection length
-        checkResponseConstraints(neutralTree);
-
-        // Step 3: Determine business success and extract data
+        // Step 2: Determine business success and extract data
         Object data = extractData(neutralTree, result);
 
-        // Step 4: Construct public result by projection whitelist
+        // Step 3: Construct public result by projection whitelist
         Object publicResult = projectData(data);
 
-        // Step 5: Execute field redaction
+        // Step 4: Execute field redaction
         Object redactedResult = redactionService.redact(
                 publicResult, outputContract.redactions());
 
-        // Step 6: Validate public output Schema
+        // Step 5: Validate public output Schema
         validatePublicSchema(redactedResult);
 
-        // Step 7: Generate structured result
+        // Step 6: Generate structured result
         return toStructuredResult(redactedResult, result);
     }
 
@@ -194,140 +203,6 @@ public final class ResultNormalizer {
     private boolean isMetadataKey(String key) {
         return "class".equals(key) || "@type".equals(key)
                 || "@class".equals(key) || "proto".equals(key);
-    }
-
-    // -------------------------------------------------------------------------
-    // Step 2: Check response constraints
-    // -------------------------------------------------------------------------
-
-    /**
-     * Checks the response byte size, depth, and collection length
-     *
-     * @param data the neutral tree
-     * @throws IllegalArgumentException if the response exceeds constraints
-     */
-    private void checkResponseConstraints(Object data) {
-        // Check byte size
-        long byteSize = estimateByteSize(data);
-        if (outputContract.maxBytes() > 0 && byteSize > outputContract.maxBytes()) {
-            throw new IllegalArgumentException(
-                    "Response too large: estimated " + byteSize
-                            + " bytes exceeds max " + outputContract.maxBytes()
-            );
-        }
-
-        // Check depth
-        int depth = calculateDepth(data, 0);
-        if (depth > MAX_DEPTH) {
-            throw new IllegalArgumentException(
-                    "Response depth " + depth + " exceeds maximum " + MAX_DEPTH
-            );
-        }
-
-        // Check collection length
-        checkCollectionLength(data);
-    }
-
-    /**
-     * Estimates the byte size of the JSON-compatible data by serializing
-     * to a string approximation.
-     *
-     * @param data the data
-     * @return the estimated byte size
-     */
-    private long estimateByteSize(Object data) {
-        if (data == null) {
-            return 4; // "null"
-        }
-        if (data instanceof String s) {
-            return s.length() + 2; // +2 for quotes
-        }
-        if (data instanceof Map<?, ?> map) {
-            long size = 2; // {}
-            boolean first = true;
-            for (Map.Entry<?, ?> entry : map.entrySet()) {
-                if (!first) size += 1; // comma
-                first = false;
-                size += String.valueOf(entry.getKey()).length() + 3; // "key":
-                size += estimateByteSize(entry.getValue());
-            }
-            return size;
-        }
-        if (data instanceof List<?> list) {
-            long size = 2; // []
-            boolean first = true;
-            for (Object item : list) {
-                if (!first) size += 1; // comma
-                first = false;
-                size += estimateByteSize(item);
-            }
-            return size;
-        }
-        return String.valueOf(data).length();
-    }
-
-    /**
-     * Calculates the maximum nesting depth of the data tree.
-     *
-     * @param data the data
-     * @param current the current depth
-     * @return the maximum depth
-     */
-    private int calculateDepth(Object data, int current) {
-        if (current > MAX_DEPTH) {
-            return current;
-        }
-        if (data instanceof Map<?, ?> map) {
-            int maxChild = current;
-            for (Object value : map.values()) {
-                int childDepth = calculateDepth(value, current + 1);
-                if (childDepth > maxChild) {
-                    maxChild = childDepth;
-                }
-            }
-            return maxChild;
-        }
-        if (data instanceof List<?> list) {
-            int maxChild = current;
-            for (Object item : list) {
-                int childDepth = calculateDepth(item, current + 1);
-                if (childDepth > maxChild) {
-                    maxChild = childDepth;
-                }
-            }
-            return maxChild;
-        }
-        return current;
-    }
-
-    /**
-     * Checks that no collection in the data exceeds the maximum length.
-     *
-     * @param data the data
-     * @throws IllegalArgumentException if a collection exceeds the limit
-     */
-    private void checkCollectionLength(Object data) {
-        if (data instanceof Map<?, ?> map) {
-            if (map.size() > MAX_COLLECTION_LENGTH) {
-                throw new IllegalArgumentException(
-                        "Map size " + map.size()
-                                + " exceeds maximum collection length " + MAX_COLLECTION_LENGTH
-                );
-            }
-            for (Object value : map.values()) {
-                checkCollectionLength(value);
-            }
-        } else if (data instanceof List<?> list) {
-            if (list.size() > MAX_COLLECTION_LENGTH) {
-                throw new IllegalArgumentException(
-                        "List size " + list.size()
-                                + " exceeds maximum collection length " + MAX_COLLECTION_LENGTH
-                );
-            }
-            for (Object item : list) {
-                checkCollectionLength(item);
-            }
-        }
     }
 
     // -------------------------------------------------------------------------

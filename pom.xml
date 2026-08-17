@@ -56,6 +56,7 @@
         <junit.version>5.11.4</junit.version>
         <assertj.version>3.26.3</assertj.version>
         <mockito.version>5.14.2</mockito.version>
+        <lombok.version>1.18.36</lombok.version>
         <testcontainers.version>1.20.4</testcontainers.version>
 
         <!-- Extensibility components (see docs/extensibility-tech-selection.md) -->
@@ -131,6 +132,13 @@
                 <groupId>com.ai.gateway</groupId>
                 <artifactId>gateway-contract-schema</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <!-- Lombok 仅用于 bootstrap 配置类的编译期样板代码生成。 -->
+            <dependency>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
             </dependency>
 
             <!-- Jackson -->

@@ -56,8 +56,11 @@ gateway:
   # Non-sensitive static configuration
   max-request-size-bytes: 65536  # 64 KiB
   max-response-bytes: 1048576    # 1 MiB
-  max-json-depth: 50
+  max-json-depth: 16
   max-array-length: 1000
+  max-object-fields: 1000
+  max-string-bytes: 16384
+  max-node-count: 10000
   default-timeout-ms: 15000
   
   # Environment configuration (resolved from env)

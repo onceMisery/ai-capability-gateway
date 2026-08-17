@@ -39,6 +39,7 @@ import com.ai.gateway.domain.model.CacheStatus;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ConverterType;
 import com.ai.gateway.domain.model.GatewayConfig;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.port.AclRepository;
 import com.ai.gateway.domain.port.AuthenticationPort;
@@ -117,6 +118,26 @@ import java.util.UUID;
  */
 @Configuration
 public class BeanConfig {
+
+    /**
+     * 创建全局 Payload 预算，供所有执行入口共享。
+     *
+     * @param gatewayProperties 请求/响应字节上限
+     * @param payloadProperties JSON 结构上限
+     * @return 统一 Payload 预算
+     */
+    @Bean
+    public PayloadLimits payloadLimits(GatewayProperties gatewayProperties,
+                                       PayloadLimitsProperties payloadProperties) {
+        return new PayloadLimits(
+                gatewayProperties.getMaxRequestSizeBytes(),
+                gatewayProperties.getMaxResponseBytes(),
+                payloadProperties.getMaxJsonDepth(),
+                payloadProperties.getMaxArrayLength(),
+                payloadProperties.getMaxObjectFields(),
+                payloadProperties.getMaxStringBytes(),
+                payloadProperties.getMaxNodeCount());
+    }
 
     private static final Logger log = LoggerFactory.getLogger(BeanConfig.class);
 
@@ -509,7 +530,8 @@ public class BeanConfig {
             DeadlineBudgetManager deadlineBudgetManager,
             InteractionRepository interactionRepository,
             DeterministicExecutionUseCase deterministicExecutionUseCase,
-            GatewayProperties gatewayProperties) {
+            GatewayProperties gatewayProperties,
+            PayloadLimits payloadLimits) {
         return new NaturalLanguageQueryUseCase(
                 authenticationPort,
                 authorizationPort,
@@ -526,7 +548,8 @@ public class BeanConfig {
                 new TextNormalizer(),
                 interactionRepository,
                 deterministicExecutionUseCase,
-                gatewayProperties.getEnvironment());
+                gatewayProperties.getEnvironment(),
+                payloadLimits);
     }
 
     /**
@@ -541,7 +564,8 @@ public class BeanConfig {
             SchemaValidator schemaValidator,
             AuthorizationPort authorizationPort,
             com.ai.gateway.domain.port.AuditPort auditPort,
-            DeadlineBudgetManager deadlineBudgetManager) {
+            DeadlineBudgetManager deadlineBudgetManager,
+            PayloadLimits payloadLimits) {
         return new DeterministicExecutionUseCase(
                 invocationAdapter,
                 typeConverterRegistry,
@@ -549,7 +573,8 @@ public class BeanConfig {
                 schemaValidator,
                 authorizationPort,
                 auditPort,
-                deadlineBudgetManager);
+                deadlineBudgetManager,
+                payloadLimits);
     }
 
     /** Structured tool invocation shares the same deterministic execution kernel as NL. */
@@ -561,10 +586,12 @@ public class BeanConfig {
             SchemaValidator schemaValidator,
             TypeConverterRegistry typeConverterRegistry,
             DeterministicExecutionUseCase deterministicExecutionUseCase,
-            GatewayProperties gatewayProperties) {
+            GatewayProperties gatewayProperties,
+            PayloadLimits payloadLimits) {
         return new StructuredInvocationUseCase(authenticationPort, authorizationPort,
                 catalogPort, schemaValidator, typeConverterRegistry,
-                deterministicExecutionUseCase, gatewayProperties.getEnvironment());
+                deterministicExecutionUseCase, gatewayProperties.getEnvironment(),
+                payloadLimits);
     }
 
     @Bean
@@ -612,7 +639,8 @@ public class BeanConfig {
             CatalogPort catalogPort,
             AuthenticationPort authenticationPort,
             ConfirmationTokenCodec confirmationTokenCodec,
-            ArgumentPayloadCodec argumentPayloadCodec) {
+            ArgumentPayloadCodec argumentPayloadCodec,
+            PayloadLimits payloadLimits) {
         return new OperationPrepareUseCase(
                 naturalLanguageQueryUseCase,
                 typeConverterRegistry,
@@ -623,7 +651,8 @@ public class BeanConfig {
                 catalogPort,
                 authenticationPort,
                 confirmationTokenCodec,
-                argumentPayloadCodec);
+                argumentPayloadCodec,
+                payloadLimits);
     }
 
     /**

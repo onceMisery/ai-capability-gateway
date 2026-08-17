@@ -5,6 +5,7 @@ import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
 import com.ai.gateway.domain.model.InvocationRequest;
 import com.ai.gateway.domain.model.InvocationResult;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.SystemContext;
 import com.ai.gateway.domain.port.AuditPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
@@ -15,6 +16,7 @@ import com.ai.gateway.domain.service.ArgumentBinder;
 import com.ai.gateway.domain.service.DeadlineBudgetManager;
 import com.ai.gateway.domain.service.RedactionService;
 import com.ai.gateway.domain.service.ResultNormalizer;
+import com.ai.gateway.domain.service.PayloadLimitExceededException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,6 +85,7 @@ public final class DeterministicExecutionUseCase {
     private final AuthorizationPort authorizationPort;
     private final AuditPort auditPort;
     private final DeadlineBudgetManager deadlineBudgetManager;
+    private final PayloadLimits payloadLimits;
 
     /**
      * Constructs a new DeterministicExecutionUseCase with the required
@@ -110,6 +113,30 @@ public final class DeterministicExecutionUseCase {
                                           AuthorizationPort authorizationPort,
                                           AuditPort auditPort,
                                           DeadlineBudgetManager deadlineBudgetManager) {
+        this(invocationAdapter, typeConverterRegistry, redactionService, schemaValidator,
+                authorizationPort, auditPort, deadlineBudgetManager, PayloadLimits.defaults());
+    }
+
+    /**
+     * 使用统一 Payload 预算创建确定性执行用例。
+     *
+     * @param invocationAdapter 协议调用适配器
+     * @param typeConverterRegistry 类型转换器注册表
+     * @param redactionService 脱敏服务
+     * @param schemaValidator Schema 校验器
+     * @param authorizationPort 授权端口
+     * @param auditPort 审计端口
+     * @param deadlineBudgetManager 截止时间预算管理器
+     * @param payloadLimits 输入/输出 Payload 预算
+     */
+    public DeterministicExecutionUseCase(InvocationAdapter invocationAdapter,
+                                          TypeConverterRegistry typeConverterRegistry,
+                                          RedactionService redactionService,
+                                          SchemaValidator schemaValidator,
+                                          AuthorizationPort authorizationPort,
+                                          AuditPort auditPort,
+                                          DeadlineBudgetManager deadlineBudgetManager,
+                                          PayloadLimits payloadLimits) {
         this.invocationAdapter = java.util.Objects.requireNonNull(invocationAdapter,
                 "invocationAdapter must not be null");
         this.typeConverterRegistry = java.util.Objects.requireNonNull(typeConverterRegistry,
@@ -124,6 +151,8 @@ public final class DeterministicExecutionUseCase {
                 "auditPort must not be null");
         this.deadlineBudgetManager = java.util.Objects.requireNonNull(deadlineBudgetManager,
                 "deadlineBudgetManager must not be null");
+        this.payloadLimits = java.util.Objects.requireNonNull(payloadLimits,
+                "payloadLimits must not be null");
     }
 
     /**
@@ -266,10 +295,20 @@ public final class DeterministicExecutionUseCase {
             ResultNormalizer normalizer = new ResultNormalizer(
                     manifest.spec().output(),
                     schemaValidator,
-                    redactionService
+                    redactionService,
+                    payloadLimits
             );
             // Steps 1-7: normalize the invocation result
             normalizedResult = normalizer.normalize(invocationResult);
+        } catch (PayloadLimitExceededException e) {
+            log.warn("Result exceeds Payload budget: capability={}", plan.capabilityId());
+            auditPort.recordTerminal(requestId, plan.capabilityId(),
+                    plan.capabilityVersion(), ErrorCode.RESULT_TOO_LARGE.name(),
+                    System.currentTimeMillis() - startTime,
+                    "{\"reason\":\"payload_budget_exceeded\"}");
+            return new ExecutionResult(null,
+                    ErrorCode.RESULT_TOO_LARGE.name(),
+                    "Provider result exceeds the configured payload budget");
         } catch (Exception e) {
             log.error("Result governance failed: capability={}", plan.capabilityId());
             auditPort.recordTerminal(requestId, plan.capabilityId(),

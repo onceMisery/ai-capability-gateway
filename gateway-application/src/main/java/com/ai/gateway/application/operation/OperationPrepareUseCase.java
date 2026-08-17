@@ -5,6 +5,7 @@ import com.ai.gateway.domain.model.ConfirmationSummary;
 import com.ai.gateway.domain.model.ConfirmationToken;
 import com.ai.gateway.domain.model.OperationRecord;
 import com.ai.gateway.domain.model.OperationState;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.port.AuthorizationPort;
@@ -75,6 +76,7 @@ public final class OperationPrepareUseCase {
     private final AuthenticationPort authenticationPort;
     private final ConfirmationTokenCodec confirmationTokenCodec;
     private final ArgumentPayloadCodec argumentPayloadCodec;
+    private final PayloadLimits payloadLimits;
 
     /**
      * Constructs a new OperationPrepareUseCase with the required dependencies.
@@ -103,6 +105,37 @@ public final class OperationPrepareUseCase {
                                     AuthenticationPort authenticationPort,
                                     ConfirmationTokenCodec confirmationTokenCodec,
                                     ArgumentPayloadCodec argumentPayloadCodec) {
+        this(nlQueryUseCase, typeConverterRegistry, schemaValidator, authorizationPort,
+                encryptionPort, operationRepository, catalogPort, authenticationPort,
+                confirmationTokenCodec, argumentPayloadCodec, PayloadLimits.defaults());
+    }
+
+    /**
+     * 使用统一 Payload 预算创建写操作 Prepare 用例。
+     *
+     * @param nlQueryUseCase 自然语言路由用例
+     * @param typeConverterRegistry 类型转换器注册表
+     * @param schemaValidator Schema 校验器
+     * @param authorizationPort 授权端口
+     * @param encryptionPort 参数加密端口
+     * @param operationRepository 操作记录存储
+     * @param catalogPort 能力目录端口
+     * @param authenticationPort 认证端口
+     * @param confirmationTokenCodec 确认令牌编解码器
+     * @param argumentPayloadCodec 参数载荷编解码器
+     * @param payloadLimits 统一 Payload 预算
+     */
+    public OperationPrepareUseCase(NaturalLanguageQueryUseCase nlQueryUseCase,
+                                    TypeConverterRegistry typeConverterRegistry,
+                                    SchemaValidator schemaValidator,
+                                    AuthorizationPort authorizationPort,
+                                    EncryptionPort encryptionPort,
+                                    OperationRepository operationRepository,
+                                    CatalogPort catalogPort,
+                                    AuthenticationPort authenticationPort,
+                                    ConfirmationTokenCodec confirmationTokenCodec,
+                                    ArgumentPayloadCodec argumentPayloadCodec,
+                                    PayloadLimits payloadLimits) {
         this.nlQueryUseCase = Objects.requireNonNull(nlQueryUseCase,
                 "nlQueryUseCase must not be null");
         this.typeConverterRegistry = Objects.requireNonNull(typeConverterRegistry,
@@ -123,6 +156,8 @@ public final class OperationPrepareUseCase {
                 "confirmationTokenCodec must not be null");
         this.argumentPayloadCodec = Objects.requireNonNull(argumentPayloadCodec,
                 "argumentPayloadCodec must not be null");
+        this.payloadLimits = Objects.requireNonNull(payloadLimits,
+                "payloadLimits must not be null");
     }
 
     /**
@@ -193,7 +228,7 @@ public final class OperationPrepareUseCase {
         try {
             ArgumentBinder binder = new ArgumentBinder(
                     typeConverterRegistry, schemaValidator,
-                    principal, systemContext, manifest);
+                    principal, systemContext, manifest, payloadLimits);
             boundArguments = binder.bind(modelArguments);
         } catch (IllegalArgumentException e) {
             log.warn("Parameter binding failed: {}", e.getMessage());

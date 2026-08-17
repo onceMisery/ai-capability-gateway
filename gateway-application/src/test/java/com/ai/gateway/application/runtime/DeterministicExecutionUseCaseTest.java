@@ -4,6 +4,9 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
 import com.ai.gateway.domain.model.InvocationResult;
+import com.ai.gateway.domain.model.OutputContract;
+import com.ai.gateway.domain.model.OutputMode;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.ResiliencePolicy;
 import com.ai.gateway.domain.model.RiskLevel;
@@ -94,6 +97,27 @@ class DeterministicExecutionUseCaseTest {
                 eq("1.0.0"), eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
     }
 
+    @Test
+    void oversizedProviderResultReturnsStablePayloadError() {
+        Fixture fixture = new Fixture();
+        CapabilityManifest.Spec spec = mock(CapabilityManifest.Spec.class);
+        when(fixture.manifest.spec()).thenReturn(spec);
+        when(spec.output()).thenReturn(new OutputContract(
+                OutputMode.DIRECT, null, List.of(), Map.of(), List.of(), 1024));
+        when(fixture.authorization.authorizeExecution(any(), anyString(), anyString()))
+                .thenReturn(true);
+        when(fixture.invocation.invoke(any())).thenReturn(new InvocationResult(
+                Map.of("message", "中文结果"), "OK", null, null, Map.of()));
+
+        DeterministicExecutionUseCase.ExecutionResult result = fixture.useCase(
+                new PayloadLimits(64 * 1024L, 10L, 16, 1000, 1000, 16 * 1024, 10000L))
+                .execute("req-too-large", fixture.plan(), fixture.principal(), fixture.manifest);
+
+        assertThat(result.errorCode()).isEqualTo(ErrorCode.RESULT_TOO_LARGE.name());
+        verify(fixture.audit).recordTerminal(eq("req-too-large"), eq("order.query"),
+                eq("1.0.0"), eq(ErrorCode.RESULT_TOO_LARGE.name()), anyLong(), anyString());
+    }
+
     private static final class Fixture {
         private final InvocationAdapter invocation = mock(InvocationAdapter.class);
         private final AuthorizationPort authorization = mock(AuthorizationPort.class);
@@ -101,10 +125,14 @@ class DeterministicExecutionUseCaseTest {
         private final CapabilityManifest manifest = mock(CapabilityManifest.class);
 
         private DeterministicExecutionUseCase useCase() {
+            return useCase(PayloadLimits.defaults());
+        }
+
+        private DeterministicExecutionUseCase useCase(PayloadLimits payloadLimits) {
             return new DeterministicExecutionUseCase(invocation,
                     mock(TypeConverterRegistry.class), new RedactionService(),
                     mock(SchemaValidator.class), authorization, audit,
-                    new DeadlineBudgetManager());
+                    new DeadlineBudgetManager(), payloadLimits);
         }
 
         private Principal principal() {

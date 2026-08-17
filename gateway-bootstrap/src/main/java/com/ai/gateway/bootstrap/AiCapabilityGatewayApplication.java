@@ -43,7 +43,10 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  */
 @SpringBootApplication(exclude = SaTokenDaoRedissonJackson.class)
 @EnableScheduling
-@EnableConfigurationProperties(com.ai.gateway.bootstrap.config.GatewayProperties.class)
+@EnableConfigurationProperties({
+        com.ai.gateway.bootstrap.config.GatewayProperties.class,
+        com.ai.gateway.bootstrap.config.PayloadLimitsProperties.class
+})
 @Import({
         // --- Pluggable provider wiring (auth / catalog / rate limiting) ---
         // Each provider group contains mutually exclusive implementations

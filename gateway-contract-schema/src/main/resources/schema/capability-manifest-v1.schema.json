@@ -2,8 +2,8 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://gateway.ai/schema/capability-manifest-v1.schema.json",
   "title": "AI Capability Gateway — Capability Manifest v1",
-  "description": "JSON Schema 2020-12 definition for the AI Capability Gateway Capability Manifest. Covers Sections 6.2–6.7, 6.5.1, 6.9, 10.1, 10.5, 12.3, 12.5 and 13.1 of the design document. This schema is the machine-checkable contract for Manifest import and validation (Section 8.2 step 1).",
-  "$comment": "Cross-field constraints that JSON Schema cannot express (e.g. parameterTypes/arguments positional correspondence, projection target uniqueness, redaction path existence within publicSchema) are enforced by the Contract Validator (Section 8.2).",
+  "description": "JSON Schema 2020-12 definition for the AI Capability Gateway Capability Manifest.",
+  "$comment": "Cross-field constraints that JSON Schema cannot express (e.g. parameterTypes/arguments positional correspondence, projection target uniqueness, redaction path existence within publicSchema) are enforced by the Contract Validator ",
 
   "type": "object",
   "required": ["apiVersion", "kind", "metadata", "spec"],
@@ -37,19 +37,19 @@
     "sourceEnum": {
       "type": "string",
       "enum": ["MODEL", "PRINCIPAL", "CONSTANT", "SYSTEM"],
-      "description": "Controlled argument source (Section 6.5)."
+      "description": "Controlled argument source."
     },
 
     "converterWhitelist": {
       "type": "string",
       "enum": ["ISO_DATE_TO_EPOCH_MILLIS", "ENUM_UPPERCASE", "STRING_TRIM"],
-      "description": "Built-in converter whitelist (Section 6.5.1). New converters are not accepted via Manifest; changes follow platform release process."
+      "description": "Built-in converter whitelist. New converters are not accepted via Manifest; changes follow platform release process."
     },
 
     "systemSourcePathWhitelist": {
       "type": "string",
       "enum": ["/traceId", "/deadlineEpochMs", "/idempotencyKey", "/locale"],
-      "description": "SYSTEM source can only read platform built-in whitelist paths (Section 6.5). Manifest cannot declare new system variables."
+      "description": "SYSTEM source can only read platform built-in whitelist paths. Manifest cannot declare new system variables."
     },
 
     "metadata": {
@@ -61,12 +61,12 @@
           "type": "string",
           "pattern": "^[a-z0-9.-]+$",
           "maxLength": 128,
-          "description": "Globally stable capability ID, e.g. order.detail.query. Only lowercase letters, digits, dots and hyphens (Section 6.3)."
+          "description": "Globally stable capability ID, e.g. order.detail.query. Only lowercase letters, digits, dots and hyphens "
         },
         "version": {
           "type": "string",
           "pattern": "^\\d+\\.\\d+\\.\\d+$",
-          "description": "SemVer contract version MAJOR.MINOR.PATCH (Section 6.3)."
+          "description": "SemVer contract version MAJOR.MINOR.PATCH ."
         },
         "owner": {
           "$ref": "#/$defs/owner"
@@ -77,7 +77,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Optional controlled tags for retrieval and governance (Section 6.2)."
+          "description": "Optional controlled tags for retrieval and governance ."
         }
       }
     },
@@ -108,12 +108,12 @@
         "displayName": {
           "type": "string",
           "maxLength": 128,
-          "description": "User-understandable capability name (Section 6.2)."
+          "description": "User-understandable capability name ."
         },
         "description": {
           "type": "string",
           "maxLength": 1024,
-          "description": "Single business action description (Section 6.2)."
+          "description": "Single business action description ."
         },
         "examples": {
           "$ref": "#/$defs/examples"
@@ -121,7 +121,7 @@
         "risk": {
           "type": "string",
           "enum": ["READ_ONLY", "WRITE_LOW", "WRITE_HIGH"],
-          "description": "Risk level determining execution control strength (Section 6.2). READ_ONLY: direct execution. WRITE_LOW: Prepare/Confirm required. WRITE_HIGH: prohibited until independent security review and dual approval (Section 13.1)."
+          "description": "Risk level determining execution control strength . READ_ONLY: direct execution. WRITE_LOW: Prepare/Confirm required. WRITE_HIGH: prohibited until independent security review and dual approval ."
         },
         "inputSchema": {
           "$ref": "#/$defs/inputSchema"
@@ -153,7 +153,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "At least three natural-language positive examples (Section 6.8)."
+          "description": "At least three natural-language positive examples ."
         },
         "negative": {
           "type": "array",
@@ -162,7 +162,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "At least two easily-confused negative examples, indicating which other capability to choose or no match (Section 6.8)."
+          "description": "At least two easily-confused negative examples, indicating which other capability to choose or no match  ."
         },
         "synonyms": {
           "type": "array",
@@ -170,7 +170,7 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Key noun synonyms for retrieval disambiguation (Section 6.8)."
+          "description": "Key noun synonyms for retrieval disambiguation ."
         }
       }
     },
@@ -181,14 +181,14 @@
       "properties": {
         "type": {
           "const": "object",
-          "description": "Root type must be object (Section 6.4)."
+          "description": "Root type must be object ."
         },
         "additionalProperties": {
           "const": false,
-          "description": "Must be explicitly false to prevent mass assignment (Section 6.4)."
+          "description": "Must be explicitly false to prevent mass assignment ."
         }
       },
-      "description": "JSON Schema 2020-12 for model-visible business parameters only. Must not contain orgId, tenantId, userId, roles, service addresses or interface names (Section 6.4). Only MODEL-sourced parameters appear here."
+      "description": "JSON Schema 2020-12 for model-visible business parameters only. Must not contain orgId, tenantId, userId, roles, service addresses or interface names  . Only MODEL-sourced parameters appear here."
     },
 
     "authorization": {
@@ -200,9 +200,9 @@
           "items": {
             "type": "string",
             "pattern": "^[a-z][a-z0-9-]*:[a-z][a-z0-9-]*:[a-z][a-z0-9-]*(:[a-z][a-z0-9-]*)?$",
-            "description": "Permission string in domain:resource:action[:scope] format (Section 10.5). Wildcards are prohibited."
+            "description": "Permission string in domain:resource:action[:scope] format . Wildcards are prohibited."
           },
-          "description": "Required permission strings. Orthogonal to risk: permissions determine 'can call', risk determines 'control strength' (Section 10.5)."
+          "description": "Required permission strings. Orthogonal to risk: permissions determine 'can call', risk determines 'control strength' ."
         },
         "principalClaims": {
           "type": "object",
@@ -212,17 +212,17 @@
             }
           },
           "additionalProperties": false,
-          "description": "Required Principal claims keyed by JSON Pointer, e.g. /orgId (Section 6.2, 10.1)."
+          "description": "Required Principal claims keyed by JSON Pointer, e.g. /orgId ."
         },
         "maxAuthAgeSeconds": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum authentication age in seconds for write operations. Confirm must re-check auth freshness (Section 10.1)."
+          "description": "Maximum authentication age in seconds for write operations. Confirm must re-check auth freshness  ."
         },
         "requiredAcr": {
           "type": "string",
           "minLength": 1,
-          "description": "Required Authentication Context Class Reference (Section 10.1)."
+          "description": "Required Authentication Context Class Reference  ."
         },
         "requiredAmr": {
           "type": "array",
@@ -230,10 +230,10 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Required Authentication Method References, e.g. MFA level (Section 10.1)."
+          "description": "Required Authentication Method References, e.g. MFA level ."
         }
       },
-      "description": "Optional authorization requirements (Section 6.2). Shelved in first phase; all authenticated users can call published READ_ONLY capabilities (Section 10.2)."
+      "description": "Optional authorization requirements  . Shelved in first phase; all authenticated users can call published READ_ONLY capabilities ."
     },
 
     "principalClaimSpec": {
@@ -332,7 +332,7 @@
           }
         }
       ],
-      "description": "A single source-to-target field binding used in composite argument objects and attachment bindings (Section 6.5). Converter operates on a single source value to a single target field; cross-field composition is not supported (Section 6.5.1)."
+      "description": "A single source-to-target field binding used in composite argument objects and attachment bindings  . Converter operates on a single source value to a single target field; cross-field composition is not supported  ."
     },
 
     "argumentBinding": {
@@ -343,7 +343,7 @@
         "position": {
           "type": "integer",
           "minimum": 0,
-          "description": "Zero-based protocol parameter position. Must be unique and continuous across arguments; must match parameterTypes (Section 6.5)."
+          "description": "Zero-based protocol parameter position. Must be unique and continuous across arguments; must match parameterTypes  ."
         },
         "name": {
           "type": "string",
@@ -376,7 +376,7 @@
           },
           "additionalProperties": false,
           "minProperties": 1,
-          "description": "Composite binding: JSON Pointer to FieldBinding map (Section 6.5). A DTO mixing business and trusted fields must use this. Reserved fields like /class, /@type are rejected by the binder."
+          "description": "Composite binding: JSON Pointer to FieldBinding map  . A DTO mixing business and trusted fields must use this. Reserved fields like /class, /@type are rejected by the binder."
         }
       },
       "oneOf": [
@@ -461,7 +461,7 @@
           }
         }
       ],
-      "description": "Protocol argument binding — either simple (source-based) or composite (object map). Exactly one binding mode per argument (Section 6.5)."
+      "description": "Protocol argument binding — either simple (source-based) or composite (object map). Exactly one binding mode per argument ."
     },
 
     "invocation": {
@@ -472,17 +472,17 @@
         "protocol": {
           "type": "string",
           "enum": ["DUBBO", "REST", "GRPC"],
-          "description": "Protocol type (Section 6.6). First phase: DUBBO only."
+          "description": "Protocol type . First phase: DUBBO only."
         },
         "registryRef": {
           "type": "string",
           "minLength": 1,
-          "description": "Reference to an operationally pre-configured registry. Manifest must not carry usernames, passwords or arbitrary registry addresses (Section 6.6). Required when protocol is DUBBO."
+          "description": "Reference to an operationally pre-configured registry. Manifest must not carry usernames, passwords or arbitrary registry addresses  . Required when protocol is DUBBO."
         },
         "interfaceName": {
           "type": "string",
           "minLength": 1,
-          "description": "Fully-qualified interface name. Used as protocol metadata string only; not loaded at runtime (Section 6.6)."
+          "description": "Fully-qualified interface name. Used as protocol metadata string only; not loaded at runtime ."
         },
         "group": {
           "type": "string",
@@ -496,7 +496,7 @@
         "method": {
           "type": "string",
           "minLength": 1,
-          "description": "Method name. Overloaded methods are located by the full parameter type list (Section 12.1)."
+          "description": "Method name. Overloaded methods are located by the full parameter type list  ."
         },
         "parameterTypes": {
           "type": "array",
@@ -504,19 +504,19 @@
             "type": "string",
             "minLength": 1
           },
-          "description": "Protocol parameter type names. Must correspond one-to-one with arguments by position and protocolType (Section 6.6)."
+          "description": "Protocol parameter type names. Must correspond one-to-one with arguments by position and protocolType  ."
         },
         "serialization": {
           "type": "string",
           "enum": ["hessian2", "fastjson2"],
-          "description": "Serialization from the platform whitelist. Only Apache Dubbo community built-in implementations are accepted (Section 12.3). Must match Provider prefer-serialization; negotiation result is固化d in compatibility testing."
+          "description": "Serialization from the platform whitelist. Only Apache Dubbo community built-in implementations are accepted  . Must match Provider prefer-serialization; negotiation result is固化d in compatibility testing."
         },
         "arguments": {
           "type": "array",
           "items": {
             "$ref": "#/$defs/argumentBinding"
           },
-          "description": "Argument bindings ordered by position (Section 6.5)."
+          "description": "Argument bindings ordered by position ."
         },
         "attachments": {
           "type": "object",
@@ -535,12 +535,12 @@
               "rtid",
               "x-idempotent-key"
             ],
-            "description": "Attachment keys must be in the platform whitelist (Section 12.5). Unsigned tenant, user or permission attachments are not allowed."
+            "description": "Attachment keys must be in the platform whitelist . Unsigned tenant, user or permission attachments are not allowed."
           },
           "additionalProperties": {
             "$ref": "#/$defs/fieldBinding"
           },
-          "description": "Attachment bindings. Attachments only carry non-authorisation context (Trace ID, deadline, Locale, signed delegated token, observability keys). They never participate in authorisation (Section 12.5)."
+          "description": "Attachment bindings. Attachments only carry non-authorisation context (Trace ID, deadline, Locale, signed delegated token, observability keys). They never participate in authorisation ."
         }
       },
       "allOf": [
@@ -559,7 +559,7 @@
           }
         }
       ],
-      "description": "Protocol binding and deterministic argument mapping. Does not enter model context (Section 6.6)."
+      "description": "Protocol binding and deterministic argument mapping. Does not enter model context  ."
     },
 
     "output": {
@@ -570,7 +570,7 @@
         "mode": {
           "type": "string",
           "enum": ["ENVELOPE", "DIRECT"],
-          "description": "Response unwrapping mode (Section 6.7). ENVELOPE: declare codePath/successValues/dataPath. DIRECT: protocol return root is data, must not declare success code path."
+          "description": "Response unwrapping mode . ENVELOPE: declare codePath/successValues/dataPath. DIRECT: protocol return root is data, must not declare success code path."
         },
         "envelope": {
           "$ref": "#/$defs/envelope"
@@ -580,7 +580,7 @@
           "items": {
             "$ref": "#/$defs/projectionItem"
           },
-          "description": "JSON Pointer whitelist projection from Provider data to public data. Unmapped fields do not leave the gateway (Section 6.7). If absent, extracted data must match publicSchema exactly."
+          "description": "JSON Pointer whitelist projection from Provider data to public data. Unmapped fields do not leave the gateway . If absent, extracted data must match publicSchema exactly."
         },
         "publicSchema": {
           "$ref": "#/$defs/publicSchema"
@@ -590,13 +590,13 @@
           "items": {
             "$ref": "#/$defs/redaction"
           },
-          "description": "Field redaction rules applied after projection and before publicSchema validation (Section 6.7, 11.3)."
+          "description": "Field redaction rules applied after projection and before publicSchema validation  ."
         },
         "maxBytes": {
           "type": "integer",
           "minimum": 1,
           "default": 262144,
-          "description": "Maximum response size in bytes (Section 6.7). Default 256 KiB."
+          "description": "Maximum response size in bytes . Default 256 KiB."
         }
       },
       "allOf": [
@@ -631,7 +631,7 @@
           }
         }
       ],
-      "description": "Response contract: unwrapping, projection, public schema, redaction and size limit (Section 6.7). Provider return is converted to neutral JSON tree before processing; protocol metadata keys (class, @type) are recursively stripped (Section 12.1)."
+      "description": "Response contract: unwrapping, projection, public schema, redaction and size limit  . Provider return is converted to neutral JSON tree before processing; protocol metadata keys (class, @type) are recursively stripped ."
     },
 
     "envelope": {
@@ -649,7 +649,7 @@
           "items": {
             "type": ["string", "number", "boolean"]
           },
-          "description": "Success code values. JSON scalars compared exactly: number 0 and string \"0\" are distinct values (Section 6.7)."
+          "description": "Success code values. JSON scalars compared exactly: number 0 and string \"0\" are distinct values  ."
         },
         "dataPath": {
           "$ref": "#/$defs/jsonPointer",
@@ -660,7 +660,7 @@
           "description": "Optional JSON Pointer to the message field."
         }
       },
-      "description": "Envelope specification for ENVELOPE mode (Section 6.7). Platform standard档: code is string \"200\", data path is /value."
+      "description": "Envelope specification for ENVELOPE mode . Platform standard档: code is string \"200\", data path is /value."
     },
 
     "projectionItem": {
@@ -677,7 +677,7 @@
           "description": "Target JSON Pointer in public data."
         }
       },
-      "description": "A single projection mapping (Section 6.7)."
+      "description": "A single projection mapping  ."
     },
 
     "redaction": {
@@ -692,10 +692,10 @@
         "method": {
           "type": "string",
           "enum": ["DELETE", "PARTIAL_MASK", "HASH"],
-          "description": "Redaction method: DELETE removes the field, PARTIAL_MASK masks part of the value, HASH replaces with irreversible hash (Section 11.3)."
+          "description": "Redaction method: DELETE removes the field, PARTIAL_MASK masks part of the value, HASH replaces with irreversible hash  ."
         }
       },
-      "description": "A single redaction rule (Section 6.7)."
+      "description": "A single redaction rule  ."
     },
 
     "publicSchema": {
@@ -704,10 +704,10 @@
       "properties": {
         "type": {
           "const": "object",
-          "description": "Root type must be object (Section 6.7)."
+          "description": "Root type must be object ."
         }
       },
-      "description": "JSON Schema 2020-12 for the public output after projection and redaction (Section 6.7). Validated after redaction; failure blocks result return."
+      "description": "JSON Schema 2020-12 for the public output after projection and redaction  . Validated after redaction; failure blocks result return."
     },
 
     "resilience": {
@@ -719,22 +719,22 @@
           "type": "integer",
           "minimum": 100,
           "maximum": 30000,
-          "description": "Provider call timeout in milliseconds (Section 6.9). Actual timeout is the minimum of Manifest value, platform cap and入口 remaining deadline (Section 12.4)."
+          "description": "Provider call timeout in milliseconds  . Actual timeout is the minimum of Manifest value, platform cap and入口 remaining deadline ."
         },
         "retries": {
           "type": "integer",
           "minimum": 0,
           "maximum": 3,
-          "description": "Maximum retry count for transient network errors only (Section 6.9). Read-only defaults to at most 1; write operations default to 0 unless Provider-verifiable idempotency key is present (Section 12.4)."
+          "description": "Maximum retry count for transient network errors only . Read-only defaults to at most 1; write operations default to 0 unless Provider-verifiable idempotency key is present ."
         },
         "maxConcurrent": {
           "type": "integer",
           "minimum": 1,
           "maximum": 1000,
-          "description": "Maximum concurrent invocations per capability for bulkhead isolation (Section 6.9)."
+          "description": "Maximum concurrent invocations per capability for bulkhead isolation  ."
         }
       },
-      "description": "Resilience settings: timeout, retries, concurrency and size limits (Section 6.9)."
+      "description": "Resilience settings: timeout, retries, concurrency and size limits ."
     }
   }
 }

@@ -46,6 +46,11 @@ management:
 # Gateway configuration
 gateway:
   environment: ${GATEWAY_ENV:development}
+  max-json-depth: 16
+  max-array-length: 1000
+  max-object-fields: 1000
+  max-string-bytes: 16384
+  max-node-count: 10000
 
   auth:
     provider: ${GATEWAY_AUTH_PROVIDER:sa-token}

@@ -1,0 +1,21 @@
+# Versioned offline routing labels: query<TAB>expected capability id
+What is the status of my order 12345?	order.detail.query
+Show me the shipping address for order 999	order.detail.query
+How much was the total for order A100?	order.detail.query
+查询订单状态	order.detail.query
+查一下订单的收货地址	order.detail.query
+Place a new order for item X	order.create
+Create an order for three laptops	order.create
+Submit a purchase request for P100	order.create
+I want to buy a product and create a purchase order	order.create
+下单购买商品	order.create
+How many units of SKU-1 are available?	inventory.stock.query
+Show the current stock level of product P100	inventory.stock.query
+Is item X in stock?	inventory.stock.query
+Check inventory availability	inventory.stock.query
+查询库存数量	inventory.stock.query
+Show my profile information	user.profile.query
+What is the email address of user 7?	user.profile.query
+Get the display name of the current user	user.profile.query
+Look up my user profile	user.profile.query
+查询用户资料	user.profile.query

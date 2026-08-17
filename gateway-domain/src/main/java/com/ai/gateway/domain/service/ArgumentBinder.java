@@ -5,6 +5,7 @@ import com.ai.gateway.domain.model.ArgumentSource;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ConverterType;
 import com.ai.gateway.domain.model.FieldBinding;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.ProtocolBinding;
 import com.ai.gateway.domain.model.SystemContext;
@@ -86,6 +87,7 @@ public final class ArgumentBinder {
     private final Principal principal;
     private final SystemContext systemContext;
     private final CapabilityManifest manifest;
+    private final PayloadTreeGuard payloadTreeGuard;
 
     /**
      * Constructs a new ArgumentBinder with the required dependencies and
@@ -110,6 +112,26 @@ public final class ArgumentBinder {
                           Principal principal,
                           SystemContext systemContext,
                           CapabilityManifest manifest) {
+        this(typeConverters, schemaValidator, principal, systemContext, manifest,
+                PayloadLimits.defaults());
+    }
+
+    /**
+     * 使用统一 Payload 预算创建参数绑定器。
+     *
+     * @param typeConverters 类型转换器注册表
+     * @param schemaValidator 输入 Schema 校验器
+     * @param principal 当前主体
+     * @param systemContext 当前系统上下文
+     * @param manifest 能力 Manifest
+     * @param payloadLimits 输入 Payload 预算
+     */
+    public ArgumentBinder(TypeConverterRegistry typeConverters,
+                          SchemaValidator schemaValidator,
+                          Principal principal,
+                          SystemContext systemContext,
+                          CapabilityManifest manifest,
+                          PayloadLimits payloadLimits) {
         this.typeConverters = java.util.Objects.requireNonNull(
                 typeConverters, "typeConverters must not be null");
         this.schemaValidator = java.util.Objects.requireNonNull(
@@ -120,6 +142,8 @@ public final class ArgumentBinder {
                 systemContext, "systemContext must not be null");
         this.manifest = java.util.Objects.requireNonNull(
                 manifest, "manifest must not be null");
+        this.payloadTreeGuard = new PayloadTreeGuard(java.util.Objects.requireNonNull(
+                payloadLimits, "payloadLimits must not be null"));
     }
 
     /**
@@ -140,6 +164,9 @@ public final class ArgumentBinder {
      */
     public List<Object> bind(Map<String, Object> modelArguments) {
         java.util.Objects.requireNonNull(modelArguments, "modelArguments must not be null");
+
+        // 在 Schema 校验和递归业务处理前先执行统一结构预算，避免深层输入耗尽栈。
+        payloadTreeGuard.validateInput(modelArguments);
 
         // Step 1: Parse model output, reject duplicate keys and non-finite numbers
         Map<String, Object> parsedModel = parseModelOutput(modelArguments);

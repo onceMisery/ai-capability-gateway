@@ -5,6 +5,7 @@ import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.model.ResiliencePolicy;
 import com.ai.gateway.domain.model.RiskLevel;
@@ -17,6 +18,8 @@ import com.ai.gateway.domain.port.SchemaValidator;
 import com.ai.gateway.domain.port.TypeConverterRegistry;
 import com.ai.gateway.domain.service.ArgumentBinder;
 import com.ai.gateway.domain.service.ManifestDigest;
+import com.ai.gateway.domain.service.PayloadTreeGuard;
+import com.ai.gateway.domain.service.PayloadLimitExceededException;
 import com.ai.gateway.domain.service.Sha256Digest;
 
 import java.time.Instant;
@@ -43,6 +46,8 @@ public final class StructuredInvocationUseCase {
     private final TypeConverterRegistry typeConverterRegistry;
     private final DeterministicExecutionUseCase deterministicExecutionUseCase;
     private final String environment;
+    private final PayloadLimits payloadLimits;
+    private final PayloadTreeGuard payloadTreeGuard;
 
     public StructuredInvocationUseCase(AuthenticationPort authenticationPort,
                                        AuthorizationPort authorizationPort,
@@ -51,6 +56,31 @@ public final class StructuredInvocationUseCase {
                                        TypeConverterRegistry typeConverterRegistry,
                                        DeterministicExecutionUseCase deterministicExecutionUseCase,
                                        String environment) {
+        this(authenticationPort, authorizationPort, catalogPort, schemaValidator,
+                typeConverterRegistry, deterministicExecutionUseCase, environment,
+                PayloadLimits.defaults());
+    }
+
+    /**
+     * 使用统一 Payload 预算创建结构化调用用例。
+     *
+     * @param authenticationPort 认证端口
+     * @param authorizationPort 授权端口
+     * @param catalogPort 能力目录端口
+     * @param schemaValidator Schema 校验器
+     * @param typeConverterRegistry 类型转换器注册表
+     * @param deterministicExecutionUseCase 确定性执行用例
+     * @param environment 运行环境
+     * @param payloadLimits 统一 Payload 预算
+     */
+    public StructuredInvocationUseCase(AuthenticationPort authenticationPort,
+                                       AuthorizationPort authorizationPort,
+                                       CatalogPort catalogPort,
+                                       SchemaValidator schemaValidator,
+                                       TypeConverterRegistry typeConverterRegistry,
+                                       DeterministicExecutionUseCase deterministicExecutionUseCase,
+                                       String environment,
+                                       PayloadLimits payloadLimits) {
         this.authenticationPort = Objects.requireNonNull(authenticationPort);
         this.authorizationPort = Objects.requireNonNull(authorizationPort);
         this.catalogPort = Objects.requireNonNull(catalogPort);
@@ -58,6 +88,8 @@ public final class StructuredInvocationUseCase {
         this.typeConverterRegistry = Objects.requireNonNull(typeConverterRegistry);
         this.deterministicExecutionUseCase = Objects.requireNonNull(deterministicExecutionUseCase);
         this.environment = Objects.requireNonNull(environment);
+        this.payloadLimits = Objects.requireNonNull(payloadLimits);
+        this.payloadTreeGuard = new PayloadTreeGuard(this.payloadLimits);
         if (environment.isBlank()) {
             throw new IllegalArgumentException("environment must not be blank");
         }
@@ -104,7 +136,11 @@ public final class StructuredInvocationUseCase {
 
         ValidationReport report;
         try {
+            payloadTreeGuard.validateInput(modelArguments);
             report = schemaValidator.validate(modelArguments, manifest.spec().inputSchema());
+        } catch (PayloadLimitExceededException e) {
+            return error(ErrorCode.ARGUMENT_VALIDATION_FAILED,
+                    "Arguments exceed the configured payload budget", snapshot.snapshotVersion());
         } catch (RuntimeException e) {
             return error(ErrorCode.INVALID_MODEL_OUTPUT, "Input validation unavailable", snapshot.snapshotVersion());
         }
@@ -126,7 +162,7 @@ public final class StructuredInvocationUseCase {
         List<Object> boundArguments;
         try {
             boundArguments = new ArgumentBinder(typeConverterRegistry, schemaValidator,
-                    principal, context, manifest).bind(modelArguments);
+                    principal, context, manifest, payloadLimits).bind(modelArguments);
         } catch (RuntimeException e) {
             return error(ErrorCode.ARGUMENT_VALIDATION_FAILED,
                     "Arguments failed binding", snapshot.snapshotVersion());
