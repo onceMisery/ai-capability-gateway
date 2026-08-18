@@ -18,26 +18,25 @@
             <artifactId>gateway-domain</artifactId>
         </dependency>
 
-        <!-- Sa-Token core: framework-agnostic auth engine (no Spring Boot starter,
-             avoiding auto-configuration intrusion per the tech-selection doc). -->
+        <!-- Sa-Token 核心：与框架无关的认证引擎（不使用 Spring Boot 启动器，
+             依据技术选型文档避免自动配置层面的侵入）。 -->
         <dependency>
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-core</artifactId>
         </dependency>
 
-        <!-- Sa-Token JWT extension: stateless JWT creation/parsing (hutool-jwt based). -->
+        <!-- Sa-Token JWT 扩展：无状态的 JWT 创建/解析（基于 hutool-jwt）。 -->
         <dependency>
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-jwt</artifactId>
         </dependency>
 
-        <!-- Sa-Token Redisson DAO (Jackson codec): session persistence into
-             the shared Redis (tech-selection doc §9 lists sa-token-dao-redisson,
-             whose correct 1.39.0 artifactId is sa-token-redisson-jackson).
-             The transitive redisson-spring-boot-starter is excluded: it brings
-             auto-configuration that would unconditionally connect to Redis,
-             conflicting with the programmatic Redisson wiring in
-             SaTokenRedisDaoConfiguration. -->
+        <!-- Sa-Token Redisson DAO（Jackson 编解码器）：将会话持久化到
+             共享 Redis（技术选型文档 §9 列出 sa-token-dao-redisson，
+             其 1.39.0 版本正确的 artifactId 为 sa-token-redisson-jackson）。
+             排除传递依赖 redisson-spring-boot-starter：它会引入自动配置，
+             无条件连接 Redis，与 SaTokenRedisDaoConfiguration 中编程式的
+             Redisson 装配冲突。 -->
         <dependency>
             <groupId>cn.dev33</groupId>
             <artifactId>sa-token-redisson-jackson</artifactId>
@@ -49,7 +48,7 @@
             </exclusions>
         </dependency>
 
-        <!-- Spring context only for @Configuration/@Bean conditional wiring. -->
+        <!-- 仅用于 @Configuration/@Bean 条件装配的 Spring context。 -->
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
@@ -65,21 +64,24 @@
             <artifactId>spring-boot-autoconfigure</artifactId>
         </dependency>
 
-        <!-- Sa-Token Redisson DAO (sa-token-redisson-jackson) internally uses
-             Spring Data Redis's GenericJackson2JsonRedisSerializer at runtime,
-             so this dependency must be present on the classpath even though we
-             wire Redisson programmatically (the redisson-spring-boot-starter is
-             excluded above). Lettuce is not used by the gateway (Redisson is the
-             Redis client) but is kept to satisfy Spring Data Redis's autoconfig
-             classpath detection; its connection factory simply backs off without
-             spring.data.redis configuration and never actually connects. -->
+        <!-- Sa-Token Redisson DAO（sa-token-redisson-jackson）在运行时内部使用
+             Spring Data Redis 的 GenericJackson2JsonRedisSerializer，因此即使我们
+             以编程方式装配 Redisson（上面已排除 redisson-spring-boot-starter），
+             该依赖也必须存在于 classpath 中。网关不使用 Lettuce（Redis 客户端为
+             Redisson），但保留它以满足 Spring Data Redis 自动配置的 classpath 检测；
+             没有 spring.data.redis 配置时其连接工厂会自动退出，实际上从不连接。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
 
-        <!-- Test -->
+
+        <!-- 测试 -->
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>

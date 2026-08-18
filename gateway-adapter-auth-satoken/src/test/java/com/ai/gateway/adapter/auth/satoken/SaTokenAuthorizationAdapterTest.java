@@ -18,11 +18,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link SaTokenAuthorizationAdapter}.
+ * {@link SaTokenAuthorizationAdapter} 的单元测试。
  *
- * <p>Verifies capability-level ACL decisions, the initial-release
- * degradation rule (empty ACL allows all), wildcard permission handling,
- * and administrative-action gating.</p>
+ * <p>验证能力级别 ACL 的决策逻辑、首发版本的降级规则（空 ACL 放行所有请求）、
+ * 通配符权限处理，以及管理操作的权限门控。</p>
+ *
+ * @author cmiracle@163.com
  */
 class SaTokenAuthorizationAdapterTest {
 

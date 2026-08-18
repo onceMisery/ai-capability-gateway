@@ -20,30 +20,28 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Sa-Token backed {@link AuthenticationPort} reference implementation.
+ * 基于 Sa-Token 的 {@link AuthenticationPort} 参考实现。
  *
- * <p>Resolves the caller credential from the {@link RequestContext}
- * (Authorization header, cookie, or query parameter) and verifies it as a
- * Sa-Token JWT using {@link SaJwtUtil}. On successful verification the JWT
- * claims are mapped onto the internal {@link Principal} structure.</p>
+ * <p>从 {@link RequestContext}（Authorization 请求头、Cookie 或查询参数）中解析
+ * 调用方凭证，并使用 {@link SaJwtUtil} 将其作为 Sa-Token JWT 进行校验。校验通过后，
+ * JWT 声明会被映射到内部的 {@link Principal} 结构中。</p>
  *
- * <p>This adapter is framework-agnostic at its core: it depends on
- * {@code sa-token-core}/{@code sa-token-jwt} only, not on the Sa-Token
- * Spring Boot starter, so it introduces no auto-configuration intrusion.
- * It is stateless — JWT signature verification does not require a session
- * store — which keeps it runnable before the Redis infrastructure
- * (tech-selection milestone M2) is available. Session persistence via
- * {@code sa-token-dao-redisson} can be layered on later.</p>
+ * <p>该适配器核心是框架无关的：它只依赖 {@code sa-token-core}/{@code sa-token-jwt}，
+ * 而不依赖 Sa-Token 的 Spring Boot 启动器，因此不会引入自动配置层面的侵入。它是
+ * 无状态的——JWT 签名校验不需要会话存储——因此可以在 Redis 基础设施（技术选型
+ * 里程碑 M2）可用之前正常运行。后续可通过 {@code sa-token-dao-redisson} 叠加
+ * 会话持久化能力。</p>
  *
- * <p>Recognized JWT claims:</p>
+ * <p>可识别的 JWT 声明：</p>
  * <ul>
- * <li>{@code loginId} (Sa-Token standard) or {@code sub} — the subject</li>
- * <li>{@code orgId} — the verified organization context</li>
- * <li>{@code roles} — role array</li>
- * <li>{@code permissions} — permission array</li>
+ * <li>{@code loginId}（Sa-Token 标准）或 {@code sub}——主体标识</li>
+ * <li>{@code orgId}——已校验的组织上下文</li>
+ * <li>{@code roles}——角色数组</li>
+ * <li>{@code permissions}——权限数组</li>
  * </ul>
  *
  * @see SaTokenAuthProperties
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIssuerPort {
@@ -68,11 +66,10 @@ public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIs
     private final SaTokenAuthProperties properties;
 
     /**
-     * Constructs a new adapter.
+     * 构造一个新的适配器。
      *
-     * @param properties the Sa-Token authentication properties; never
-     * {@code null}
-     * @throws NullPointerException if {@code properties} is null
+     * @param properties Sa-Token 认证属性；不能为 {@code null}
+     * @throws NullPointerException 如果 {@code properties} 为 null
      */
     public SaTokenAuthenticationAdapter(SaTokenAuthProperties properties) {
         this.properties = Objects.requireNonNull(properties, "properties must not be null");
@@ -97,9 +94,8 @@ public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIs
         }
         JSONObject payloads;
         try {
-            // Verify signature and loginType; timeout is enforced via the JWT
-            // expiry claim when present, so the Sa-Token timeout field is not
-            // strictly required here.
+            // 校验签名和 loginType；超时由 JWT 中的过期声明（存在时）强制执行，
+            // 因此这里并不严格要求 Sa-Token 的超时字段。
             payloads = SaJwtUtil.getPayloads(
                     token, properties.getLoginType(), properties.getJwtSecretKey());
         } catch (Exception e) {
@@ -112,17 +108,15 @@ public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIs
     }
 
     /**
-     * Issues a Sa-Token JWT for the given subject and claims.
+     * 为给定的主体和声明签发 Sa-Token JWT。
      *
-     * <p>Primarily useful for tests and for deployments where the gateway's
-     * own auth server mints tokens. The produced token carries the Sa-Token
-     * {@code loginType} and {@code loginId} claims plus the supplied extra
-     * data, and can be verified by {@link #validateToken(String)}.</p>
+     * <p>主要用于测试，以及网关自身认证服务器签发令牌的部署场景。生成的令牌携带
+     * Sa-Token 的 {@code loginType} 和 {@code loginId} 声明，以及传入的附加数据，
+     * 可通过 {@link #validateToken(String)} 进行校验。</p>
      *
-     * @param subject the subject (login id)
-     * @param extraData additional claims (orgId, roles, permissions, ...);
-     * may be {@code null}
-     * @return the signed JWT string
+     * @param subject 主体标识（登录 ID）
+     * @param extraData 附加声明（orgId、roles、permissions 等）；可以为 {@code null}
+     * @return 签名后的 JWT 字符串
      */
     @Override
     public TokenPair issueTokenPair(String subject, Map<String, Object> extraData) {
@@ -217,14 +211,14 @@ public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIs
     }
 
     private String resolveToken(RequestContext context) {
-        // 1. Authorization header (Bearer scheme preferred)
+        // 1. Authorization 请求头（优先使用 Bearer 方案）
         String authHeader = context.header("Authorization");
         if (authHeader != null && !authHeader.isBlank()) {
             return authHeader.startsWith(BEARER_PREFIX)
                     ? authHeader.substring(BEARER_PREFIX.length()).trim()
                     : authHeader.trim();
         }
-        // 2. Named header (token name)
+        // 2. 命名请求头（令牌名称）
         String namedHeader = context.header(properties.getTokenName());
         if (namedHeader != null && !namedHeader.isBlank()) {
             return namedHeader.trim();
@@ -234,7 +228,7 @@ public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIs
         if (cookie != null && !cookie.isBlank()) {
             return cookie.trim();
         }
-        // 4. Query parameter
+        // 4. 查询参数
         String query = context.queryParams().get(properties.getTokenName());
         if (query != null && !query.isBlank()) {
             return query.trim();

@@ -10,27 +10,20 @@ import com.ai.gateway.domain.port.AuthorizationPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
 
 /**
- * Sa-Token reference implementation of {@link AuthorizationPort} enforcing
- * capability-level (capabilityId + version) authorization.
+ * {@link AuthorizationPort} 的 Sa-Token 参考实现，强制实施能力级别
+ * （capabilityId + version）的授权。
  *
- * <p>The core decision matches the caller's roles against a
- * capability → allowed-roles access-control list (ACL). Authorization is
- * keyed by capability id and version. Production wiring loads ACL entries
- * from PostgreSQL through {@link AclRepository}; the map is only a process
- * cache.</p>
+ * <p>核心决策是将调用方的角色与"能力 → 允许角色"的访问控制列表（ACL）进行匹配。
+ * 授权以能力 ID 和版本为键。生产环境的装配通过 {@link AclRepository} 从 PostgreSQL
+ * 加载 ACL 条目；该 Map 仅是进程内缓存。</p>
  *
- * <p>Empty ACL behavior is explicit. Production wiring uses default-deny;
- * development-only callers may opt into allow-all with the boolean
- * constructor argument. ACL loading failures always deny.</p>
+ * <p>空 ACL 的行为是明确的。生产环境的装配采用默认拒绝；仅用于开发环境的调用方
+ * 可以通过布尔构造参数选择全部放行。ACL 加载失败时始终拒绝。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public class SaTokenAuthorizationAdapter implements AuthorizationPort {
@@ -38,12 +31,12 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     private static final Logger log = LoggerFactory.getLogger(SaTokenAuthorizationAdapter.class);
 
     /**
-     * Role that grants every administrative action.
+     * 授予所有管理操作的角色。
      */
     public static final String ROLE_ADMIN = "admin";
 
     /**
-     * Permission wildcard that grants every capability execution.
+     * 授予所有能力执行的权限通配符。
      */
     public static final String PERMISSION_WILDCARD = "*";
 
@@ -51,36 +44,33 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     private final AclRepository aclRepository;
 
     /**
-     * Capability ACL: capabilityId → set of roles allowed to execute it.
+     * 能力 ACL：capabilityId → 允许执行该能力的角色集合。
      */
     private volatile Map<CapabilityKey, AclPolicy> capabilityAcl = Map.of();
     private volatile boolean aclLoadHealthy = true;
 
     /**
-     * Constructs an adapter with the secure default policy (deny when the ACL
-     * is empty).
+     * 以安全的默认策略构造适配器（ACL 为空时拒绝）。
      */
     public SaTokenAuthorizationAdapter() {
         this(false);
     }
 
     /**
-     * Constructs an adapter with an explicit empty-ACL policy.
+     * 以明确的空 ACL 策略构造适配器。
      *
-     * @param allowAllIfAclEmpty when {@code true}, an empty ACL authorizes
-     * every authenticated caller; when {@code false}, an empty ACL denies
-     * everything (strict default-deny)
+     * @param allowAllIfAclEmpty 为 {@code true} 时，空 ACL 将授权所有已认证的调用方；
+     * 为 {@code false} 时，空 ACL 拒绝所有请求（严格的默认拒绝）
      */
     public SaTokenAuthorizationAdapter(boolean allowAllIfAclEmpty) {
         this(allowAllIfAclEmpty, null);
     }
 
     /**
-     * Constructs an adapter with an AclRepository for loading ACL entries
-     * from PostgreSQL.
+     * 使用 AclRepository 构造适配器，用于从 PostgreSQL 加载 ACL 条目。
      *
-     * @param allowAllIfAclEmpty the empty-ACL policy
-     * @param aclRepository the ACL repository; may be {@code null} for stub mode
+     * @param allowAllIfAclEmpty 空 ACL 策略
+     * @param aclRepository ACL 仓库；在桩（stub）模式下可以为 {@code null}
      */
     public SaTokenAuthorizationAdapter(boolean allowAllIfAclEmpty, AclRepository aclRepository) {
         this.allowAllIfAclEmpty = allowAllIfAclEmpty;
@@ -112,8 +102,8 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         if (!aclLoadHealthy) {
             return false;
         }
-        // Wildcard is only meaningful after the ACL source has loaded
-        // successfully. Infrastructure failure must remain fail-closed.
+        // 通配符仅在 ACL 数据源成功加载之后才有意义。
+        // 基础设施故障必须保持默认拒绝（fail-closed）。
         if (principal.permissions().contains(PERMISSION_WILDCARD)) {
             return true;
         }
@@ -132,7 +122,7 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         boolean roleAllowed = policy.allowedRoles().isEmpty()
                 || principal.roles().stream().anyMatch(policy.allowedRoles()::contains);
         boolean permissionsAllowed = principal.permissions().contains(PERMISSION_WILDCARD)
-                || principal.permissions().containsAll(policy.requiredPermissions());
+                || new HashSet<>(principal.permissions()).containsAll(policy.requiredPermissions());
         return roleAllowed && permissionsAllowed;
     }
 
@@ -140,8 +130,7 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     public boolean authorizeAdmin(Principal principal, AdminAction action) {
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(action, "action must not be null");
-        // Administrative actions require the admin role or the wildcard
-        // permission; default deny otherwise.
+        // 管理操作需要 admin 角色或通配符权限；否则默认拒绝。
         return principal.roles().contains(ROLE_ADMIN)
                 || principal.permissions().contains(PERMISSION_WILDCARD);
     }
@@ -155,10 +144,10 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     }
 
     /**
-     * Registers an ACL entry granting the given roles access to a capability.
+     * 注册一条 ACL 条目，授予给定角色访问某能力的权限。
      *
-     * @param capabilityId the capability identifier
-     * @param roles the roles allowed to execute the capability
+     * @param capabilityId 能力标识
+     * @param roles 允许执行该能力的角色
      */
     public synchronized void grant(String capabilityId, Set<String> roles) {
         Objects.requireNonNull(capabilityId, "capabilityId must not be null");
@@ -178,11 +167,10 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     }
 
     /**
-     * Loads the capability ACL.
+     * 加载能力 ACL。
      *
-     * <p>If an {@link AclRepository} is configured, loads entries from
-     * PostgreSQL. Without a repository the ACL remains empty and the
-     * explicit empty-ACL policy decides the result; loading failures deny.</p>
+     * <p>如果配置了 {@link AclRepository}，则从 PostgreSQL 加载条目。没有仓库时
+     * ACL 保持为空，由明确的空 ACL 策略决定结果；加载失败时拒绝。</p>
      */
     protected synchronized void loadAcl() {
         if (aclRepository == null) {
@@ -207,10 +195,9 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     }
 
     /**
-     * Refreshes the in-memory ACL cache from the database.
+     * 从数据库刷新内存中的 ACL 缓存。
      *
-     * <p>Called after ACL mutations from the admin console to ensure
-     * authorization decisions reflect the latest configuration.</p>
+     * <p>在管理控制台对 ACL 进行变更后调用，以确保授权决策反映最新的配置。</p>
      */
     public void refreshAcl() {
         loadAcl();

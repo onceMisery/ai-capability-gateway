@@ -12,18 +12,17 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 
 /**
- * Conditional Spring wiring for the Sa-Token authentication/authorization
- * adapter.
+ * 基于 Sa-Token 的认证/授权适配器的条件式 Spring 装配。
  *
- * <p>Activated only when {@code gateway.auth.provider=sa-token}. This is the
- * pluggability seam described in the tech-selection doc: swapping the
- * authentication provider is a configuration change plus a different
- * {@link AuthenticationPort}/{@link AuthorizationPort} bean — the Domain
- * ports stay untouched.</p>
+ * <p>仅在 {@code gateway.auth.provider=sa-token} 时激活。这是技术选型文档中描述
+ * 的可插拔接缝：更换认证提供方只需修改配置并替换不同的
+ * {@link AuthenticationPort}/{@link AuthorizationPort} Bean——领域端口保持
+ * 不变。</p>
  *
- * <p>The Sa-Token JWT secret is held in {@link SaTokenAuthProperties} and
- * passed to the Sa-Token JWT utilities explicitly by the adapter.</p>
+ * <p>Sa-Token 的 JWT 密钥保存在 {@link SaTokenAuthProperties} 中，由适配器显式
+ * 传递给 Sa-Token 的 JWT 工具类。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Configuration
@@ -31,15 +30,13 @@ import org.springframework.core.env.Environment;
 public class SaTokenAuthConfiguration {
 
     /**
-     * Binds {@code gateway.auth.sa-token.*} properties using the Spring
-     * {@link Environment}.
+     * 使用 Spring 的 {@link Environment} 绑定 {@code gateway.auth.sa-token.*} 属性。
      *
-     * <p>Programmatic binding keeps the module free of the Spring Boot
-     * {@code @ConfigurationProperties} machinery, consistent with the
-     * tech-selection decision to avoid framework-level intrusion.</p>
+     * <p>采用编程式绑定可使本模块不依赖 Spring Boot 的
+     * {@code @ConfigurationProperties} 机制，与避免框架层面侵入的技术选型决策保持一致。</p>
      *
-     * @param environment the Spring environment
-     * @return the populated properties holder
+     * @param environment Spring 环境
+     * @return 填充完成后的属性持有对象
      */
     @Bean
     public SaTokenAuthProperties saTokenAuthProperties(Environment environment) {
@@ -62,16 +59,14 @@ public class SaTokenAuthConfiguration {
     }
 
     /**
-     * Publishes a Sa-Token {@link SaTokenConfig} carrying the shared JWT
-     * secret and token name.
+     * 发布一个携带共享 JWT 密钥和令牌名称的 Sa-Token {@link SaTokenConfig}。
      *
-     * <p>The adapter passes the secret to the Sa-Token JWT utilities
-     * explicitly on each call; this bean additionally exposes the values as
-     * a Sa-Token config object for future integration with session storage
-     * ({@code sa-token-dao-redisson}, milestone M2).</p>
+     * <p>适配器在每次调用时都会将密钥显式传递给 Sa-Token 的 JWT 工具类；该 Bean
+     * 额外将这些值以 Sa-Token 配置对象的形式暴露出来，用于将来与会话存储
+     * （{@code sa-token-dao-redisson}，里程碑 M2）集成。</p>
      *
-     * @param properties the bound Sa-Token properties
-     * @return the Sa-Token configuration
+     * @param properties 已绑定的 Sa-Token 属性
+     * @return Sa-Token 配置
      */
     @Bean
     public SaTokenConfig saTokenConfig(SaTokenAuthProperties properties) {
@@ -84,10 +79,10 @@ public class SaTokenAuthConfiguration {
     }
 
     /**
-     * The Sa-Token {@link AuthenticationPort} implementation.
+     * Sa-Token {@link AuthenticationPort} 的实现。
      *
-     * @param properties the bound Sa-Token properties
-     * @return the authentication adapter
+     * @param properties 已绑定的 Sa-Token 属性
+     * @return 认证适配器
      */
     @Bean
     public SaTokenAuthenticationAdapter saTokenAuthenticationAdapter(
@@ -101,14 +96,12 @@ public class SaTokenAuthConfiguration {
     }
 
     /**
-     * The Sa-Token {@link TokenIssuerPort} implementation.
+     * Sa-Token {@link TokenIssuerPort} 的实现。
      *
-     * <p>Shares the same {@link SaTokenAuthenticationAdapter} instance as
-     * {@link #authenticationPort}. This bean is consumed by the admin console
-     * controller to issue JWT tokens for console admin login.</p>
+     * <p>与 {@link #authenticationPort} 共享同一个 {@link SaTokenAuthenticationAdapter}
+     * 实例。该 Bean 由管理控制台控制器使用，用于签发控制台管理员登录所需的 JWT 令牌。</p>
      *
-     * @param properties the bound Sa-Token properties
-     * @return the token issuer
+     * @return 令牌签发器
      */
     @Bean
     public TokenIssuerPort tokenIssuerPort(@Qualifier("saTokenAuthenticationAdapter") SaTokenAuthenticationAdapter adapter) {
@@ -116,14 +109,14 @@ public class SaTokenAuthConfiguration {
     }
 
     /**
-     * The Sa-Token {@link AuthorizationPort} implementation (capability-level
-     * ACL, fail-closed when ACL data is empty or unavailable).
+     * Sa-Token {@link AuthorizationPort} 的实现（能力级别 ACL，ACL 数据为空或
+     * 不可用时默认拒绝访问）。
      *
-     * <p>Injects the {@link AclRepository} to load capability ACL entries
-     * from PostgreSQL on startup and support runtime refresh.</p>
+     * <p>注入 {@link AclRepository}，用于在启动时从 PostgreSQL 加载能力 ACL 条目，
+     * 并支持运行时刷新。</p>
      *
-     * @param aclRepository the ACL repository
-     * @return the authorization adapter
+     * @param aclRepository ACL 仓库
+     * @return 授权适配器
      */
     @Bean
     public AuthorizationPort authorizationPort(AclRepository aclRepository) {

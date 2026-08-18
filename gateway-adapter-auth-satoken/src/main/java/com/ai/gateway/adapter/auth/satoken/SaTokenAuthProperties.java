@@ -1,41 +1,43 @@
 package com.ai.gateway.adapter.auth.satoken;
 
+import lombok.Data;
+
 import java.util.Objects;
 
 /**
- * Configuration properties for the Sa-Token authentication adapter.
+ * Sa-Token 认证适配器的配置属性。
  *
- * <p>Bound from the {@code gateway.auth.sa-token.*} namespace. These values
- * drive JWT verification (secret key, login type) and token resolution
- * (token name across header / cookie / query parameter sources).</p>
+ * <p>从 {@code gateway.auth.sa-token.*} 命名空间绑定。这些值驱动 JWT 校验
+ * （密钥、登录类型）和令牌解析（令牌名称在请求头 / Cookie / 查询参数来源中的
+ * 定位方式）。</p>
  *
- * <p>This is a plain holder — it deliberately avoids Spring Boot
- * {@code @ConfigurationProperties} so the adapter module stays free of the
- * Spring Boot auto-configuration machinery, consistent with the
- * tech-selection decision to introduce {@code sa-token-core} only.</p>
+ * <p>这是一个普通的属性持有类——特意避免使用 Spring Boot 的
+ * {@code @ConfigurationProperties}，使适配器模块不依赖 Spring Boot 的自动配置
+ * 机制，与仅引入 {@code sa-token-core} 的技术选型决策保持一致。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Data
 public class SaTokenAuthProperties {
 
     /**
-     * Default token name used to locate the credential in headers, cookies,
-     * and query parameters.
+     * 默认令牌名称，用于在请求头、Cookie 和查询参数中定位凭证。
      */
     public static final String DEFAULT_TOKEN_NAME = "Authorization";
 
     /**
-     * Default Sa-Token login type embedded in issued JWTs.
+     * 签发的 JWT 中携带的默认 Sa-Token 登录类型。
      */
     public static final String DEFAULT_LOGIN_TYPE = "login";
 
     /**
-     * Default access-token timeout in seconds (2 hours).
+     * 默认访问令牌超时时间（秒），即 2 小时。
      */
     public static final long DEFAULT_ACCESS_TOKEN_TIMEOUT_SECONDS = 7200L;
 
     /**
-     * Default refresh-token timeout in seconds (7 days).
+     * 默认刷新令牌超时时间（秒），即 7 天。
      */
     public static final long DEFAULT_REFRESH_TOKEN_TIMEOUT_SECONDS = 604800L;
 
@@ -45,50 +47,10 @@ public class SaTokenAuthProperties {
     private long accessTokenTimeoutSeconds = DEFAULT_ACCESS_TOKEN_TIMEOUT_SECONDS;
     private long refreshTokenTimeoutSeconds = DEFAULT_REFRESH_TOKEN_TIMEOUT_SECONDS;
 
-    public String getTokenName() {
-        return tokenName;
-    }
-
-    public void setTokenName(String tokenName) {
-        this.tokenName = tokenName;
-    }
-
-    public String getLoginType() {
-        return loginType;
-    }
-
-    public void setLoginType(String loginType) {
-        this.loginType = loginType;
-    }
-
-    public String getJwtSecretKey() {
-        return jwtSecretKey;
-    }
-
-    public void setJwtSecretKey(String jwtSecretKey) {
-        this.jwtSecretKey = jwtSecretKey;
-    }
-
-    public long getAccessTokenTimeoutSeconds() {
-        return accessTokenTimeoutSeconds;
-    }
-
-    public void setAccessTokenTimeoutSeconds(long accessTokenTimeoutSeconds) {
-        this.accessTokenTimeoutSeconds = accessTokenTimeoutSeconds;
-    }
-
-    public long getRefreshTokenTimeoutSeconds() {
-        return refreshTokenTimeoutSeconds;
-    }
-
-    public void setRefreshTokenTimeoutSeconds(long refreshTokenTimeoutSeconds) {
-        this.refreshTokenTimeoutSeconds = refreshTokenTimeoutSeconds;
-    }
-
     /**
-     * Validates that the minimum required configuration is present.
+     * 校验最小必需配置是否齐全。
      *
-     * @throws IllegalStateException if the JWT secret key is not configured
+     * @throws IllegalStateException 如果未配置 JWT 密钥
      */
     public void validate() {
         Objects.requireNonNull(jwtSecretKey,

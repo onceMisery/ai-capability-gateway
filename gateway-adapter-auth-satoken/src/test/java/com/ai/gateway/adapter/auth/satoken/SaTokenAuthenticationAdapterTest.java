@@ -13,11 +13,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Unit tests for {@link SaTokenAuthenticationAdapter}.
+ * {@link SaTokenAuthenticationAdapter} 的单元测试。
  *
- * <p>Verifies the JWT round-trip (issue → verify → Principal mapping),
- * multi-source token resolution, and Fail-Closed behavior on invalid or
- * missing credentials.</p>
+ * <p>验证 JWT 的完整往返（签发 → 校验 → Principal 映射）、多来源令牌解析，
+ * 以及在凭证无效或缺失时的默认拒绝（Fail-Closed）行为。</p>
+ *
+ * @author cmiracle@163.com
  */
 class SaTokenAuthenticationAdapterTest {
 
