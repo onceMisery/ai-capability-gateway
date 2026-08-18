@@ -278,7 +278,7 @@ class CapabilityProcessorTest {
                             schemaResource = "schemas/order-output.json")
                     String query(@CapArg(
                             source = CapabilityArgumentSource.CONSTANT,
-                            constantValueJson = "{\"enabled\":true}") String filter);
+                            constantValueJson = "[true]") String filter);
                 }
                 """);
 

@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
+import java.text.BreakIterator;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -377,7 +378,7 @@ public final class CapabilityProcessor extends AbstractProcessor {
         if (doc == null) {
             return "";
         }
-        return normalizeDocTrees(doc.getFirstSentence());
+        return firstSentence(normalizeDocTrees(doc.getFirstSentence()));
     }
 
     private String extractParameterDescription(ExecutableElement method, String parameterName) {
@@ -402,6 +403,36 @@ public final class CapabilityProcessor extends AbstractProcessor {
                 .collect(Collectors.joining())
                 .replaceAll("\\s+", " ")
                 .trim();
+    }
+
+    private static String firstSentence(String text) {
+        if (text.isEmpty()) {
+            return text;
+        }
+        BreakIterator iterator = BreakIterator.getSentenceInstance(Locale.CHINESE);
+        iterator.setText(text);
+        int end = iterator.next();
+        String sentence = end == BreakIterator.DONE ? text : text.substring(0, end).trim();
+        int punctuationEnd = firstSentencePunctuation(text);
+        if (punctuationEnd > 0 && (sentence.equals(text) || punctuationEnd < sentence.length())) {
+            return text.substring(0, punctuationEnd).trim();
+        }
+        return sentence;
+    }
+
+    private static int firstSentencePunctuation(String text) {
+        int end = text.length();
+        for (char punctuation : new char[]{'。', '！', '？', '；'}) {
+            int index = text.indexOf(punctuation);
+            if (index >= 0) {
+                end = Math.min(end, index + 1);
+            }
+        }
+        int englishPeriod = text.indexOf(". ");
+        if (englishPeriod >= 0) {
+            end = Math.min(end, englishPeriod + 1);
+        }
+        return end == text.length() ? -1 : end;
     }
 
     private static boolean requiresExplicitInputSchema(List<ArgumentDescriptor> arguments) {

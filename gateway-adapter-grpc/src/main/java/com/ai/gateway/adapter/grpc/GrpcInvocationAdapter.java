@@ -13,41 +13,32 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * gRPC invocation adapter skeleton implementing {@link InvocationAdapter}
+ * 实现 {@link InvocationAdapter} 的 gRPC 调用适配器骨架。
  *
- * <p>This is an evolution protocol adapter. The initial production release
- * supports {@link Protocol#DUBBO Dubbo} only. gRPC is an
- * evolution protocol that shares the same lifecycle, confirmation,
- * natural-language semantics, input/output JSON Schema, Principal injection,
- * authorization, risk, audit, and write-operation state machine as all other
- * protocols.</p>
+ * <p>这是一个演进协议适配器。初始生产版本仅支持 {@link Protocol#DUBBO Dubbo}。
+ * gRPC 作为演进协议，与所有其他协议共享相同的生命周期、确认、自然语言语义、
+ * 输入/输出 JSON Schema、Principal 注入、授权、风险、审计以及写操作状态机。</p>
  *
- * <p>The gRPC adapter will use a confirmed {@code FileDescriptorSet} to
- * construct dynamic messages at runtime without loading any business API
- * JAR. The method name and message types come from the published Manifest's
- * {@link ProtocolBinding}. The adapter must not perform natural-language
- * routing, user authorization, or capability state changes.</p>
+ * <p>gRPC 适配器将使用已确认的 {@code FileDescriptorSet} 在运行时构建动态消息，
+ * 而无需加载任何业务 API JAR。方法名和消息类型来自已发布 Manifest 的
+ * {@link ProtocolBinding}。适配器不得执行自然语言路由、用户授权或能力状态变更。</p>
  *
- * <p><strong>Future implementation fields:</strong></p>
+ * <p><strong>未来实现字段：</strong></p>
  * <ul>
- * <li><strong>FileDescriptorSet dynamic message construction</strong> —
- * load the proto descriptor set from a pre-configured, confirmed
- * source. Use {@code DynamicMessage} to construct request messages
- * without loading any business API class.</li>
- * <li><strong>mTLS</strong> — mutual TLS for gRPC channel security.
- * The channel is configured with client and server certificates
- * from a pre-configured secret store.</li>
- * <li><strong>Deadline</strong> — gRPC deadline propagation from the
- * invocation request's {@link com.ai.gateway.domain.model.DeadlineBudget}.
- * No downstream timeout may exceed the remaining time at the point
- * of the call.</li>
+ * <li><strong>FileDescriptorSet 动态消息构建</strong> —— 从预配置、已确认的
+ * 来源加载 proto 描述符集。使用 {@code DynamicMessage} 构建请求消息，
+ * 而无需加载任何业务 API 类。</li>
+ * <li><strong>mTLS</strong> —— 用于 gRPC 通道安全性的双向 TLS。
+ * 通道使用来自预配置密钥库的客户端和服务端证书进行配置。</li>
+ * <li><strong>Deadline</strong> —— 从调用请求的
+ * {@link com.ai.gateway.domain.model.DeadlineBudget} 传播 gRPC 截止时间。
+ * 任何下游超时都不得超过调用时点的剩余时间。</li>
  * </ul>
  *
- * <p>The gRPC adapter uses unary RPC only. Streaming RPC
- * is not supported in the initial evolution. The adapter converts the
- * gRPC response to a JSON-compatible tree and returns it as an
- * {@link InvocationResult}.</p>
+ * <p>gRPC 适配器仅使用一元 RPC。初始演进阶段不支持流式 RPC。适配器将 gRPC
+ * 响应转换为 JSON 兼容的树结构，并以 {@link InvocationResult} 形式返回。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  * @see InvocationAdapter
  * @see Protocol#GRPC
@@ -56,72 +47,65 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
 
     private static final Logger log = LoggerFactory.getLogger(GrpcInvocationAdapter.class);
 
-    // --- Future implementation fields ---
+    // --- 未来实现字段 ---
 
     /**
-     * Future: the confirmed FileDescriptorSet for dynamic message construction.
+     * 未来：用于动态消息构建的已确认 FileDescriptorSet。
      *
-     * <p>The proto descriptor set is loaded from a pre-configured, confirmed
-     * source. The adapter uses {@code DynamicMessage} to construct request
-     * messages at runtime without loading any business API JAR.
-     * The gateway does not call {@code Class.forName} — all type information
-     * exists as strings only, consistent with the Dubbo adapter approach.</p>
+     * <p>proto 描述符集从预配置、已确认的来源加载。适配器使用
+     * {@code DynamicMessage} 在运行时构建请求消息，而无需加载任何业务 API JAR。
+     * 网关不会调用 {@code Class.forName} ——所有类型信息仅以字符串形式存在，
+     * 与 Dubbo 适配器的做法保持一致。</p>
      */
     private final Object fileDescriptorSet;
 
     /**
-     * Future: the gRPC channel manager with mTLS support.
+     * 未来：支持 mTLS 的 gRPC 通道管理器。
      *
-     * <p>The channel is configured with mutual TLS using client and server
-     * certificates from a pre-configured secret store. Manifests must not
-     * carry certificates, keys, or arbitrary endpoint addresses.</p>
+     * <p>通道使用来自预配置密钥库的客户端和服务端证书配置双向 TLS。Manifest
+     * 不得携带证书、密钥或任意的端点地址。</p>
      */
     private final Object channelManager;
 
     /**
-     * Future: the gRPC deadline calculator.
+     * 未来：gRPC 截止时间计算器。
      *
-     * <p>Derives the gRPC deadline from the invocation request's
-     * {@link com.ai.gateway.domain.model.DeadlineBudget}. No downstream
-     * timeout may exceed the remaining time at the point of the call
-     *.</p>
+     * <p>从调用请求的 {@link com.ai.gateway.domain.model.DeadlineBudget} 推导
+     * gRPC 截止时间。任何下游超时都不得超过调用时点的剩余时间。</p>
      */
     private final Object deadlineCalculator;
 
     /**
-     * Future: the dynamic message builder.
+     * 未来：动态消息构建器。
      *
-     * <p>Constructs {@code DynamicMessage} instances from the
-     * FileDescriptorSet and the bound arguments. The message type is
-     * determined by the protocol binding's {@code interfaceName} and
-     * {@code method} fields.</p>
+     * <p>根据 FileDescriptorSet 和已绑定的参数构建 {@code DynamicMessage}
+     * 实例。消息类型由协议绑定的 {@code interfaceName} 和 {@code method}
+     * 字段决定。</p>
      */
     private final Object dynamicMessageBuilder;
 
     /**
-     * Future: the gRPC response converter.
+     * 未来：gRPC 响应转换器。
      *
-     * <p>Converts the gRPC response message to a JSON-compatible tree
-     * for the {@link InvocationResult}. Protocol-specific metadata (e.g.,
-     * gRPC status codes, trailers) is mapped to stable error codes.</p>
+     * <p>将 gRPC 响应消息转换为 JSON 兼容的树结构，用于
+     * {@link InvocationResult}。协议相关的元数据（例如 gRPC 状态码、trailer）
+     * 会被映射为稳定的错误码。</p>
      */
     private final Object responseConverter;
 
     /**
-     * Future: the mTLS configuration.
+     * 未来：mTLS 配置。
      *
-     * <p>Holds the client certificate chain, private key, and trusted CA
-     * certificates for mutual TLS. These are loaded from a pre-configured
-     * secret store and must not appear in manifests.</p>
+     * <p>保存用于双向 TLS 的客户端证书链、私钥和受信任的 CA 证书。这些信息从
+     * 预配置的密钥库加载，不得出现在 Manifest 中。</p>
      */
     private final Object mtlsConfig;
 
     /**
-     * Constructs a new GrpcInvocationAdapter skeleton.
+     * 构造一个新的 GrpcInvocationAdapter 骨架。
      *
-     * <p>All future implementation fields are initialized to null. The
-     * adapter is registered with protocol {@link Protocol#GRPC} but cannot
-     * perform actual invocations.</p>
+     * <p>所有未来实现字段均初始化为 null。适配器以 {@link Protocol#GRPC}
+     * 协议注册，但尚不能执行实际的调用。</p>
      */
     public GrpcInvocationAdapter() {
         this.fileDescriptorSet = null;
@@ -139,23 +123,20 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Validates the gRPC protocol binding for structural, semantic, and
-     * security compliance.
+     * 校验 gRPC 协议绑定在结构、语义与安全合规性方面是否通过。
      *
-     * <p>This is a placeholder that returns success. When fully implemented,
-     * validation will include:</p>
+     * <p>这是一个占位实现，总是返回成功。完整实现后，校验将包括：</p>
      * <ul>
-     * <li>Protocol is {@link Protocol#GRPC}.</li>
-     * <li>The service and method names reference entries in the
-     * confirmed FileDescriptorSet.</li>
-     * <li>Message types correspond one-to-one with argument positions.</li>
-     * <li>The mTLS configuration is present and valid.</li>
-     * <li>The deadline budget is consistent with the gRPC deadline policy.</li>
-     * <li>Only unary RPC is allowed; streaming is rejected.</li>
+     * <li>协议为 {@link Protocol#GRPC}。</li>
+     * <li>服务名和方法名引用已确认 FileDescriptorSet 中的条目。</li>
+     * <li>消息类型与参数位置一一对应。</li>
+     * <li>mTLS 配置存在且有效。</li>
+     * <li>截止时间预算与 gRPC 截止时间策略保持一致。</li>
+     * <li>仅允许一元 RPC；流式调用被拒绝。</li>
      * </ul>
      *
-     * @param binding the protocol binding to validate
-     * @return a valid validation report (placeholder)
+     * @param binding 待校验的协议绑定
+     * @return 校验报告（占位实现，总是有效）
      */
     @Override
     public ValidationReport validate(ProtocolBinding binding) {
@@ -163,21 +144,19 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
         log.debug("gRPC binding validation (placeholder): interface={}, method={}",
                 binding.interfaceName(), binding.method());
 
-        // Placeholder: always returns success
+        // 占位实现：总是返回成功
         return ValidationReport.success();
     }
 
     /**
-     * Invokes the target capability using gRPC unary RPC.
+     * 使用 gRPC 一元 RPC 调用目标能力。
      *
-     * <p>This method is not yet implemented. gRPC is an evolution protocol
-     *. The initial production release supports Dubbo only
-     *.</p>
+     * <p>该方法尚未实现。gRPC 是演进协议，初始生产版本仅支持 Dubbo。</p>
      *
-     * @param request the protocol-neutral invocation request
-     * @return never returns normally; always throws
-     * @throws UnsupportedOperationException always, as the gRPC adapter
-     * is not yet implemented
+     * @param request 与协议无关的调用请求
+     * @return 永不正常返回；总是抛出异常
+     * @throws UnsupportedOperationException 总是抛出，因为 gRPC 适配器
+     * 尚未实现
      */
     @Override
     public InvocationResult invoke(InvocationRequest request) {
@@ -188,17 +167,16 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
                 "gRPC adapter not yet implemented");
     }
 
-    // --- Future implementation helper methods ---
+    // --- 未来实现辅助方法 ---
 
     /**
-     * Future: Loads the confirmed FileDescriptorSet for the given service.
+     * 未来：为指定的服务加载已确认的 FileDescriptorSet。
      *
-     * <p>The proto descriptor set is loaded from a pre-configured, confirmed
-     * source. The adapter uses this to construct {@code DynamicMessage}
-     * instances at runtime without loading any business API JAR.</p>
+     * <p>proto 描述符集从预配置、已确认的来源加载。适配器使用它在运行时构建
+     * {@code DynamicMessage} 实例，而无需加载任何业务 API JAR。</p>
      *
-     * @param serviceName the fully-qualified gRPC service name
-     * @return the FileDescriptorSet (not yet implemented)
+     * @param serviceName gRPC 服务的全限定名
+     * @return FileDescriptorSet（尚未实现）
      */
     @SuppressWarnings("unused")
     private Object loadFileDescriptorSet(String serviceName) {
@@ -207,17 +185,14 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Future: Constructs a dynamic gRPC request message from the bound
-     * arguments.
+     * 未来：根据已绑定的参数构建动态 gRPC 请求消息。
      *
-     * <p>Uses {@code DynamicMessage} to build the request message from the
-     * FileDescriptorSet and the ordered, fully-bound protocol arguments.
-     * The message type is determined by the protocol binding's method
-     * field.</p>
+     * <p>使用 {@code DynamicMessage}，根据 FileDescriptorSet 以及有序、完全绑定的
+     * 协议参数构建请求消息。消息类型由协议绑定的 method 字段决定。</p>
      *
-     * @param messageTypeName the fully-qualified request message type name
-     * @param arguments the ordered, fully-bound protocol arguments
-     * @return the dynamic message (not yet implemented)
+     * @param messageTypeName 请求消息类型的全限定名
+     * @param arguments 有序、完全绑定的协议参数
+     * @return 动态消息（尚未实现）
      */
     @SuppressWarnings("unused")
     private Object buildDynamicMessage(String messageTypeName, List<Object> arguments) {
@@ -226,15 +201,13 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Future: Creates or retrieves a gRPC channel with mTLS for the given
-     * target.
+     * 未来：为指定的目标创建或获取启用 mTLS 的 gRPC 通道。
      *
-     * <p>The channel is configured with mutual TLS using client and server
-     * certificates from a pre-configured secret store. Manifests must not
-     * carry certificates, keys, or arbitrary endpoint addresses.</p>
+     * <p>通道使用来自预配置密钥库的客户端和服务端证书配置双向 TLS。Manifest
+     * 不得携带证书、密钥或任意的端点地址。</p>
      *
-     * @param target the gRPC target address (resolved from endpointRef)
-     * @return the gRPC channel (not yet implemented)
+     * @param target gRPC 目标地址（由 endpointRef 解析而来）
+     * @return gRPC 通道（尚未实现）
      */
     @SuppressWarnings("unused")
     private Object getOrCreateChannel(String target) {
@@ -243,15 +216,13 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Future: Calculates the gRPC deadline from the invocation request's
-     * deadline budget.
+     * 未来：根据调用请求的截止时间预算计算 gRPC 截止时间。
      *
-     * <p>No downstream timeout may exceed the remaining time at the point
-     * of the call. The gRPC deadline is set to the remaining
-     * milliseconds in the {@link com.ai.gateway.domain.model.DeadlineBudget}.</p>
+     * <p>任何下游超时都不得超过调用时点的剩余时间。gRPC 截止时间设置为
+     * {@link com.ai.gateway.domain.model.DeadlineBudget} 中的剩余毫秒数。</p>
      *
-     * @param deadlineBudget the deadline budget from the invocation request
-     * @return the gRPC deadline in milliseconds (not yet implemented)
+     * @param deadlineBudget 来自调用请求的截止时间预算
+     * @return gRPC 截止时间（毫秒）（尚未实现）
      */
     @SuppressWarnings("unused")
     private long calculateDeadline(
@@ -261,15 +232,14 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Future: Converts a gRPC response message to a JSON-compatible tree.
+     * 未来：将 gRPC 响应消息转换为 JSON 兼容的树结构。
      *
-     * <p>The converter maps gRPC-specific metadata (status codes, trailers)
-     * to stable {@link com.ai.gateway.domain.model.ErrorCode} values.
-     * The result must not contain raw protocol objects, stack traces,
-     * internal addresses, or sensitive parameters.</p>
+     * <p>转换器将 gRPC 特有的元数据（状态码、trailer）映射为稳定的
+     * {@link com.ai.gateway.domain.model.ErrorCode} 值。结果不得包含原始的协议
+     * 对象、堆栈跟踪、内部地址或敏感参数。</p>
      *
-     * @param grpcResponse the raw gRPC response message
-     * @return the JSON-compatible result data (not yet implemented)
+     * @param grpcResponse 原始 gRPC 响应消息
+     * @return JSON 兼容的结果数据（尚未实现）
      */
     @SuppressWarnings("unused")
     private Object convertResponseToJson(Object grpcResponse) {
