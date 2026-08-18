@@ -1,38 +1,33 @@
 package com.ai.gateway.adapter.llm;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * Versioned prompt template registry.
+ * 经过版本化管理的提示词模板注册表。
  *
- * <p>Prompt templates, model IDs, temperature, and parser versions must be
- * versioned and enter evaluation. This registry maintains an
- * in-memory map of template name to template content. It is pre-loaded with
- * a default system prompt that constrains the LLM to only select from the
- * provided candidates.</p>
+ * <p>提示词模板、模型 ID、temperature 以及解析器版本都必须经过版本化并纳入评估。
+ * 该注册表维护一个从模板名称到模板内容的内存映射，并在初始化时预加载一条默认
+ * 系统提示词，将 LLM 约束为只能从提供的候选中进行选择。</p>
  *
- * <p>The default system prompt enforces the security boundary:
- * the model may only select one candidate alias and generate arguments for
- * that candidate's public input Schema. The model must not output protocol
- * bindings, service addresses, interface class names, tenant identity,
- * serialization methods, timeout, or retry configuration.</p>
+ * <p>默认系统提示词用于强制实施安全边界：模型只能选择一个候选别名，并为该候选的
+ * 公开输入 Schema 生成参数。模型不得输出协议绑定、服务地址、接口类名、租户标识、
+ * 序列化方式、超时或重试配置。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class PromptTemplateRegistry {
 
-    private static final Logger log = LoggerFactory.getLogger(PromptTemplateRegistry.class);
-
     /**
-     * The default system prompt that constrains the LLM to only select from
-     * the provided candidates and return one of three decision types.
+     * 默认系统提示词，约束 LLM 只能从提供的候选中选择，并返回三种决策类型之一。
      */
     private static final String DEFAULT_SYSTEM_PROMPT = """
             You are a capability routing assistant for an AI capability gateway.
@@ -78,8 +73,7 @@ public class PromptTemplateRegistry {
     private final Map<String, String> templates = new ConcurrentHashMap<>();
 
     /**
-     * Constructs a new PromptTemplateRegistry pre-loaded with the default
-     * system prompt.
+     * 构造一个新的 PromptTemplateRegistry，并预加载默认系统提示词。
      */
     public PromptTemplateRegistry() {
         registerTemplate(DEFAULT_TEMPLATE_NAME, DEFAULT_SYSTEM_PROMPT);
@@ -87,11 +81,11 @@ public class PromptTemplateRegistry {
     }
 
     /**
-     * Retrieves a prompt template by name.
+     * 按名称检索提示词模板。
      *
-     * @param name the template name
-     * @return the template content, or {@code null} if not found
-     * @throws java.lang.NullPointerException if name is null
+     * @param name 模板名称
+     * @return 模板内容；如果未找到则为 {@code null}
+     * @throws java.lang.NullPointerException 如果 name 为 null
      */
     public String getTemplate(String name) {
         Objects.requireNonNull(name, "name must not be null");
@@ -99,14 +93,14 @@ public class PromptTemplateRegistry {
     }
 
     /**
-     * Registers or replaces a prompt template.
+     * 注册或替换一条提示词模板。
      *
-     * <p>Templates are versioned in evaluation. Replacing a
-     * template at runtime does not affect already-sent LLM requests.</p>
+     * <p>模板在评估流程中经过版本化管理。在运行时替换模板不会影响已经发出去的
+     * LLM 请求。</p>
      *
-     * @param name the template name
-     * @param content the template content
-     * @throws java.lang.NullPointerException if name or content is null
+     * @param name 模板名称
+     * @param content 模板内容
+     * @throws java.lang.NullPointerException 如果 name 或 content 为 null
      */
     public void registerTemplate(String name, String content) {
         Objects.requireNonNull(name, "name must not be null");

@@ -1,10 +1,6 @@
 package com.ai.gateway.adapter.grpc;
 
-import com.ai.gateway.domain.model.InvocationRequest;
-import com.ai.gateway.domain.model.InvocationResult;
-import com.ai.gateway.domain.model.Protocol;
-import com.ai.gateway.domain.model.ProtocolBinding;
-import com.ai.gateway.domain.model.ValidationReport;
+import com.ai.gateway.domain.model.*;
 import com.ai.gateway.domain.port.InvocationAdapter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -225,8 +221,7 @@ public class GrpcInvocationAdapter implements InvocationAdapter {
      * @return gRPC 截止时间（毫秒）（尚未实现）
      */
     @SuppressWarnings("unused")
-    private long calculateDeadline(
-            com.ai.gateway.domain.model.DeadlineBudget deadlineBudget) {
+    private long calculateDeadline(DeadlineBudget deadlineBudget) {
         throw new UnsupportedOperationException(
                 "gRPC deadline calculation not yet implemented");
     }

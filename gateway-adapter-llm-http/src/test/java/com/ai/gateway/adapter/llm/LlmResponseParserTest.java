@@ -6,6 +6,14 @@ import org.junit.jupiter.api.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * LlmResponseParser 的单元测试。
+ *
+ * <p>覆盖 SELECT 形状解析、拒绝未知顶层字段、拒绝错误字段类型、拒绝缺少 reasonCode
+ * 的 NO_MATCH，以及拒绝尾部多余 JSON 文档等场景。</p>
+ *
+ * @author cmiracle@163.com
+ */
 class LlmResponseParserTest {
 
     private final LlmResponseParser parser = new LlmResponseParser();

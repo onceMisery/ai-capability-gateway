@@ -4,8 +4,6 @@ import com.ai.gateway.domain.model.ModelDecision;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -13,42 +11,42 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * Parses the LLM response into a {@link ModelDecision}.
+ * 将 LLM 响应解析为 {@link ModelDecision}。
  *
- * <p>The model must return exactly one of three decision types. This parser
- * extracts the decision field and constructs the appropriate
- * {@link ModelDecision} subtype:</p>
+ * <p>模型必须且只能返回三种决策类型之一。该解析器提取 decision 字段并构造对应的
+ * {@link ModelDecision} 子类型：</p>
  * <ul>
- * <li>{@code SELECT}: extracts alias and arguments</li>
- * <li>{@code CLARIFY}: extracts question</li>
- * <li>{@code NO_MATCH}: extracts reasonCode</li>
+ * <li>{@code SELECT}：提取别名与参数</li>
+ * <li>{@code CLARIFY}：提取追问问题</li>
+ * <li>{@code NO_MATCH}：提取原因码</li>
  * </ul>
  *
- * <p>Model provider response content is NOT logged in full.
- * Only structural metadata (decision type, alias, error indicators) is
- * logged at appropriate levels.</p>
+ * <p>模型提供方的响应内容不会完整记录到日志。仅以适当的级别记录结构化的元数据
+ * （决策类型、别名、错误指示）。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class LlmResponseParser {
-
-    private static final Logger log = LoggerFactory.getLogger(LlmResponseParser.class);
 
     private final ObjectMapper objectMapper;
 
     /**
-     * Constructs a new LlmResponseParser with the default ObjectMapper.
+     * 使用默认的 ObjectMapper 构造一个新的 LlmResponseParser。
      */
     public LlmResponseParser() {
         this(new ObjectMapper());
     }
 
     /**
-     * Constructs a new LlmResponseParser with a custom ObjectMapper.
+     * 使用自定义的 ObjectMapper 构造一个新的 LlmResponseParser。
      *
-     * @param objectMapper the JSON deserializer
+     * @param objectMapper JSON 反序列化器
      */
     public LlmResponseParser(ObjectMapper objectMapper) {
         this.objectMapper = Objects.requireNonNull(objectMapper,
@@ -56,16 +54,15 @@ public class LlmResponseParser {
     }
 
     /**
-     * Parses the LLM response body into a {@link ModelDecision}.
+     * 将 LLM 响应体解析为 {@link ModelDecision}。
      *
-     * <p>The response must contain a {@code decision} field with one of:
-     * {@code SELECT}, {@code CLARIFY}, or {@code NO_MATCH}. The parser
-     * extracts the corresponding fields based on the decision type.</p>
+     * <p>响应必须包含 {@code decision} 字段，其值为以下之一：
+     * {@code SELECT}、{@code CLARIFY} 或 {@code NO_MATCH}。解析器根据决策类型
+     * 提取对应的字段。</p>
      *
-     * @param responseBody the raw LLM response body as a JSON string
-     * @return the parsed model decision; never {@code null}
-     * @throws RuntimeException if the response cannot be parsed or the
-     * decision field is missing/invalid
+     * @param responseBody 以 JSON 字符串形式表示的原始 LLM 响应体
+     * @return 解析出的模型决策；永不为 {@code null}
+     * @throws RuntimeException 如果响应无法解析，或 decision 字段缺失/无效
      */
     @SuppressWarnings("unchecked")
     public ModelDecision parse(String responseBody) {
@@ -108,10 +105,10 @@ public class LlmResponseParser {
     }
 
     /**
-     * Parses a SELECT decision from the response root.
+     * 从响应根节点解析 SELECT 决策。
      *
-     * @param root the response root node
-     * @return a {@link ModelDecision.SelectDecision}
+     * @param root 响应根节点
+     * @return {@link ModelDecision.SelectDecision}
      */
     private ModelDecision parseSelectDecision(JsonNode root) {
         requireOnlyFields(root, Set.of("decision", "alias", "arguments"));
@@ -136,10 +133,10 @@ public class LlmResponseParser {
     }
 
     /**
-     * Parses a CLARIFY decision from the response root.
+     * 从响应根节点解析 CLARIFY 决策。
      *
-     * @param root the response root node
-     * @return a {@link ModelDecision.ClarifyDecision}
+     * @param root 响应根节点
+     * @return {@link ModelDecision.ClarifyDecision}
      */
     private ModelDecision parseClarifyDecision(JsonNode root) {
         requireOnlyFields(root, Set.of("decision", "question"));
@@ -149,10 +146,10 @@ public class LlmResponseParser {
     }
 
     /**
-     * Parses a NO_MATCH decision from the response root.
+     * 从响应根节点解析 NO_MATCH 决策。
      *
-     * @param root the response root node
-     * @return a {@link ModelDecision.NoMatchDecision}
+     * @param root 响应根节点
+     * @return {@link ModelDecision.NoMatchDecision}
      */
     private ModelDecision parseNoMatchDecision(JsonNode root) {
         requireOnlyFields(root, Set.of("decision", "reasonCode"));

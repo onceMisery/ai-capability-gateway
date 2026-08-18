@@ -25,22 +25,20 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * HTTP-based implementation of {@link LlmRouterPort} using JDK HttpClient
+ * 基于 HTTP 的 {@link LlmRouterPort} 实现，使用 JDK HttpClient。
  *
- * <p>This adapter calls the LLM API using {@link java.net.http.HttpClient},
- * sends the restricted candidate context, and parses the model's response.
- * It uses structured output or Function Calling and performs local Schema
- * validation on the final JSON.</p>
+ * <p>该适配器通过 {@link java.net.http.HttpClient} 调用 LLM API，发送受限的候选
+ * 上下文，并解析模型的响应。它使用结构化输出或 Function Calling，并对最终 JSON
+ * 执行本地 Schema 校验。</p>
  *
- * <p>Key security constraints:</p>
+ * <p>关键安全约束：</p>
  * <ul>
- * <li>Model provider response content is NOT logged in full.</li>
- * <li>If the LLM is unavailable, returns a clear error or routes to
- * manual entry — it must not degrade to guessing interfaces.</li>
- * <li>Prompt templates, model IDs, temperature, and parser versions are
- * versioned.</li>
+ * <li>模型提供方的响应内容不会完整记录到日志。</li>
+ * <li>如果 LLM 不可用，返回明确错误，或路由到人工录入——绝不能退化为猜测接口。</li>
+ * <li>提示词模板、模型 ID、temperature 和解析器版本均经过版本化管理。</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
@@ -68,16 +66,16 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
     private final int maxResponseBytes;
 
     /**
-     * Constructs a new HttpLlmRouterAdapter.
+     * 构造一个新的 HttpLlmRouterAdapter。
      *
-     * @param endpoint the LLM API endpoint URL
-     * @param apiKey the API key for authentication
-     * @param model the model identifier (versioned)
-     * @param temperature the sampling temperature (versioned)
-     * @param maxTokens the maximum tokens in the response
-     * @param requestBuilder the request builder for restricted candidate context
-     * @param responseParser the response parser for model decisions
-     * @param templateRegistry the prompt template registry
+     * @param endpoint LLM API 端点 URL
+     * @param apiKey 用于认证的 API 密钥
+     * @param model 模型标识符（已版本化）
+     * @param temperature 采样温度（已版本化）
+     * @param maxTokens 响应中的最大 token 数
+     * @param requestBuilder 用于受限候选上下文的请求构建器
+     * @param responseParser 用于模型决策的响应解析器
+     * @param templateRegistry 提示词模板注册表
      */
     public HttpLlmRouterAdapter(String endpoint,
                                 String apiKey,
@@ -134,24 +132,24 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
         }
 
         try {
-            // Step 1: Build the restricted candidate context
+            // 步骤 1：构建受限候选上下文
             String candidateContext = requestBuilder.buildRequest(userText, candidates);
 
-            // Step 2: Build the LLM API request body
+            // 步骤 2：构建 LLM API 请求体
             String requestBody = buildApiRequestBody(candidateContext);
 
-            // Step 3: Send HTTP POST to LLM endpoint
+            // 步骤 3：向 LLM 端点发送 HTTP POST 请求
             String responseBody = sendRequest(requestBody);
 
-            // Step 4: Extract model content from API response
+            // 步骤 4：从 API 响应中提取模型内容
             String modelContent = extractModelContent(responseBody);
 
-            // Step 5: Local Schema validation and parse
+            // 步骤 5：本地 Schema 校验并解析
             ModelDecision decision = responseParser.parse(modelContent);
 
-            // Step 6: Validate decision against candidate set
-            // The gateway performs deterministic checks after the model returns.
-            // Alias validation against candidate set is done here as a first gate.
+            // 步骤 6：针对候选集校验决策
+            // 网关在模型返回后执行确定性检查。
+            // 在此处先行对候选集进行别名校验作为第一道关卡。
             validateDecisionAgainstCandidates(decision, candidates);
 
             log.debug("LLM routing completed: decision type={}",
@@ -168,14 +166,13 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
     }
 
     /**
-     * Builds the LLM API request body in chat completions format.
+     * 以 chat completions 格式构建 LLM API 请求体。
      *
-     * <p>The system prompt constrains the LLM to only select from provided
-     * candidates. The user message contains the restricted candidate context
-     * from {@link LlmRequestBuilder}.</p>
+     * <p>系统提示词将 LLM 约束为只能从提供的候选中选择。用户消息包含来自
+     * {@link LlmRequestBuilder} 的受限候选上下文。</p>
      *
-     * @param candidateContext the restricted candidate context JSON string
-     * @return the API request body JSON string
+     * @param candidateContext 受限候选上下文的 JSON 字符串
+     * @return API 请求体的 JSON 字符串
      */
     private String buildApiRequestBody(String candidateContext) {
         try {
@@ -184,10 +181,10 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
             rootNode.put("temperature", temperature);
             rootNode.put("max_tokens", maxTokens);
 
-            // Messages: system prompt + user message with candidate context
+            // 消息：系统提示词 + 包含候选上下文的用户消息
             ArrayNode messagesArray = rootNode.putArray("messages");
 
-            // System prompt from registry (versioned)
+            // 从注册表获取系统提示词（已版本化）
             String systemPrompt = templateRegistry.getTemplate("default-system");
             if (systemPrompt != null) {
                 ObjectNode systemMessage = messagesArray.addObject();
@@ -195,7 +192,7 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
                 systemMessage.put("content", systemPrompt);
             }
 
-            // User message with restricted candidate context
+            // 包含受限候选上下文的用户消息
             ObjectNode userMessage = messagesArray.addObject();
             userMessage.put("role", "user");
             userMessage.put("content", candidateContext);
@@ -207,15 +204,14 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
     }
 
     /**
-     * Sends the HTTP POST request to the LLM endpoint.
+     * 向 LLM 端点发送 HTTP POST 请求。
      *
-     * <p>Model provider response content is NOT logged in full.
-     * Only the HTTP status code and structural metadata are logged.</p>
+     * <p>模型提供方的响应内容不会完整记录到日志。仅记录 HTTP 状态码与结构化的
+     * 元数据。</p>
      *
-     * @param requestBody the API request body JSON string
-     * @return the response body string
-     * @throws LlmRouterPort.LlmRoutingException if the LLM is unreachable or returns
-     * a server error
+     * @param requestBody API 请求体的 JSON 字符串
+     * @return 响应体字符串
+     * @throws LlmRouterPort.LlmRoutingException 如果 LLM 不可达或返回服务端错误
      */
     private String sendRequest(String requestBody) {
         try {
@@ -241,7 +237,7 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
                 throw new LlmRouterPort.LlmRoutingException(
                         ErrorCode.RATE_LIMITED, "LLM provider rate limit reached");
             } else {
-                // LLM unavailable — do not log full response body
+                // LLM 不可用——不记录完整响应体
                 log.error("LLM API returned non-success status: {} (response body not logged)", statusCode);
                 throw new LlmRouterPort.LlmRoutingException(
                         ErrorCode.LLM_UNAVAILABLE, "LLM provider unavailable");
@@ -293,20 +289,20 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
     }
 
     /**
-     * Extracts the model's content from the API response.
+     * 从 API 响应中提取模型的内容。
      *
-     * <p>Standard chat completions responses contain the model output in
-     * {@code choices[0].message.content}. If the response is already a
-     * direct decision JSON (not wrapped in choices), it is returned as-is.</p>
+     * <p>标准 chat completions 响应将模型输出放在
+     * {@code choices[0].message.content} 中。如果响应本身已经是直接的决策 JSON
+     * （未被 choices 包裹），则原样返回。</p>
      *
-     * @param responseBody the raw API response body
-     * @return the model's content string (the decision JSON)
+     * @param responseBody 原始 API 响应体
+     * @return 模型的内容字符串（即决策 JSON）
      */
     private String extractModelContent(String responseBody) {
         try {
             JsonNode root = objectMapper.readTree(responseBody);
 
-            // Standard chat completions format: choices[0].message.content
+            // 标准 chat completions 格式：choices[0].message.content
             JsonNode choicesNode = root.get("choices");
             if (choicesNode != null && choicesNode.isArray() && !choicesNode.isEmpty()) {
                 JsonNode messageNode = choicesNode.get(0).get("message");
@@ -318,7 +314,7 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
                 }
             }
 
-            // Fallback: the response body itself is the decision JSON
+            // 兜底：响应体本身即为决策 JSON
             if (root.has("decision")) {
                 return responseBody;
             }
@@ -334,15 +330,13 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
     }
 
     /**
-     * Validates that the SELECT decision's alias belongs to the provided
-     * candidate set.
+     * 校验 SELECT 决策的别名是否属于所提供的候选集。
      *
-     * <p>This is the first deterministic check after the model returns. The
-     * gateway performs additional checks (authorization, capability state,
-     * Schema validation) in subsequent pipeline stages.</p>
+     * <p>这是模型返回后执行的第一个确定性检查。网关会在后续流水线阶段执行额外的
+     * 检查（授权、能力状态、Schema 校验）。</p>
      *
-     * @param decision the model's decision
-     * @param candidates the authorized candidate set
+     * @param decision 模型的决策
+     * @param candidates 已授权的候选集
      */
     private void validateDecisionAgainstCandidates(ModelDecision decision,
                                                    List<LlmCandidate> candidates) {
@@ -359,12 +353,12 @@ public class HttpLlmRouterAdapter implements LlmRouterPort {
     }
 
     /**
-     * Gracefully shuts down the HTTP client.
+     * 优雅地关闭 HTTP 客户端。
      */
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down HttpLlmRouterAdapter...");
-        // HttpClient in JDK 21 manages its own resources and is auto-closable
+        // JDK 21 中的 HttpClient 自行管理其资源，且是可自动关闭的
         log.info("HttpLlmRouterAdapter shutdown complete");
     }
 

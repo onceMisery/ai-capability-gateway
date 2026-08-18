@@ -15,6 +15,14 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * HttpLlmRouterAdapter 的边界测试。
+ *
+ * <p>覆盖受限响应体读取、提供方失败（503）按 LLM_UNAVAILABLE 上报、命中限流（429）
+ * 按 RATE_LIMITED 上报等边界场景。</p>
+ *
+ * @author cmiracle@163.com
+ */
 class HttpLlmRouterAdapterBoundaryTest {
 
     private HttpServer server;

@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.doctree.DocTree;
 import com.sun.source.doctree.ParamTree;
+import com.sun.source.doctree.TextTree;
 import com.sun.source.util.DocTrees;
 
 import javax.annotation.processing.AbstractProcessor;
@@ -399,7 +400,8 @@ public final class CapabilityProcessor extends AbstractProcessor {
 
     private static String normalizeDocTrees(List<? extends DocTree> trees) {
         return trees.stream()
-                .map(DocTree::toString)
+                .map(tree -> tree instanceof TextTree textTree
+                        ? textTree.getBody() : tree.toString())
                 .collect(Collectors.joining())
                 .replaceAll("\\s+", " ")
                 .trim();
