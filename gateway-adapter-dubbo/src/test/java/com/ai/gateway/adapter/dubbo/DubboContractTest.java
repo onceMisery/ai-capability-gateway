@@ -14,13 +14,14 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
- * Contract and compatibility tests for Dubbo generic invocation.
+ * Dubbo 泛化调用的契约与兼容性测试。
  *
- * <p>The unit-test nested classes exercise the protocol-safe components
- * ({@link GenericResultStripper}, {@link GenericArgumentBuilder},
- * {@link SerializationWhitelist}, {@link DubboAttachmentManager}) without a
- * running provider. Real GenericService invocation is covered separately by
- * {@link DubboGenericInvocationIT} in the Failsafe phase.</p>
+ * <p>单元测试嵌套类在无运行 Provider 的情况下测试协议安全的组件
+ * （{@link GenericResultStripper}、{@link GenericArgumentBuilder}、
+ * {@link SerializationWhitelist}、{@link DubboAttachmentManager}）。真实的
+ * GenericService 调用由 Failsafe 阶段的 {@link DubboGenericInvocationIT} 单独覆盖。</p>
+ *
+ * @author cmiracle@163.com
  */
 class DubboContractTest {
 

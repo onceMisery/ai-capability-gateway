@@ -18,18 +18,17 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Bounded reference cache for Dubbo GenericService instances.
+ * Dubbo GenericService 实例的有界引用缓存。
  *
- * <p>The cache key includes:
- * {@code registryRef + interfaceName + group + version + protocol + serialization}.
- * References use a bounded cache, and after a snapshot switch, references no
- * longer in use are lazily evicted. Creation failure does not pollute the
- * active cache. The manager supports graceful shutdown, waiting for
- * in-flight requests to complete before releasing references.</p>
+ * <p>缓存键包括：
+ * {@code registryRef + interfaceName + group + version + protocol + serialization}。
+ * 引用使用有界缓存，快照切换后不再使用的引用会被惰性淘汰。创建失败不会污染
+ * 活跃缓存。管理器支持优雅关闭，在释放引用前会等待在途请求完成。</p>
  *
- * <p>Uses {@link org.apache.dubbo.config.ReferenceConfig} to create and
- * manage Dubbo service references in generic mode.</p>
+ * <p>使用 {@link org.apache.dubbo.config.ReferenceConfig} 以泛化模式创建和管理
+ * Dubbo 服务引用。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
@@ -38,24 +37,23 @@ public class DubboReferenceManager {
     private static final Logger log = LoggerFactory.getLogger(DubboReferenceManager.class);
 
     /**
-     * The default maximum number of cached references.
+     * 缓存引用的默认最大数量。
      */
     private static final int DEFAULT_MAX_CACHE_SIZE = 256;
 
     /**
-     * The default idle timeout for lazy eviction (30 minutes).
+     * 惰性淘汰的默认空闲超时时间（30 分钟）。
      */
     private static final long DEFAULT_IDLE_TIMEOUT_MS = 30 * 60 * 1000L;
 
     /**
-     * The maximum time to wait for in-flight requests during shutdown.
+     * 关闭期间等待在途请求的最大时长。
      */
     private static final long SHUTDOWN_WAIT_TIMEOUT_MS = 30_000L;
 
     /**
-     * A mutable cache entry containing the GenericService, ReferenceConfig,
-     * and last access time. The lastAccessTime is volatile to allow
-     * lock-free reads with safe updates.
+     * 可变的缓存条目，包含 GenericService、ReferenceConfig 和最后访问时间。
+     * lastAccessTime 使用 volatile 修饰，以在无锁读取的同时保证更新的安全性。
      */
     private static final class CacheEntry {
         final GenericService genericService;
@@ -83,24 +81,22 @@ public class DubboReferenceManager {
     private final AtomicBoolean shutdownRequested = new AtomicBoolean(false);
 
     /**
-     * Constructs a new DubboReferenceManager with default settings.
+     * 使用默认设置构造一个新的 DubboReferenceManager。
      *
-     * <p>This constructor is used by Spring for component scanning. Registry
-     * addresses must be registered via {@link #registerRegistryAddress} before
-     * any {@code getOrCreate} calls.</p>
+     * <p>该构造函数供 Spring 组件扫描使用。在任何 {@code getOrCreate} 调用之前，
+     * 必须先通过 {@link #registerRegistryAddress} 注册注册中心地址。</p>
      */
     public DubboReferenceManager() {
         this(new ConcurrentHashMap<>(), DEFAULT_MAX_CACHE_SIZE, DEFAULT_IDLE_TIMEOUT_MS);
     }
 
     /**
-     * Constructs a new DubboReferenceManager with the specified registry
-     * address map and cache configuration.
+     * 使用指定的注册中心地址映射和缓存配置构造一个新的 DubboReferenceManager。
      *
-     * @param registryAddresses a map of registryRef to registry address
-     * (e.g., "nacos://127.0.0.1:8848")
-     * @param maxCacheSize the maximum number of cached references
-     * @param idleTimeoutMs the idle timeout for lazy eviction in milliseconds
+     * @param registryAddresses registryRef 到注册中心地址的映射
+     * （例如 "nacos://127.0.0.1:8848"）
+     * @param maxCacheSize 缓存引用的最大数量
+     * @param idleTimeoutMs 惰性淘汰的空闲超时时间（毫秒）
      */
     public DubboReferenceManager(Map<String, String> registryAddresses,
                                  int maxCacheSize,
@@ -115,10 +111,10 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Registers a registry address for a given registryRef.
+     * 为给定的 registryRef 注册注册中心地址。
      *
-     * @param registryRef the registry reference name
-     * @param registryAddress the registry address (e.g., "nacos://127.0.0.1:8848")
+     * @param registryRef 注册中心引用名称
+     * @param registryAddress 注册中心地址（例如 "nacos://127.0.0.1:8848"）
      */
     public void registerRegistryAddress(String registryRef, String registryAddress) {
         Objects.requireNonNull(registryRef, "registryRef must not be null");
@@ -128,26 +124,24 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Gets or creates a GenericService for the given Dubbo service coordinates.
+     * 获取或创建指定 Dubbo 服务坐标对应的 GenericService。
      *
-     * <p>The cache key includes:
-     * {@code registryRef + interfaceName + group + version + protocol + serialization}.
-     * If a cached reference exists, it is returned. Otherwise, a new
-     * {@link ReferenceConfig} is created and the GenericService is obtained.</p>
+     * <p>缓存键包括：
+     * {@code registryRef + interfaceName + group + version + protocol + serialization}。
+     * 如果缓存中已有引用，则直接返回；否则创建新的 {@link ReferenceConfig} 并获取
+     * GenericService。</p>
      *
-     * <p>Creation failure does not pollute the active cache: if
-     * {@code ReferenceConfig.get()} throws an exception, no entry is added
-     * to the cache, and subsequent calls will attempt creation again.</p>
+     * <p>创建失败不会污染活跃缓存：如果 {@code ReferenceConfig.get()} 抛出异常，
+     * 不会向缓存添加任何条目，后续调用将再次尝试创建。</p>
      *
-     * @param registryRef the operationally pre-configured registry reference
-     * @param interfaceName the fully-qualified service interface name
-     * @param group the service group
-     * @param version the service version
-     * @param serialization the serialization method (must be whitelisted)
-     * @return the GenericService for the given coordinates
-     * @throws IllegalStateException if the manager has been shut down or the
-     * registry address is not configured
-     * @throws RuntimeException if GenericService creation fails
+     * @param registryRef 运营上预配置的注册中心引用
+     * @param interfaceName 服务接口的全限定名
+     * @param group 服务分组
+     * @param version 服务版本
+     * @param serialization 序列化方式（必须在白名单内）
+     * @return 指定坐标对应的 GenericService
+     * @throws IllegalStateException 如果管理器已关闭或未配置注册中心地址
+     * @throws RuntimeException 如果 GenericService 创建失败
      */
     public GenericService getOrCreate(String registryRef,
                                       String interfaceName,
@@ -158,20 +152,19 @@ public class DubboReferenceManager {
             throw new IllegalStateException("DubboReferenceManager has been shut down");
         }
 
-        // Validate serialization whitelist
+        // 校验序列化白名单
         SerializationWhitelist.validate(serialization);
 
         String cacheKey = buildCacheKey(registryRef, interfaceName, group, version, serialization);
 
-        // Try to get from cache first (fast path)
+        // 首先尝试从缓存获取（快速路径）
         CacheEntry existing = cache.get(cacheKey);
         if (existing != null) {
             existing.touch();
             return existing.genericService;
         }
 
-        // Create new reference outside the cache — creation failure must not
-        // pollute the active cache
+        // 在缓存之外创建新引用——创建失败不得污染活跃缓存
         ReferenceConfig<GenericService> referenceConfig = createReferenceConfig(
                 registryRef, interfaceName, group, version, serialization);
         GenericService newService;
@@ -182,29 +175,29 @@ public class DubboReferenceManager {
                         "ReferenceConfig.get() returned null for interface: " + interfaceName);
             }
         } catch (Exception e) {
-            // Creation failure — destroy the config and propagate.
-            // Do NOT add to cache.
+            // 创建失败——销毁配置并向上抛出。
+            // 不向缓存中添加。
             destroyReferenceConfig(referenceConfig);
             throw new RuntimeException(
                     "Failed to create GenericService for interface=" + interfaceName
                             + ", group=" + group + ", version=" + version, e);
         }
 
-        // Put into cache with size bound (double-checked locking)
+        // 以大小上限的方式放入缓存（双重检查锁定）
         synchronized (this) {
-            // Double-check after acquiring lock
+            // 获取锁后再次检查
             existing = cache.get(cacheKey);
             if (existing != null) {
-                // Another thread already created it; discard our new one
+                // 其他线程已创建；丢弃我们新建的这个
                 destroyReferenceConfig(referenceConfig);
                 existing.touch();
                 return existing.genericService;
             }
 
-            // Evict idle entries if at capacity
+            // 如果达到容量上限，淘汰空闲条目
             evictIdleEntries();
 
-            // Evict oldest entry if still at capacity
+            // 如果仍达到容量上限，淘汰最旧的条目
             if (cache.size() >= maxCacheSize) {
                 evictOldestEntry();
             }
@@ -218,8 +211,7 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Performs lazy eviction of unused references that have exceeded the
-     * idle timeout.
+     * 对超过空闲超时时间且不再使用的引用执行惰性淘汰。
      */
     private void evictIdleEntries() {
         long now = System.currentTimeMillis();
@@ -234,7 +226,7 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Evicts the oldest cache entry when the cache is at capacity.
+     * 当缓存达到容量上限时淘汰最旧的缓存条目。
      */
     private void evictOldestEntry() {
         String oldestKey = null;
@@ -256,15 +248,15 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Creates a new ReferenceConfig for the given service coordinates.
+     * 为指定的服务坐标创建新的 ReferenceConfig。
      *
-     * @param registryRef the registry reference name
-     * @param interfaceName the fully-qualified service interface name
-     * @param group the service group
-     * @param version the service version
-     * @param serialization the serialization method
-     * @return a new ReferenceConfig configured for generic invocation
-     * @throws IllegalStateException if the registry address is not configured
+     * @param registryRef 注册中心引用名称
+     * @param interfaceName 服务接口的全限定名
+     * @param group 服务分组
+     * @param version 服务版本
+     * @param serialization 序列化方式
+     * @return 配置为泛化调用的新 ReferenceConfig
+     * @throws IllegalStateException 如果未配置注册中心地址
      */
     private ReferenceConfig<GenericService> createReferenceConfig(String registryRef,
                                                                    String interfaceName,
@@ -286,7 +278,7 @@ public class DubboReferenceManager {
         referenceConfig.setGroup(group);
         referenceConfig.setVersion(version);
         referenceConfig.setGeneric("true");
-        // Serialization is set per-reference through Dubbo URL parameters
+        // 序列化方式通过 Dubbo URL 参数按引用设置
         //
         referenceConfig.setParameters(java.util.Map.of("serialization", serialization));
         referenceConfig.setRegistries(List.of(registryConfig));
@@ -295,16 +287,16 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Builds the cache key from the Dubbo service coordinates.
+     * 根据 Dubbo 服务坐标构建缓存键。
      *
-     * <p>Key format: {@code registryRef|interfaceName|group|version|DUBBO|serialization}</p>
+     * <p>键格式：{@code registryRef|interfaceName|group|version|DUBBO|serialization}</p>
      *
-     * @param registryRef the registry reference
-     * @param interfaceName the interface name
-     * @param group the service group
-     * @param version the service version
-     * @param serialization the serialization method
-     * @return the cache key string
+     * @param registryRef 注册中心引用
+     * @param interfaceName 接口名称
+     * @param group 服务分组
+     * @param version 服务版本
+     * @param serialization 序列化方式
+     * @return 缓存键字符串
      */
     private String buildCacheKey(String registryRef,
                                  String interfaceName,
@@ -319,9 +311,9 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Destroys a ReferenceConfig, releasing its resources.
+     * 销毁 ReferenceConfig，释放其资源。
      *
-     * @param referenceConfig the reference config to destroy; may be null
+     * @param referenceConfig 待销毁的引用配置；可以为 null
      */
     private void destroyReferenceConfig(ReferenceConfig<?> referenceConfig) {
         if (referenceConfig != null) {
@@ -334,36 +326,35 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Increments the in-flight request counter.
+     * 递增在途请求计数器。
      *
-     * @return the new count
+     * @return 新的计数值
      */
     int incrementInFlight() {
         return inFlightRequests.incrementAndGet();
     }
 
     /**
-     * Decrements the in-flight request counter.
+     * 递减在途请求计数器。
      *
-     * @return the new count
+     * @return 新的计数值
      */
     int decrementInFlight() {
         return inFlightRequests.decrementAndGet();
     }
 
     /**
-     * Gracefully shuts down the reference manager.
+     * 优雅地关闭引用管理器。
      *
-     * <p>Waits for in-flight requests to reach zero (up to the shutdown
-     * timeout), then destroys all cached ReferenceConfigs and clears the
-     * cache.</p>
+     * <p>等待在途请求数归零（最多等待至关闭超时时间），然后销毁所有缓存的
+     * ReferenceConfig 并清空缓存。</p>
      */
     @PreDestroy
     public void shutdown() {
         log.info("Shutting down DubboReferenceManager...");
         shutdownRequested.set(true);
 
-        // Wait for in-flight requests to complete
+        // 等待在途请求完成
         long deadline = System.currentTimeMillis() + SHUTDOWN_WAIT_TIMEOUT_MS;
         while (inFlightRequests.get() > 0) {
             if (System.currentTimeMillis() > deadline) {
@@ -382,7 +373,7 @@ public class DubboReferenceManager {
             }
         }
 
-        // Destroy all cached references
+        // 销毁所有缓存的引用
         int destroyed = 0;
         for (Map.Entry<String, CacheEntry> entry : cache.entrySet()) {
             destroyReferenceConfig(entry.getValue().referenceConfig);
@@ -393,9 +384,9 @@ public class DubboReferenceManager {
     }
 
     /**
-     * Returns the current number of cached references.
+     * 返回当前缓存的引用数量。
      *
-     * @return the cache size
+     * @return 缓存大小
      */
     public int cacheSize() {
         return cache.size();

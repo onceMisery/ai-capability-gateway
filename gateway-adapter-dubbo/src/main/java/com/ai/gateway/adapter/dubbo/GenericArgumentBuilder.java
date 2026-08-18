@@ -12,25 +12,23 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * Constructs generic invocation arguments for Dubbo.
+ * 为 Dubbo 构建泛化调用参数。
  *
- * <p>Dubbo generic invocation uses Map/List/primitive structures instead of
- * loading business API JARs. For POJO parameter types, the adapter creates a
- * {@link HashMap} with the {@code class} field set to the confirmed
- * {@code protocolType} from the Manifest. User and model must NOT write
- * {@code class} or {@code @type} fields — the adapter generates type
- * metadata exclusively from the confirmed protocol type.</p>
+ * <p>Dubbo 泛化调用使用 Map/List/基本类型结构，而非加载业务 API JAR。对于 POJO
+ * 参数类型，适配器会创建一个 {@link HashMap}，其中 {@code class} 字段设置为
+ * Manifest 中确认的 {@code protocolType}。用户和模型不得写入 {@code class} 或
+ * {@code @type} 字段——适配器仅从确认的协议类型生成类型元数据。</p>
  *
- * <p>The method signature is:</p>
+ * <p>方法签名如下：</p>
  * <pre>
  * Object[] buildArguments(List&lt;Object&gt; boundArguments, List&lt;String&gt; parameterTypes)
  * </pre>
  *
- * <p>Where {@code boundArguments} are the fully-resolved, positionally-ordered
- * protocol arguments and {@code parameterTypes} are the exact type-name
- * strings from the interface declaration. The adapter does NOT call
- * {@code Class.forName}.</p>
+ * <p>其中 {@code boundArguments} 是已完全解析、按位置排序的协议参数，
+ * {@code parameterTypes} 是接口声明中精确的类型名（字符串）。适配器不会调用
+ * {@code Class.forName}。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
@@ -39,19 +37,18 @@ public class GenericArgumentBuilder {
     private static final Logger log = LoggerFactory.getLogger(GenericArgumentBuilder.class);
 
     /**
-     * The type metadata key for Dubbo generic invocation POJO parameters.
+     * Dubbo 泛化调用中 POJO 参数的类型元数据键。
      */
     private static final String CLASS_KEY = "class";
 
     /**
-     * Additional reserved field that must not be written by user or model.
+     * 用户或模型不得写入的额外保留字段。
      */
     private static final String TYPE_KEY = "@type";
 
     /**
-     * Java primitive and wrapper types that are passed as-is without
-     * wrapping in a Map. These types do not require type metadata for
-     * Dubbo generic invocation.
+     * Java 基本类型及包装类型，按原样传递而无需包装为 Map。这些类型在 Dubbo
+     * 泛化调用中不需要类型元数据。
      */
     private static final Set<String> SIMPLE_TYPES = Set.of(
             "int", "long", "boolean", "double", "float", "byte", "short", "char",
@@ -90,26 +87,22 @@ public class GenericArgumentBuilder {
     );
 
     /**
-     * Builds the argument array for Dubbo generic invocation.
+     * 为 Dubbo 泛化调用构建参数数组。
      *
-     * <p>For each argument at position {@code i}:</p>
+     * <p>对于位置 {@code i} 处的每个参数：</p>
      * <ul>
-     * <li>If {@code parameterTypes[i]} is a primitive/wrapper/String/Map/List
-     * type: the argument is passed as-is.</li>
-     * <li>If {@code parameterTypes[i]} is a POJO type: the argument is
-     * wrapped in a {@link HashMap} with the {@code class} field set
-     * to the protocolType. Any existing {@code class} or
-     * {@code @type} keys from user/model output are removed first
-     *.</li>
+     * <li>如果 {@code parameterTypes[i]} 是基本类型/包装类型/String/Map/List
+     * 类型：参数按原样传递。</li>
+     * <li>如果 {@code parameterTypes[i]} 是 POJO 类型：参数被包装到
+     * {@link HashMap} 中，{@code class} 字段设置为 protocolType。用户或模型
+     * 输出中已有的任何 {@code class} 或 {@code @type} 键会先被移除。</li>
      * </ul>
      *
-     * @param boundArguments the fully-resolved, positionally-ordered arguments
-     * @param parameterTypes the exact type-name strings from the interface
-     * declaration
-     * @return the argument array for {@code genericService.$invoke}
-     * @throws NullPointerException if either parameter is null
-     * @throws IllegalArgumentException if the argument and type lists have
-     * different lengths
+     * @param boundArguments 已完全解析、按位置排序的参数
+     * @param parameterTypes 接口声明中精确的类型名（字符串）
+     * @return 用于 {@code genericService.$invoke} 的参数数组
+     * @throws NullPointerException 如果任一参数为 null
+     * @throws IllegalArgumentException 如果参数列表与类型列表长度不同
      */
     public Object[] buildArguments(List<Object> boundArguments, List<String> parameterTypes) {
         Objects.requireNonNull(boundArguments, "boundArguments must not be null");
@@ -134,11 +127,11 @@ public class GenericArgumentBuilder {
     }
 
     /**
-     * Builds a single generic argument for the given value and protocol type.
+     * 为给定的值和协议类型构建单个泛化参数。
      *
-     * @param arg the bound argument value
-     * @param protocolType the fully-qualified Java type name string
-     * @return the generic invocation argument
+     * @param arg 已绑定的参数值
+     * @param protocolType Java 类型名的全限定字符串
+     * @return 泛化调用参数
      */
     @SuppressWarnings("unchecked")
     private Object buildSingleArgument(Object arg, String protocolType) {
@@ -146,40 +139,39 @@ public class GenericArgumentBuilder {
             return null;
         }
 
-        // Simple types are passed as-is
+        // 简单类型按原样传递
         if (SIMPLE_TYPES.contains(protocolType)) {
             return arg;
         }
 
-        // For array types, pass as-is (Dubbo handles arrays natively)
+        // 数组类型按原样传递（Dubbo 原生支持数组）
         if (protocolType.endsWith("[]")) {
             return arg;
         }
 
-        // POJO type: wrap in HashMap with "class" field set to protocolType
+        // POJO 类型：包装为 HashMap，将 "class" 字段设置为 protocolType
         if (arg instanceof Map<?, ?> mapArg) {
             Map<String, Object> genericMap = new LinkedHashMap<>(mapArg.size() + 1);
             for (Map.Entry<?, ?> entry : mapArg.entrySet()) {
                 String key = String.valueOf(entry.getKey());
-                // User and model must NOT write class, @type fields
-                // Remove any that were injected (defense in depth)
+                // 用户和模型不得写入 class、@type 字段
+                // 移除任何被注入的字段（纵深防御）
                 if (CLASS_KEY.equals(key) || TYPE_KEY.equals(key)) {
                     log.warn("Removing reserved '{}' key from model/user output", key);
                     continue;
                 }
                 genericMap.put(key, entry.getValue());
             }
-            // Adapter generates type metadata from confirmed protocolType
+            // 适配器从确认的 protocolType 生成类型元数据
             genericMap.put(CLASS_KEY, protocolType);
             return genericMap;
         }
 
-        // If the argument is not a Map but the type is a POJO, we cannot
-        // construct the proper generic representation. This should not
-        // normally happen since model output is JSON-compatible (Map/List/primitives).
+        // 如果参数不是 Map 但类型是 POJO，则无法构建正确的泛化表示。
+        // 正常情况下不应发生，因为模型输出是 JSON 兼容的（Map/List/基本类型）。
         log.warn("Argument for POJO type '{}' is not a Map (actual: {}), "
-                        + "wrapping with class metadata only",
-                protocolType, arg.getClass().getName());
+                + "wrapping with class metadata only",
+        protocolType, arg.getClass().getName());
         Map<String, Object> genericMap = new HashMap<>();
         genericMap.put(CLASS_KEY, protocolType);
         return genericMap;

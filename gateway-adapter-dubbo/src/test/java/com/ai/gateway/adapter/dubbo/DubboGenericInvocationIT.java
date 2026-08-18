@@ -15,6 +15,14 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * Dubbo 泛化调用的集成测试。
+ *
+ * <p>使用嵌入式 injvm 协议导出一个泛化 Provider，验证无需加载业务 API JAR，
+ * 仅凭接口名与类型名即可完成调用。</p>
+ *
+ * @author cmiracle@163.com
+ */
 class DubboGenericInvocationIT {
 
     private static final String INTERFACE = "com.example.gateway.ContractOnlyService";

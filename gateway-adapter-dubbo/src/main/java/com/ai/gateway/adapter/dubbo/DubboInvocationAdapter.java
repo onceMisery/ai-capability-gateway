@@ -25,32 +25,29 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Dubbo generic invocation adapter implementing {@link InvocationAdapter}
+ * 实现 {@link InvocationAdapter} 的 Dubbo 泛化调用适配器。
  *
- * <p>This adapter uses Apache Dubbo's {@link GenericService} to invoke
- * target capabilities without loading any business API JAR at runtime.
- * The method name and parameter type names come from the published
- * Manifest's {@link ProtocolBinding}. The adapter does NOT call
- * {@code Class.forName} — all type information exists as strings only.</p>
+ * <p>该适配器使用 Apache Dubbo 的 {@link GenericService} 调用目标能力，而无需在
+ * 运行时加载任何业务 API JAR。方法名和参数类型名来自已发布 Manifest 的
+ * {@link ProtocolBinding}。适配器不会调用 {@code Class.forName}——所有类型信息
+ * 仅以字符串形式存在。</p>
  *
- * <p>The invocation flow is:</p>
+ * <p>调用流程如下：</p>
  * <ol>
- * <li>Look up the published Manifest by capabilityId + version to obtain
- * the {@link ProtocolBinding}.</li>
- * <li>Get or create a {@link GenericService} from
- * {@link DubboReferenceManager}.</li>
- * <li>Build generic arguments using {@link GenericArgumentBuilder}.</li>
- * <li>Build Dubbo attachments using {@link DubboAttachmentManager}.</li>
- * <li>Set attachments on {@link RpcContext} and call
- * {@code genericService.$invoke(method, parameterTypes, arguments)}.</li>
- * <li>Strip protocol metadata keys from the result using
- * {@link GenericResultStripper}.</li>
- * <li>Return an {@link InvocationResult} with JSON-compatible data.</li>
+ * <li>按 capabilityId + version 查找已发布的 Manifest，获取
+ * {@link ProtocolBinding}。</li>
+ * <li>从 {@link DubboReferenceManager} 获取或创建 {@link GenericService}。</li>
+ * <li>使用 {@link GenericArgumentBuilder} 构建泛化参数。</li>
+ * <li>使用 {@link DubboAttachmentManager} 构建 Dubbo 附件。</li>
+ * <li>在 {@link RpcContext} 上设置附件，并调用
+ * {@code genericService.$invoke(method, parameterTypes, arguments)}。</li>
+ * <li>使用 {@link GenericResultStripper} 从结果中剥离协议元数据键。</li>
+ * <li>返回包含 JSON 兼容数据的 {@link InvocationResult}。</li>
  * </ol>
  *
- * <p>The adapter must not perform natural-language routing, user
- * authorization, or capability state changes.</p>
+ * <p>适配器不得执行自然语言路由、用户授权或能力状态变更。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
@@ -65,14 +62,13 @@ public class DubboInvocationAdapter implements InvocationAdapter {
     private final ManifestRepository manifestRepository;
 
     /**
-     * Constructs a new DubboInvocationAdapter.
+     * 构造一个新的 DubboInvocationAdapter。
      *
-     * @param referenceManager the Dubbo reference cache manager
-     * @param argumentBuilder the generic argument builder
-     * @param resultStripper the protocol metadata stripper
-     * @param attachmentManager the attachment whitelist manager
-     * @param manifestRepository the manifest repository for looking up
-     * published manifests
+     * @param referenceManager Dubbo 引用缓存管理器
+     * @param argumentBuilder 泛化参数构建器
+     * @param resultStripper 协议元数据剥离器
+     * @param attachmentManager 附件白名单管理器
+     * @param manifestRepository 用于查找已发布 Manifest 的仓库
      */
     public DubboInvocationAdapter(DubboReferenceManager referenceManager,
                                   GenericArgumentBuilder argumentBuilder,
@@ -98,24 +94,19 @@ public class DubboInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Validates the Dubbo protocol binding for structural, semantic, and
-     * security compliance.
+     * 校验 Dubbo 协议绑定在结构、语义与安全合规性方面是否通过。
      *
-     * <p>Validation includes:</p>
+     * <p>校验内容包括：</p>
      * <ul>
-     * <li>Protocol is {@link Protocol#DUBBO}.</li>
-     * <li>{@code registryRef} is present (references a pre-configured
-     * registry).</li>
-     * <li>{@code serialization} belongs to the platform whitelist
-     *.</li>
-     * <li>{@code parameterTypes} correspond one-to-one with argument
-     * positions.</li>
-     * <li>{@code group} and {@code version} are present for service
-     * resolution.</li>
+     * <li>协议为 {@link Protocol#DUBBO}。</li>
+     * <li>{@code registryRef} 存在（引用预配置的注册中心）。</li>
+     * <li>{@code serialization} 属于平台白名单。</li>
+     * <li>{@code parameterTypes} 与参数位置一一对应。</li>
+     * <li>{@code group} 和 {@code version} 存在，用于服务定位。</li>
      * </ul>
      *
-     * @param binding the protocol binding to validate
-     * @return the validation report; valid only if errors is empty
+     * @param binding 待校验的协议绑定
+     * @return 校验报告；仅当 errors 为空时校验通过
      */
     @Override
     public ValidationReport validate(ProtocolBinding binding) {
@@ -124,17 +115,17 @@ public class DubboInvocationAdapter implements InvocationAdapter {
         List<String> errors = new ArrayList<>();
         List<String> warnings = new ArrayList<>();
 
-        // Protocol must be DUBBO
+        // 协议必须为 DUBBO
         if (binding.protocol() != Protocol.DUBBO) {
             errors.add("Protocol must be DUBBO, got: " + binding.protocol());
         }
 
-        // registryRef must be present
+        // registryRef 必须存在
         if (binding.registryRef() == null || binding.registryRef().isBlank()) {
             errors.add("registryRef must not be null or blank");
         }
 
-        // serialization must be in whitelist
+        // serialization 必须在白名单内
         if (binding.serialization() == null) {
             errors.add("serialization must not be null");
         } else if (!SerializationWhitelist.isAllowed(binding.serialization())) {
@@ -144,7 +135,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
                     + "");
         }
 
-        // group and version should be present for service resolution
+        // group 和 version 应存在，用于服务定位
         if (binding.group() == null || binding.group().isBlank()) {
             warnings.add("group is null or blank — Dubbo default group will be used");
         }
@@ -152,7 +143,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
             warnings.add("version is null or blank — Dubbo default version will be used");
         }
 
-        // parameterTypes must correspond one-to-one with arguments
+        // parameterTypes 必须与参数一一对应
         if (binding.parameterTypes().size() != binding.arguments().size()) {
             errors.add("parameterTypes count (" + binding.parameterTypes().size()
                     + ") does not match arguments count (" + binding.arguments().size()
@@ -170,15 +161,14 @@ public class DubboInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Invokes the target capability using Dubbo generic invocation.
+     * 使用 Dubbo 泛化调用方式调用目标能力。
      *
-     * <p>The adapter looks up the published Manifest to obtain the
-     * {@link ProtocolBinding}, builds generic arguments, sets attachments,
-     * calls {@code genericService.$invoke}, strips protocol metadata from
-     * the result, and returns a JSON-compatible {@link InvocationResult}.</p>
+     * <p>适配器查找已发布的 Manifest 以获取 {@link ProtocolBinding}，构建泛化参数，
+     * 设置附件，调用 {@code genericService.$invoke}，从结果中剥离协议元数据，
+     * 并返回 JSON 兼容的 {@link InvocationResult}。</p>
      *
-     * @param request the protocol-neutral invocation request
-     * @return the protocol-neutral invocation result; never null
+     * @param request 与协议无关的调用请求
+     * @return 与协议无关的调用结果；永不为 null
      */
     @Override
     public InvocationResult invoke(InvocationRequest request) {
@@ -191,7 +181,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
         log.debug("Dubbo invocation starting: capability={}, version={}",
                 capabilityId, capabilityVersion);
 
-        // Step 1: Look up the published Manifest to obtain the ProtocolBinding
+        // 步骤 1：查找已发布的 Manifest，获取 ProtocolBinding
         Optional<CapabilityManifest> manifestOpt =
                 manifestRepository.findByIdAndVersion(capabilityId, capabilityVersion);
         if (manifestOpt.isEmpty()) {
@@ -211,7 +201,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
         CapabilityManifest manifest = manifestOpt.get();
         ProtocolBinding binding = manifest.spec().invocation();
 
-        // Step 2: Validate the binding
+        // 步骤 2：校验绑定
         ValidationReport validation = validate(binding);
         if (!validation.valid()) {
             log.error("Protocol binding validation failed: {}", validation.errors());
@@ -225,7 +215,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
             );
         }
 
-        // Step 3: Get GenericService from DubboReferenceManager
+        // 步骤 3：从 DubboReferenceManager 获取 GenericService
         GenericService genericService;
         try {
             genericService = referenceManager.getOrCreate(
@@ -247,7 +237,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
             );
         }
 
-        // Step 4: Build generic arguments using GenericArgumentBuilder
+        // 步骤 4：使用 GenericArgumentBuilder 构建泛化参数
         Object[] argumentValues;
         try {
             argumentValues = argumentBuilder.buildArguments(
@@ -264,26 +254,26 @@ public class DubboInvocationAdapter implements InvocationAdapter {
             );
         }
 
-        // Step 5: Build attachments and set on RpcContext
+        // 步骤 5：构建附件并设置到 RpcContext
         Map<String, String> attachments = attachmentManager.buildAttachments(
                 request.systemContext(), new AttachmentWhitelist());
 
-        // Apply deadline from the request's deadline budget
+        // 应用请求截止时间预算中的 deadline
         DeadlineBudget deadlineBudget = request.deadlineBudget();
         if (!deadlineBudget.isExpired()) {
             attachments.putIfAbsent("deadline",
                     String.valueOf(System.currentTimeMillis() + deadlineBudget.remainingMs()));
         }
 
-        // Set attachments on RpcContext before invocation
+        // 调用前将附件设置到 RpcContext
         try {
             RpcContext.getClientAttachment().setAttachments(attachments);
         } catch (Exception e) {
             log.warn("Failed to set Dubbo attachments: {}", e.getMessage());
-            // Continue — attachments are best-effort context propagation
+            // 继续执行——附件属于尽力而为的上下文传播
         }
 
-        // Step 6: Call genericService.$invoke
+        // 步骤 6：调用 genericService.$invoke
         referenceManager.incrementInFlight();
         Object rawResult;
         try {
@@ -319,7 +309,7 @@ public class DubboInvocationAdapter implements InvocationAdapter {
             );
         } finally {
             referenceManager.decrementInFlight();
-            // Clear RpcContext attachments after invocation
+            // 调用完成后清理 RpcContext 附件
             try {
                 RpcContext.getClientAttachment().clearAttachments();
             } catch (Exception e) {
@@ -329,14 +319,14 @@ public class DubboInvocationAdapter implements InvocationAdapter {
 
         long durationMs = System.currentTimeMillis() - startTime;
 
-        // Step 7: Strip protocol metadata keys from result
-        // Must be called BEFORE Envelope judgment, projection, and Schema validation
+        // 步骤 7：从结果中剥离协议元数据键
+        // 必须在 Envelope 判定、投影和 Schema 校验之前调用
         Object strippedResult = resultStripper.strip(rawResult);
 
         log.info("Dubbo invocation completed: capability={}, method={}, durationMs={}",
                 capabilityId, binding.method(), durationMs);
 
-        // Step 8: Return InvocationResult with JSON-compatible data
+        // 步骤 8：返回包含 JSON 兼容数据的 InvocationResult
         return new InvocationResult(
                 strippedResult,
                 "OK",
@@ -351,20 +341,20 @@ public class DubboInvocationAdapter implements InvocationAdapter {
     }
 
     /**
-     * Classifies a Dubbo RpcException into the appropriate ErrorCode.
+     * 将 Dubbo RpcException 归类为对应的 ErrorCode。
      *
-     * <p>Dubbo RpcException codes:</p>
+     * <p>Dubbo RpcException 错误码：</p>
      * <ul>
-     * <li>1 (TIMEOUT_EXCEPTION) → PROVIDER_TIMEOUT</li>
-     * <li>2 (NETWORK_EXCEPTION) → PROVIDER_TIMEOUT (retryable)</li>
-     * <li>3 (FORBIDDEN_EXCEPTION) → PERMISSION_DENIED</li>
+     * <li>1（TIMEOUT_EXCEPTION）→ PROVIDER_TIMEOUT</li>
+     * <li>2（NETWORK_EXCEPTION）→ PROVIDER_TIMEOUT（可重试）</li>
+     * <li>3（FORBIDDEN_EXCEPTION）→ PERMISSION_DENIED</li>
      * <li>BIZ_EXCEPTION → PROVIDER_REJECTED</li>
-     * <li>5 (METHOD_NOT_FOUND) → PROTOCOL_ERROR</li>
-     * <li>others → PROTOCOL_ERROR</li>
+     * <li>5（METHOD_NOT_FOUND）→ PROTOCOL_ERROR</li>
+     * <li>其他 → PROTOCOL_ERROR</li>
      * </ul>
      *
-     * @param e the Dubbo RpcException
-     * @return the appropriate ErrorCode
+     * @param e Dubbo RpcException
+     * @return 对应的 ErrorCode
      */
     private ErrorCode classifyRpcException(RpcException e) {
         return switch (e.getCode()) {

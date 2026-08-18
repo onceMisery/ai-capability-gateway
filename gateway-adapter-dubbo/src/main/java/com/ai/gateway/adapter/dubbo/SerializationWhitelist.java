@@ -4,45 +4,41 @@ import java.util.Collections;
 import java.util.Set;
 
 /**
- * Serialization whitelist for Dubbo generic invocation.
+ * Dubbo 泛化调用的序列化白名单。
  *
- * <p>The serialization method is a capability-level configuration declared
- * in the Manifest's protocol binding. The declared value must belong to
- * this platform-maintained whitelist. Only serialization implementations
- * shipped with Apache Dubbo community releases are permitted.</p>
+ * <p>序列化方式是 Manifest 协议绑定中声明的能力级配置。声明的值必须属于
+ * 该平台维护的白名单。只允许 Apache Dubbo 社区版本自带的序列化实现。</p>
  *
- * <p>The whitelist currently contains:</p>
+ * <p>当前白名单包含：</p>
  * <ul>
- * <li>{@code hessian2} - Apache Dubbo's default Hessian2 serialization</li>
- * <li>{@code fastjson2} - Fastjson2 serialization</li>
+ * <li>{@code hessian2} - Apache Dubbo 默认的 Hessian2 序列化</li>
+ * <li>{@code fastjson2} - Fastjson2 序列化</li>
  * </ul>
  *
- * <p>Internal custom serialization extensions (custom serialization IDs in
- * private artifacts) do not enter the whitelist: introducing them requires
- * depending on internal JARs, violating the independence boundary
- * (Section 4). If a target service only supports internal custom
- * serialization, it must first expose a standard serialization negotiation
- * capability before it can be onboarded.</p>
+ * <p>内部自定义序列化扩展（私有构件中的自定义序列化 ID）不会进入白名单：
+ * 引入它们需要依赖内部 JAR，违反独立性边界（第 4 节）。如果目标服务仅支持内部
+ * 自定义序列化，必须先暴露标准的序列化协商能力，之后才能接入。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public final class SerializationWhitelist {
 
     /**
-     * The immutable set of allowed serialization methods.
+     * 允许的序列化方式的不可变集合。
      */
     private static final Set<String> ALLOWED = Collections.unmodifiableSet(
             Set.of("hessian2", "fastjson2"));
 
     private SerializationWhitelist() {
-        // Utility class — not instantiable
+        // 工具类——不可实例化
     }
 
     /**
-     * Returns whether the given serialization method is in the whitelist.
+     * 返回给定的序列化方式是否在白名单中。
      *
-     * @param serialization the serialization method name to check
-     * @return {@code true} if the serialization method is whitelisted
+     * @param serialization 待检查的序列化方式名称
+     * @return {@code true} 表示该序列化方式在白名单内
      */
     public static boolean isAllowed(String serialization) {
         if (serialization == null) {
@@ -52,12 +48,11 @@ public final class SerializationWhitelist {
     }
 
     /**
-     * Validates that the given serialization method is in the whitelist.
+     * 校验给定的序列化方式是否在白名单中。
      *
-     * @param serialization the serialization method name to validate
-     * @throws IllegalArgumentException if the serialization method is not
-     * in the whitelist
-     * @throws NullPointerException if serialization is null
+     * @param serialization 待校验的序列化方式名称
+     * @throws IllegalArgumentException 如果序列化方式不在白名单中
+     * @throws NullPointerException 如果 serialization 为 null
      */
     public static void validate(String serialization) {
         java.util.Objects.requireNonNull(serialization,
@@ -72,9 +67,9 @@ public final class SerializationWhitelist {
     }
 
     /**
-     * Returns an unmodifiable view of the allowed serialization methods.
+     * 返回允许的序列化方式的不可修改视图。
      *
-     * @return the set of whitelisted serialization method names
+     * @return 白名单内的序列化方式名称集合
      */
     public static Set<String> allowedValues() {
         return ALLOWED;

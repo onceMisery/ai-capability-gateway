@@ -10,28 +10,24 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Recursively strips protocol metadata keys from Dubbo generic invocation
- * results.
+ * 递归地从 Dubbo 泛化调用结果中剥离协议元数据键。
  *
- * <p>When the Provider returns a Map via Dubbo generic invocation, it
- * carries protocol metadata keys such as {@code class}. The adapter must
- * recursively strip these keys before constructing a neutral JSON tree,
- * as they must not enter Envelope judgment, projection, Schema validation,
- * or any external output.</p>
+ * <p>当 Provider 通过 Dubbo 泛化调用返回 Map 时，会携带诸如 {@code class} 之类的
+ * 协议元数据键。适配器必须在构建中立的 JSON 树之前递归剥离这些键，因为它们是
+ * 不允许进入 Envelope 判定、投影、Schema 校验或任何外部输出的。</p>
  *
- * <p>Stripping must occur BEFORE:</p>
+ * <p>剥离必须发生在以下步骤之前：</p>
  * <ul>
- * <li>Envelope judgment</li>
- * <li>Projection whitelist application</li>
- * <li>Schema validation</li>
- * <li>Any external output</li>
+ * <li>Envelope 判定</li>
+ * <li>投影白名单应用</li>
+ * <li>Schema 校验</li>
+ * <li>任何外部输出</li>
  * </ul>
  *
- * <p>The stripping is recursive: for Map values, the {@code class} key is
- * removed and remaining values are recursively processed. For List values,
- * each element is recursively processed. Primitive values are returned
- * as-is.</p>
+ * <p>剥离是递归的：对于 Map 值，移除 {@code class} 键后，其余值会被递归处理。
+ * 对于 List 值，每个元素会被递归处理。基本类型的值按原样返回。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
@@ -40,32 +36,28 @@ public class GenericResultStripper {
     private static final Logger log = LoggerFactory.getLogger(GenericResultStripper.class);
 
     /**
-     * The protocol metadata key that Dubbo adds to generic invocation
-     * Map results to indicate the original Java type.
+     * Dubbo 在泛化调用 Map 结果中添加的协议元数据键，用于指示原始 Java 类型。
      */
     private static final String CLASS_KEY = "class";
 
     /**
-     * Additional protocol metadata key that some serialization frameworks
-     * may add to generic invocation results.
+     * 某些序列化框架可能添加到泛化调用结果中的额外协议元数据键。
      */
     private static final String TYPE_KEY = "@type";
 
     /**
-     * Recursively strips protocol metadata keys from the result.
+     * 递归地从结果中剥离协议元数据键。
      *
-     * <p>Processing rules:</p>
+     * <p>处理规则：</p>
      * <ul>
-     * <li>If the result is a {@link Map}: remove the {@code class} and
-     * {@code @type} keys, then recursively process all remaining
-     * values.</li>
-     * <li>If the result is a {@link List}: recursively process each
-     * element.</li>
-     * <li>If the result is any other type: return it as-is.</li>
+     * <li>如果结果是 {@link Map}：移除 {@code class} 和 {@code @type} 键，
+     * 然后递归处理所有剩余的值。</li>
+     * <li>如果结果是 {@link List}：递归处理每个元素。</li>
+     * <li>如果结果是其他任何类型：按原样返回。</li>
      * </ul>
      *
-     * @param result the raw Dubbo generic invocation result
-     * @return the stripped result with protocol metadata keys removed
+     * @param result 原始的 Dubbo 泛化调用结果
+     * @return 已移除协议元数据键的剥离结果
      */
     @SuppressWarnings("unchecked")
     public Object strip(Object result) {
@@ -77,11 +69,11 @@ public class GenericResultStripper {
             Map<String, Object> cleaned = new LinkedHashMap<>(rawMap.size());
             for (Map.Entry<?, ?> entry : rawMap.entrySet()) {
                 String key = String.valueOf(entry.getKey());
-                // Strip protocol metadata keys
+                // 剥离协议元数据键
                 if (CLASS_KEY.equals(key) || TYPE_KEY.equals(key)) {
                     continue;
                 }
-                // Recursively strip nested values
+                // 递归剥离嵌套值
                 cleaned.put(key, strip(entry.getValue()));
             }
             return cleaned;
@@ -96,8 +88,8 @@ public class GenericResultStripper {
         }
 
         if (result.getClass().isArray()) {
-            // Handle primitive arrays — return as-is, they are JSON-compatible
-            // Object arrays are recursively processed
+            // 处理基本类型数组——按原样返回，它们与 JSON 兼容
+            // 对象数组会被递归处理
             if (result instanceof Object[] rawArray) {
                 Object[] cleaned = new Object[rawArray.length];
                 for (int i = 0; i < rawArray.length; i++) {
@@ -105,11 +97,11 @@ public class GenericResultStripper {
                 }
                 return cleaned;
             }
-            // Primitive arrays (int[], long[], etc.) are JSON-compatible
+            // 基本类型数组（int[]、long[] 等）与 JSON 兼容
             return result;
         }
 
-        // Primitive types, String, Number, Boolean — return as-is
+        // 基本类型、String、Number、Boolean——按原样返回
         return result;
     }
 }

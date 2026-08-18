@@ -13,27 +13,25 @@ import java.util.Set;
 import java.util.UUID;
 
 /**
- * Attachment whitelist manager for Dubbo invocation context.
+ * Dubbo 调用上下文的附件白名单管理器。
  *
- * <p>Allowed attachments use the platform whitelist defined in
- * {@link AttachmentWhitelist}:</p>
+ * <p>允许的附件使用 {@link AttachmentWhitelist} 中定义的平台白名单：</p>
  * <ul>
- * <li>{@code traceId} - the distributed trace identifier</li>
- * <li>{@code deadline} - the request deadline for downstream timeout propagation</li>
- * <li>{@code locale} - the request locale</li>
- * <li>{@code delegatedToken} - a short-lived, audience-bound delegated token</li>
- * <li>{@code b3-traceid} - B3 trace propagation header</li>
- * <li>{@code b3-spanid} - B3 span propagation header</li>
- * <li>{@code rtid} - the trace user identifier key for logging only;
- * never participates in authorization</li>
+ * <li>{@code traceId} - 分布式链路追踪标识</li>
+ * <li>{@code deadline} - 请求截止时间，用于向下游传播超时</li>
+ * <li>{@code locale} - 请求语言区域</li>
+ * <li>{@code delegatedToken} - 短期、受受众约束的委派令牌</li>
+ * <li>{@code b3-traceid} - B3 链路追踪传播请求头</li>
+ * <li>{@code b3-spanid} - B3 链路追踪传播请求头</li>
+ * <li>{@code rtid} - 仅用于日志记录的追踪用户标识键；
+ * 绝不参与授权决策</li>
  * </ul>
  *
- * <p>Manifests MUST NOT define arbitrary attachment names. Unsigned tenant,
- * user, or permission attachments do not participate in authorization. The
- * manager does NOT introduce an internal Dubbo Filter ecosystem: no
- * dependency on internal filter JARs, internal attachment keys, or implicit
- * call chain contracts.</p>
+ * <p>Manifest 不得定义任意的附件名称。未经签名的租户、用户或权限附件不参与授权。
+ * 该管理器不会引入内部 Dubbo Filter 生态：不依赖内部 filter JAR、内部附件键，
+ * 也不依赖隐式的调用链契约。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
@@ -42,70 +40,67 @@ public class DubboAttachmentManager {
     private static final Logger log = LoggerFactory.getLogger(DubboAttachmentManager.class);
 
     /**
-     * The attachment key for the distributed trace identifier.
+     * 分布式链路追踪标识的附件键。
      */
     private static final String ATTACHMENT_TRACE_ID = "traceId";
 
     /**
-     * The attachment key for the request deadline.
+     * 请求截止时间的附件键。
      */
     private static final String ATTACHMENT_DEADLINE = "deadline";
 
     /**
-     * The attachment key for the request locale.
+     * 请求语言区域的附件键。
      */
     private static final String ATTACHMENT_LOCALE = "locale";
 
     /**
-     * The attachment key for the delegated token.
+     * 委派令牌的附件键。
      */
     private static final String ATTACHMENT_DELEGATED_TOKEN = "delegatedToken";
 
     /**
-     * The attachment key for B3 trace ID.
+     * B3 链路追踪 ID 的附件键。
      */
     private static final String ATTACHMENT_B3_TRACEID = "b3-traceid";
 
     /**
-     * The attachment key for B3 span ID.
+     * B3 链路追踪 span ID 的附件键。
      */
     private static final String ATTACHMENT_B3_SPANID = "b3-spanid";
 
     /**
-     * The attachment key for the trace user identifier (logging only).
+     * 追踪用户标识的附件键（仅用于日志记录）。
      */
-    private static final String ATTACHMENT_RTID = "rtid";
+    private static final String ATTACHMENT_USERID = "userId";
 
     /**
-     * Constructs a new DubboAttachmentManager.
+     * 构造一个新的 DubboAttachmentManager。
      */
     public DubboAttachmentManager() {
         log.info("DubboAttachmentManager initialized");
     }
 
     /**
-     * Builds the Dubbo attachment map from the system context, filtered by
-     * the platform attachment whitelist.
+     * 根据系统上下文构建 Dubbo 附件 Map，并按平台附件白名单进行过滤。
      *
-     * <p>Only whitelisted attachment keys are included. The values are
-     * derived from {@link SystemContext}:</p>
+     * <p>只包含白名单内的附件键。值从 {@link SystemContext} 派生：</p>
      * <ul>
      * <li>{@code traceId} ← {@code systemContext.traceId()}</li>
      * <li>{@code deadline} ← {@code String.valueOf(systemContext.deadlineEpochMs())}</li>
      * <li>{@code locale} ← {@code systemContext.locale()}</li>
-     * <li>{@code b3-traceid} ← {@code systemContext.traceId()} (B3 propagation)</li>
-     * <li>{@code b3-spanid} ← a new UUID-based span ID</li>
-     * <li>{@code rtid} ← {@code systemContext.traceId()} (logging only)</li>
+     * <li>{@code b3-traceid} ← {@code systemContext.traceId()}（B3 传播）</li>
+     * <li>{@code b3-spanid} ← 基于 UUID 生成的新 span ID</li>
+     * <li>{@code rtid} ← {@code systemContext.traceId()}（仅用于日志记录）</li>
      * </ul>
      *
-     * <p>The {@code delegatedToken} is not set by this manager from
-     * {@link SystemContext}; it requires an authentication context that is
-     * not available at the attachment building stage.</p>
+     * <p>{@code delegatedToken} 不会由该管理器从 {@link SystemContext} 设置；它需要
+     * 认证上下文，而认证上下文在构建附件阶段尚不可用。</p>
      *
-     * @param systemContext the platform execution context
-     * @param whitelist the attachment whitelist (enforces the closed set)
-     * @return a map of whitelisted attachment keys to string values; never null
-     * @throws NullPointerException if systemContext or whitelist is null
+     * @param systemContext 平台执行上下文
+     * @param whitelist 附件白名单（强制约束封闭集合）
+     * @return 白名单附件键到字符串值的 Map；永不为 null
+     * @throws NullPointerException 如果 systemContext 或 whitelist 为 null
      */
     public Map<String, String> buildAttachments(SystemContext systemContext,
                                                 AttachmentWhitelist whitelist) {
@@ -115,55 +110,53 @@ public class DubboAttachmentManager {
         Set<String> allowedKeys = AttachmentWhitelist.allowedKeys();
         Map<String, String> attachments = new HashMap<>();
 
-        // traceId
+        // traceId（链路追踪 ID）
         if (allowedKeys.contains(ATTACHMENT_TRACE_ID)) {
             attachments.put(ATTACHMENT_TRACE_ID, systemContext.traceId());
         }
 
-        // deadline
+        // deadline（请求截止时间）
         if (allowedKeys.contains(ATTACHMENT_DEADLINE)) {
             attachments.put(ATTACHMENT_DEADLINE,
                     String.valueOf(systemContext.deadlineEpochMs()));
         }
 
-        // locale
+        // locale（请求语言区域）
         if (allowedKeys.contains(ATTACHMENT_LOCALE)) {
             attachments.put(ATTACHMENT_LOCALE, systemContext.locale());
         }
 
-        // b3-traceid (B3 trace propagation — same as traceId)
+        // b3-traceid（B3 链路传播——与 traceId 相同）
         if (allowedKeys.contains(ATTACHMENT_B3_TRACEID)) {
             attachments.put(ATTACHMENT_B3_TRACEID, systemContext.traceId());
         }
 
-        // b3-spanid (generate a new span ID for this hop)
+        // b3-spanid（为本跳生成新的 span ID）
         if (allowedKeys.contains(ATTACHMENT_B3_SPANID)) {
             String spanId = generateSpanId();
             attachments.put(ATTACHMENT_B3_SPANID, spanId);
         }
 
-        // rtid (trace user identifier for logging only — never participates
-        // in authorization)
-        if (allowedKeys.contains(ATTACHMENT_RTID)) {
-            attachments.put(ATTACHMENT_RTID, systemContext.traceId());
+        // rtid（仅用于日志记录的追踪用户标识——绝不参与授权决策）
+        if (allowedKeys.contains(ATTACHMENT_USERID)) {
+            attachments.put(ATTACHMENT_USERID, systemContext.traceId());
         }
 
-        // delegatedToken — not available from SystemContext; requires
-        // authentication context. Left unset here.
-        // If a delegated token is configured via binding, it is injected
-        // separately by the argument binder.
+        // delegatedToken —— 无法从 SystemContext 获取；需要认证上下文。
+        // 此处保持不设置。
+        // 如果通过绑定配置了委派令牌，将由参数绑定器单独注入。
 
         log.debug("Built {} attachments from system context", attachments.size());
         return attachments;
     }
 
     /**
-     * Generates a new span ID for B3 trace propagation.
+     * 为 B3 链路追踪传播生成新的 span ID。
      *
-     * <p>Uses a shortened UUID (first 16 hex characters) to create a
-     * unique span identifier for this invocation hop.</p>
+     * <p>使用截短的 UUID（前 16 个十六进制字符）为本次调用跳创建一个唯一的
+     * span 标识。</p>
      *
-     * @return a new span ID string
+     * @return 新的 span ID 字符串
      */
     private String generateSpanId() {
         return UUID.randomUUID().toString().replace("-", "").substring(0, 16);
