@@ -1,5 +1,6 @@
 package com.ai.gateway.adapter.web.controller;
 
+import com.ai.gateway.adapter.web.manifest.ManifestDocumentMapper;
 import com.ai.gateway.application.controlplane.CapabilitySuspendUseCase;
 import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
@@ -12,9 +13,12 @@ import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
+import com.ai.gateway.domain.port.ManifestDocumentValidator;
 import com.ai.gateway.domain.service.Sha256Digest;
 import com.ai.gateway.adapter.web.support.SecurityHelper;
 import com.ai.gateway.domain.model.AdminAction;
+import com.fasterxml.jackson.databind.JsonNode;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -34,7 +38,6 @@ import jakarta.validation.constraints.Size;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * REST controller for the management/admin API
@@ -64,6 +67,7 @@ import java.util.Objects;
  */
 @RestController
 @RequestMapping("/admin/v1")
+@RequiredArgsConstructor
 public class AdminController {
 
     private static final Logger log = LoggerFactory.getLogger(AdminController.class);
@@ -77,60 +81,36 @@ public class AdminController {
     private final CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase;
     private final AuthenticationPort authenticationPort;
     private final AuthorizationPort authorizationPort;
-
-    /**
-     * Constructs a new AdminController.
-     *
-     * @param manifestImportUseCase the manifest import use case
-     * @param manifestApprovalUseCase the manifest approval use case
-     * @param catalogPublishUseCase the catalog publish use case
-     * @param catalogRollbackUseCase the catalog rollback use case
-     * @param capabilitySuspendUseCase the capability suspend use case
-     * @param manifestRepository the manifest repository for loading manifests
-     * @param manifestValidator the manifest validator for re-validation
-     * @param catalogPort the catalog port for snapshot queries
-     * @throws NullPointerException if any argument is null
-     */
-    public AdminController(ManifestImportUseCase manifestImportUseCase,
-                           ManifestApprovalUseCase manifestApprovalUseCase,
-                           CatalogPublishUseCase catalogPublishUseCase,
-                           CatalogRollbackUseCase catalogRollbackUseCase,
-                           CapabilitySuspendUseCase capabilitySuspendUseCase,
-                           ManifestValidationUseCase manifestValidationUseCase,
-                           CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase,
-                           AuthenticationPort authenticationPort,
-                           AuthorizationPort authorizationPort) {
-        this.manifestImportUseCase = Objects.requireNonNull(manifestImportUseCase,
-                "manifestImportUseCase must not be null");
-        this.manifestApprovalUseCase = Objects.requireNonNull(manifestApprovalUseCase,
-                "manifestApprovalUseCase must not be null");
-        this.catalogPublishUseCase = Objects.requireNonNull(catalogPublishUseCase,
-                "catalogPublishUseCase must not be null");
-        this.catalogRollbackUseCase = Objects.requireNonNull(catalogRollbackUseCase,
-                "catalogRollbackUseCase must not be null");
-        this.capabilitySuspendUseCase = Objects.requireNonNull(capabilitySuspendUseCase,
-                "capabilitySuspendUseCase must not be null");
-        this.manifestValidationUseCase = Objects.requireNonNull(manifestValidationUseCase,
-                "manifestValidationUseCase must not be null");
-        this.catalogSnapshotQueryUseCase = Objects.requireNonNull(catalogSnapshotQueryUseCase,
-                "catalogSnapshotQueryUseCase must not be null");
-        this.authenticationPort = Objects.requireNonNull(authenticationPort,
-                "authenticationPort must not be null");
-        this.authorizationPort = Objects.requireNonNull(authorizationPort,
-                "authorizationPort must not be null");
-    }
+    private final ManifestDocumentValidator manifestDocumentValidator;
+    private final ManifestDocumentMapper manifestDocumentMapper;
 
     /**
      * Imports a Capability Manifest through the 10-step validation pipeline
      *
-     * @param manifest the capability manifest to import
+     * @param document the raw capability manifest document
      * @return the import result with validation report and manifest digest
      */
     @PostMapping("/manifests:import")
     public ResponseEntity<Map<String, Object>> importManifest(
-            @RequestBody @Valid CapabilityManifest manifest) {
+            @RequestBody JsonNode document) {
 
         SecurityHelper.requireAdmin(authenticationPort, authorizationPort, AdminAction.IMPORT);
+
+        ValidationReport documentReport = manifestDocumentValidator.validate(
+                manifestDocumentMapper.toValidationTree(document));
+        if (!documentReport.valid()) {
+            return rejectedManifestDocument(documentReport, "Manifest Schema 校验失败");
+        }
+
+        CapabilityManifest manifest;
+        try {
+            manifest = manifestDocumentMapper.toDomain(document);
+        } catch (IllegalArgumentException e) {
+            log.warn("Manifest document mapping failed: {}", e.getMessage());
+            return rejectedManifestDocument(
+                    ValidationReport.failure(List.of(e.getMessage())),
+                    "Manifest 字段映射失败");
+        }
 
         log.info("Manifest import requested: id={}, version={}",
                 manifest.metadata().id(), manifest.metadata().version());
@@ -151,6 +131,16 @@ public class AdminController {
             body.put("validationReport", buildValidationReportBody(result.report()));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
         }
+    }
+
+    private ResponseEntity<Map<String, Object>> rejectedManifestDocument(
+            ValidationReport report,
+            String error) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", "REJECTED");
+        body.put("error", error);
+        body.put("validationReport", buildValidationReportBody(report));
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
     }
 
     /**

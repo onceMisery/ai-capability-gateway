@@ -43,6 +43,10 @@
             <groupId>com.ai.gateway</groupId>
             <artifactId>gateway-adapter-auth-satoken</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-contract-schema</artifactId>
+        </dependency>
         <!-- 仅用于配置类的 getter/setter，运行时不需要 Lombok。 -->
         <dependency>
             <groupId>org.projectlombok</groupId>

@@ -69,7 +69,7 @@ public record ArgumentBinding(
         ArgumentSource source,
         String sourcePath,
         String converter,
-        String constantValue,
+        Object constantValue,
         Map<String, FieldBinding> objectBindings
 ) {
 

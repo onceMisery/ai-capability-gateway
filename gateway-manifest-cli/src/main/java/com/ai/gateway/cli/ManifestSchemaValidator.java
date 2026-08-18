@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -30,8 +31,10 @@ public final class ManifestSchemaValidator {
     /** Classpath location of the Capability Manifest JSON Schema. */
     private static final String SCHEMA_CLASSPATH = "/schema/capability-manifest-v1.schema.json";
 
-    private final ObjectMapper jsonMapper = new ObjectMapper();
-    private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+    private final ObjectMapper jsonMapper = new ObjectMapper()
+            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
+    private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory())
+            .enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     private final JsonSchema schema;
 
     public ManifestSchemaValidator() {
@@ -71,12 +74,23 @@ public final class ManifestSchemaValidator {
         return validateNode(node);
     }
 
+    /**
+     * 校验已经解析完成的 Manifest JSON 树。
+     *
+     * @param node Manifest JSON 树
+     * @return 校验错误；为空表示通过
+     */
+    public List<String> validate(JsonNode node) {
+        return validateNode(node);
+    }
+
     private List<String> validateNode(JsonNode node) {
         Set<ValidationMessage> messages = schema.validate(node);
         List<String> errors = new ArrayList<>(messages.size());
         for (ValidationMessage message : messages) {
             errors.add(message.getMessage());
         }
+        errors.sort(String::compareTo);
         return errors;
     }
 }

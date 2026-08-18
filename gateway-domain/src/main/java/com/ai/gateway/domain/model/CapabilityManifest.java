@@ -239,22 +239,44 @@ public record CapabilityManifest(
      *
      * @param permissions the required permission strings
      * @param principalClaims the required Principal claims keyed by JSON Pointer
+     * @param maxAuthAgeSeconds write-operation authentication freshness limit
+     * @param requiredAcr required authentication context class reference
+     * @param requiredAmr required authentication methods
      */
     public record Authorization(
             List<String> permissions,
-            Map<String, ClaimRequirement> principalClaims
+            Map<String, ClaimRequirement> principalClaims,
+            Integer maxAuthAgeSeconds,
+            String requiredAcr,
+            List<String> requiredAmr
     ) {
+
+        /**
+         * 创建不声明增强认证要求的授权配置。
+         *
+         * @param permissions 权限列表
+         * @param principalClaims Principal 声明要求
+         */
+        public Authorization(
+                List<String> permissions,
+                Map<String, ClaimRequirement> principalClaims) {
+            this(permissions, principalClaims, null, null, List.of());
+        }
 
         /**
          * Compact constructor performing defensive copying.
          *
          * @param permissions the permission strings
          * @param principalClaims the principal claim requirements
+         * @param maxAuthAgeSeconds authentication freshness limit
+         * @param requiredAcr required authentication context
+         * @param requiredAmr required authentication methods
          */
         public Authorization {
             java.util.Objects.requireNonNull(permissions, "permissions must not be null");
             permissions = List.copyOf(permissions);
             principalClaims = principalClaims == null ? Map.of() : Map.copyOf(principalClaims);
+            requiredAmr = requiredAmr == null ? List.of() : List.copyOf(requiredAmr);
         }
     }
 

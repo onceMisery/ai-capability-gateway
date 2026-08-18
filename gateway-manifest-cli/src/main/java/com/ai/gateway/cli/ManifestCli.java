@@ -9,26 +9,10 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Offline CLI entry point for generating and validating Capability Manifests
- * (design document ).
+ * Capability Manifest 离线生成与校验入口。
  *
- * <p>Supported commands:</p>
- * <ul>
- * <li>{@code validate --manifest <file>} &mdash; validates a Manifest against the
- * Capability Manifest JSON Schema.</li>
- * <li>{@code help} &mdash; prints usage.</li>
- * </ul>
- *
- * <h2>Process isolation notes</h2>
- * <p>Manifest generation from arbitrary API JARs executes untrusted bytecode metadata and
- * MUST run in a hardened, isolated process. The sandbox wrapper around this CLI is expected
- * to enforce the following (not implemented here):</p>
- * <ul>
- * <li>close all network access (no egress / ingress);</li>
- * <li>cap CPU time and heap/native memory;</li>
- * <li>cap output file size;</li>
- * <li>mount the input directory read-only and the output directory write-only.</li>
- * </ul>
+ * <p>{@code generate} 只读取 APT 描述符、治理配置、环境 Profile 和 Schema
+ * 资源，不加载或执行 Provider 业务 JAR；生成结果始终是待人工确认的 Draft。</p>
  */
 public final class ManifestCli {
 
@@ -60,6 +44,8 @@ public final class ManifestCli {
         switch (command) {
             case "validate":
                 return validate(options);
+            case "generate":
+                return generate(options);
             case "help":
             case "--help":
             case "-h":
@@ -125,6 +111,44 @@ public final class ManifestCli {
         return 1;
     }
 
+    private static int generate(Map<String, String> options) {
+        List<String> required = List.of(
+                "descriptor", "schemas", "governance", "profile", "out", "report");
+        List<String> missing = required.stream()
+                .filter(name -> isBlank(options.get(name)))
+                .toList();
+        if (!missing.isEmpty()) {
+            System.err.println("generate requires options: " + String.join(", ", missing));
+            return 1;
+        }
+
+        ManifestDraftGenerator.GenerationRequest request =
+                new ManifestDraftGenerator.GenerationRequest(
+                        Path.of(options.get("descriptor")),
+                        Path.of(options.get("schemas")),
+                        Path.of(options.get("governance")),
+                        Path.of(options.get("profile")),
+                        Path.of(options.get("out")),
+                        Path.of(options.get("report")));
+        try {
+            ManifestDraftGenerator.GenerationResult result =
+                    new ManifestDraftGenerator().generate(request);
+            System.out.println("Generated " + result.generated().size()
+                    + " Manifest Draft(s). Report: " + request.report());
+            if (result.successful()) {
+                return 0;
+            }
+            result.failures().forEach((id, errors) -> {
+                System.err.println("Generation failed for " + id + ":");
+                errors.forEach(error -> System.err.println(" - " + error));
+            });
+            return 1;
+        } catch (IOException | RuntimeException e) {
+            System.err.println("Manifest generation failed: " + e.getMessage());
+            return 1;
+        }
+    }
+
     private static boolean isYaml(String fileName) {
         String lower = fileName.toLowerCase(Locale.ROOT);
         return lower.endsWith(".yaml") || lower.endsWith(".yml");
@@ -156,6 +180,10 @@ public final class ManifestCli {
         System.out.println(" manifest-cli validate --manifest <file>");
         System.out.println(" Validate a Manifest (.json/.yaml/.yml) against the Capability "
                 + "Manifest JSON Schema.");
+        System.out.println();
+        System.out.println(" manifest-cli generate --descriptor <file> --schemas <dir>");
+        System.out.println("   --governance <file> --profile <file> --out <dir> --report <file>");
+        System.out.println(" Generate reviewed Manifest Drafts from a capability descriptor.");
         System.out.println();
         System.out.println(" manifest-cli help");
         System.out.println(" Print this usage information.");

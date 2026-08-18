@@ -25,6 +25,8 @@
         <module>gateway-adapter-rest</module>
         <module>gateway-adapter-grpc</module>
         <module>gateway-bootstrap</module>
+        <module>gateway-capability-annotations</module>
+        <module>gateway-capability-processor</module>
         <module>gateway-manifest-cli</module>
         <module>gateway-contract-schema</module>
         <module>gateway-example</module>
@@ -131,6 +133,16 @@
             <dependency>
                 <groupId>com.ai.gateway</groupId>
                 <artifactId>gateway-contract-schema</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ai.gateway</groupId>
+                <artifactId>gateway-capability-annotations</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ai.gateway</groupId>
+                <artifactId>gateway-capability-processor</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

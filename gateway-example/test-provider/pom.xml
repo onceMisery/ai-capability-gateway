@@ -28,6 +28,11 @@
             <version>${dubbo.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-capability-annotations</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
             <scope>test</scope>
@@ -35,6 +40,27 @@
     </dependencies>
     <build>
         <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <dependencies>
+                    <!-- 让 Reactor 将 Processor 纳入构建顺序，但不污染业务依赖。 -->
+                    <dependency>
+                        <groupId>com.ai.gateway</groupId>
+                        <artifactId>gateway-capability-processor</artifactId>
+                        <version>${project.version}</version>
+                    </dependency>
+                </dependencies>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>com.ai.gateway</groupId>
+                            <artifactId>gateway-capability-processor</artifactId>
+                            <version>${project.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>

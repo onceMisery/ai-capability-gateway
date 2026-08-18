@@ -34,10 +34,29 @@ public final class ManifestDigest {
             out.append("N;");
             return;
         }
-        if (value instanceof String || value instanceof Number || value instanceof Boolean
-                || value instanceof Character || value instanceof Enum<?>) {
-            out.append('S');
-            appendScalar(out, value instanceof Enum<?> e ? e.name() : value.toString());
+        if (value instanceof String) {
+            out.append('T');
+            appendScalar(out, value.toString());
+            return;
+        }
+        if (value instanceof Number) {
+            out.append('N');
+            appendScalar(out, value.toString());
+            return;
+        }
+        if (value instanceof Boolean) {
+            out.append('B');
+            appendScalar(out, value.toString());
+            return;
+        }
+        if (value instanceof Character) {
+            out.append('C');
+            appendScalar(out, value.toString());
+            return;
+        }
+        if (value instanceof Enum<?> enumValue) {
+            out.append('E');
+            appendScalar(out, enumValue.name());
             return;
         }
         if (value instanceof Map<?, ?> map) {

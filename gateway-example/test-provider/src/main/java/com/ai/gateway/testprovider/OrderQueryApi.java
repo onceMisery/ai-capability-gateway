@@ -1,25 +1,68 @@
 package com.ai.gateway.testprovider;
 
+import com.ai.gateway.capability.annotation.CapArg;
+import com.ai.gateway.capability.annotation.CapComposite;
+import com.ai.gateway.capability.annotation.CapFieldBinding;
+import com.ai.gateway.capability.annotation.CapInput;
+import com.ai.gateway.capability.annotation.CapOutput;
+import com.ai.gateway.capability.annotation.CapProjection;
+import com.ai.gateway.capability.annotation.CapRedaction;
+import com.ai.gateway.capability.annotation.Capability;
+import com.ai.gateway.capability.annotation.CapabilityArgumentSource;
+import com.ai.gateway.capability.annotation.CapabilityGroup;
+import com.ai.gateway.capability.annotation.CapabilityOutputMode;
+import com.ai.gateway.capability.annotation.CapabilityProtocol;
+import com.ai.gateway.capability.annotation.CapabilityRedactionMethod;
+import com.ai.gateway.capability.annotation.CapabilityRisk;
+
 import java.util.Map;
 
 /**
- * Test Dubbo interface simulating a real business order query API
- * (design document ).
+ * 模拟真实订单查询场景的 Dubbo 测试接口。
  *
- * <p>The signature intentionally uses only JDK types ({@code Long} and {@code Map})
- * so the gateway can invoke it through generic Dubbo invocation without needing the
- * original business API JAR. The returned {@code Map} carries the platform standard
- * Envelope structure: {@code {code, value, message}}.</p>
+ * <p>方法签名特意只使用 {@code Long} 和 {@code Map} 等 JDK 类型，使网关无需加载
+ * 原始业务 API JAR 即可通过 Dubbo 泛化调用执行。返回的 {@code Map} 使用平台标准
+ * Envelope 结构：{@code {code, value, message}}。</p>
  */
+@CapabilityGroup(idPrefix = "order", protocol = CapabilityProtocol.DUBBO)
 public interface OrderQueryApi {
 
     /**
-     * Queries a single order.
+     * 查询当前组织可见的单个订单。
      *
-     * @param orgId the organization / tenant id (injected by the gateway from the principal)
-     * @param request the business request payload; expected to contain {@code orderNo}
-     * @return a platform standard Envelope as a {@code Map}:
-     * {@code {code: "200", value: {...}, message: "success"}} on success
+     * @param orgId 组织标识，由网关从 Principal 注入
+     * @param request 业务请求，只允许模型提供 {@code orderNo}
+     * @return 平台标准 Envelope；成功时结构为
+     * {@code {code: "200", value: {...}, message: "success"}}
      */
-    Map<String, Object> query(Long orgId, Map<String, Object> request);
+    @Capability(
+            id = "order.detail.query",
+            version = "1.0.0",
+            risk = CapabilityRisk.READ_ONLY,
+            policyRef = "order.detail.read",
+            displayName = "查询订单详情",
+            description = "按订单号查询当前组织可见的订单详情")
+    @CapInput(schemaResource = "schemas/order-detail-input.json")
+    @CapOutput(
+            mode = CapabilityOutputMode.ENVELOPE,
+            envelopeProfile = "standard-result-v1",
+            schemaResource = "schemas/order-detail-public.json",
+            projection = {
+                    @CapProjection(from = "/orderNo", to = "/orderNo"),
+                    @CapProjection(from = "/status", to = "/status"),
+                    @CapProjection(from = "/amount", to = "/amount"),
+                    @CapProjection(from = "/customerName", to = "/customerName")
+            },
+            redactions = @CapRedaction(
+                    path = "/customerName",
+                    method = CapabilityRedactionMethod.PARTIAL_MASK),
+            maxBytes = 65536)
+    Map<String, Object> query(
+            @CapArg(
+                    source = CapabilityArgumentSource.PRINCIPAL,
+                    sourcePath = "/orgId") Long orgId,
+            @CapComposite(@CapFieldBinding(
+                    targetPath = "/orderNo",
+                    source = CapabilityArgumentSource.MODEL,
+                    sourcePath = "/orderNo")) Map<String, Object> request);
 }

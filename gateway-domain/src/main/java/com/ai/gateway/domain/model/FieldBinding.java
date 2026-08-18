@@ -43,7 +43,7 @@ public record FieldBinding(
         ArgumentSource source,
         String sourcePath,
         String converter,
-        String constantValue
+        Object constantValue
 ) {
 
     /**
