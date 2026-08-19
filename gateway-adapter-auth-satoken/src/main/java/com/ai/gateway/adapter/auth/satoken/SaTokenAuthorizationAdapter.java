@@ -4,13 +4,21 @@ import com.ai.gateway.domain.model.AdminAction;
 import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityAclEntry;
 import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.CapabilityReference;
+import com.ai.gateway.domain.model.CapabilityVisibility;
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.PolicySnapshot;
 import com.ai.gateway.domain.port.AclRepository;
 import com.ai.gateway.domain.port.AuthorizationPort;
+import com.ai.gateway.domain.port.TelemetryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * {@link AuthorizationPort} 的 Sa-Token 参考实现，强制实施能力级别
@@ -39,15 +47,22 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
      * 授予所有能力执行的权限通配符。
      */
     public static final String PERMISSION_WILDCARD = "*";
+    private static final int DEFAULT_MAX_VISIBILITY_CACHE_ENTRIES = 10_000;
 
     private final boolean allowAllIfAclEmpty;
     private final AclRepository aclRepository;
+    private final int maxVisibilityCacheEntries;
+    private final TelemetryPort telemetry;
 
     /**
      * 能力 ACL：capabilityId → 允许执行该能力的角色集合。
      */
-    private volatile Map<CapabilityKey, AclPolicy> capabilityAcl = Map.of();
-    private volatile boolean aclLoadHealthy = true;
+    private volatile PolicyState policyState = new PolicyState(Map.of(), true, 1L);
+    private final ConcurrentMap<VisibilityCacheKey, CapabilityVisibility> visibilityCache =
+            new ConcurrentHashMap<>();
+    private final Queue<VisibilityCacheKey> visibilityInsertionOrder =
+            new ConcurrentLinkedQueue<>();
+    private final AtomicLong visibilityCacheEvictions = new AtomicLong();
 
     /**
      * 以安全的默认策略构造适配器（ACL 为空时拒绝）。
@@ -73,8 +88,25 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
      * @param aclRepository ACL 仓库；在桩（stub）模式下可以为 {@code null}
      */
     public SaTokenAuthorizationAdapter(boolean allowAllIfAclEmpty, AclRepository aclRepository) {
+        this(allowAllIfAclEmpty, aclRepository,
+                DEFAULT_MAX_VISIBILITY_CACHE_ENTRIES, null);
+    }
+
+    public SaTokenAuthorizationAdapter(
+            boolean allowAllIfAclEmpty,
+            AclRepository aclRepository,
+            int maxVisibilityCacheEntries,
+            TelemetryPort telemetry) {
+        if (maxVisibilityCacheEntries <= 0) {
+            throw new IllegalArgumentException("maxVisibilityCacheEntries must be positive");
+        }
         this.allowAllIfAclEmpty = allowAllIfAclEmpty;
         this.aclRepository = aclRepository;
+        this.maxVisibilityCacheEntries = maxVisibilityCacheEntries;
+        this.telemetry = telemetry;
+        recordValue("gateway.authorization.visibility_cache.capacity",
+                maxVisibilityCacheEntries);
+        recordCacheSize();
         loadAcl();
     }
 
@@ -95,11 +127,65 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     }
 
     @Override
+    public PolicySnapshot resolvePolicySnapshot(Principal principal) {
+        Objects.requireNonNull(principal, "principal must not be null");
+        PolicyState state = policyState;
+        CapabilityVisibility visibility = resolveVisibility(principal, state);
+        return new PolicySnapshot(state.epoch(), state.loadHealthy(), visibility);
+    }
+
+    @Override
+    public CapabilityVisibility resolveVisibility(Principal principal) {
+        Objects.requireNonNull(principal, "principal must not be null");
+        return resolveVisibility(principal, policyState);
+    }
+
+    private CapabilityVisibility resolveVisibility(Principal principal, PolicyState state) {
+        if (!state.loadHealthy()) {
+            return CapabilityVisibility.unavailable(state.epoch());
+        }
+        if (principal.permissions().contains(PERMISSION_WILDCARD)
+                || (state.capabilityAcl().isEmpty() && allowAllIfAclEmpty)) {
+            return CapabilityVisibility.all(state.epoch());
+        }
+
+        VisibilityCacheKey cacheKey = VisibilityCacheKey.from(principal, state.epoch());
+        CapabilityVisibility cached = visibilityCache.get(cacheKey);
+        if (cached != null) {
+            incrementCache("hit");
+            return cached;
+        }
+        incrementCache("miss");
+
+        Set<CapabilityReference> visible = new HashSet<>();
+        state.capabilityAcl().forEach((key, policy) -> {
+            if (isAllowed(principal, policy)) {
+                visible.add(new CapabilityReference(key.capabilityId(), key.version()));
+            }
+        });
+        CapabilityVisibility resolved = CapabilityVisibility.restricted(state.epoch(), visible);
+        CapabilityVisibility existing = visibilityCache.putIfAbsent(cacheKey, resolved);
+        if (existing != null) {
+            return existing;
+        }
+        visibilityInsertionOrder.add(cacheKey);
+        evictOverflow();
+        recordCacheSize();
+        return resolved;
+    }
+
+    @Override
+    public long currentPolicyEpoch() {
+        return policyState.epoch();
+    }
+
+    @Override
     public boolean authorizeExecution(Principal principal, String capabilityId, String version) {
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(capabilityId, "capabilityId must not be null");
 
-        if (!aclLoadHealthy) {
+        PolicyState state = policyState;
+        if (!state.loadHealthy()) {
             return false;
         }
         // 通配符仅在 ACL 数据源成功加载之后才有意义。
@@ -107,23 +193,19 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         if (principal.permissions().contains(PERMISSION_WILDCARD)) {
             return true;
         }
-        AclPolicy policy = capabilityAcl.get(new CapabilityKey(capabilityId, version));
+        AclPolicy policy = state.capabilityAcl().get(new CapabilityKey(capabilityId, version));
         if (policy == null) {
-            policy = capabilityAcl.get(new CapabilityKey(capabilityId, "*"));
+            policy = state.capabilityAcl().get(new CapabilityKey(capabilityId, "*"));
         }
         if (policy == null) {
-            boolean allowed = capabilityAcl.isEmpty() && allowAllIfAclEmpty;
+            boolean allowed = state.capabilityAcl().isEmpty() && allowAllIfAclEmpty;
             if (!allowed) {
                 log.debug("Execution denied (no ACL entry): capability={}, version={}",
                         capabilityId, version);
             }
             return allowed;
         }
-        boolean roleAllowed = policy.allowedRoles().isEmpty()
-                || principal.roles().stream().anyMatch(policy.allowedRoles()::contains);
-        boolean permissionsAllowed = principal.permissions().contains(PERMISSION_WILDCARD)
-                || new HashSet<>(principal.permissions()).containsAll(policy.requiredPermissions());
-        return roleAllowed && permissionsAllowed;
+        return isAllowed(principal, policy);
     }
 
     @Override
@@ -138,8 +220,8 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     @Override
     public AclPolicyStatus aclPolicyStatus() {
         return new AclPolicyStatus(
-                aclLoadHealthy,
-                capabilityAcl.size(),
+                policyState.loadHealthy(),
+                policyState.capabilityAcl().size(),
                 allowAllIfAclEmpty ? "ALLOW" : "DENY");
     }
 
@@ -152,18 +234,22 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     public synchronized void grant(String capabilityId, Set<String> roles) {
         Objects.requireNonNull(capabilityId, "capabilityId must not be null");
         Objects.requireNonNull(roles, "roles must not be null");
-        Map<CapabilityKey, AclPolicy> updated = new HashMap<>(capabilityAcl);
+        PolicyState state = policyState;
+        Map<CapabilityKey, AclPolicy> updated = new HashMap<>(state.capabilityAcl());
         updated.put(new CapabilityKey(capabilityId, "*"),
                 new AclPolicy(Set.copyOf(roles), Set.of()));
-        capabilityAcl = Map.copyOf(updated);
+        policyState = new PolicyState(Map.copyOf(updated), true, state.epoch() + 1);
+        clearVisibilityCache();
     }
 
     public synchronized void grant(String capabilityId, String version, Set<String> roles,
                       Set<String> requiredPermissions) {
-        Map<CapabilityKey, AclPolicy> updated = new HashMap<>(capabilityAcl);
+        PolicyState state = policyState;
+        Map<CapabilityKey, AclPolicy> updated = new HashMap<>(state.capabilityAcl());
         updated.put(new CapabilityKey(capabilityId, version),
                 new AclPolicy(Set.copyOf(roles), Set.copyOf(requiredPermissions)));
-        capabilityAcl = Map.copyOf(updated);
+        policyState = new PolicyState(Map.copyOf(updated), true, state.epoch() + 1);
+        clearVisibilityCache();
     }
 
     /**
@@ -185,11 +271,15 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
                         new AclPolicy(Set.copyOf(entry.allowedRoles()),
                                 Set.copyOf(entry.requiredPermissions())));
             }
-            capabilityAcl = Map.copyOf(loaded);
-            aclLoadHealthy = true;
-            log.info("Loaded {} ACL entries from database", entries.size());
+            long loadedEpoch = Math.max(1L, aclRepository.currentPolicyEpoch());
+            policyState = new PolicyState(Map.copyOf(loaded), true, loadedEpoch);
+            clearVisibilityCache();
+            log.info("Loaded {} ACL entries from database at policy epoch {}",
+                    entries.size(), loadedEpoch);
         } catch (Exception e) {
-            aclLoadHealthy = false;
+            PolicyState state = policyState;
+            policyState = new PolicyState(state.capabilityAcl(), false, state.epoch());
+            clearVisibilityCache();
             log.error("Failed to load ACL entries from database; authorization fails closed", e);
         }
     }
@@ -201,12 +291,88 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
      */
     public void refreshAcl() {
         loadAcl();
-        log.info("ACL cache refreshed, {} entries loaded", capabilityAcl.size());
+        log.info("ACL cache refreshed, {} entries loaded at policy epoch {}",
+                policyState.capabilityAcl().size(), policyState.epoch());
+    }
+
+    int visibilityCacheSize() {
+        return visibilityCache.size();
+    }
+
+    long visibilityCacheEvictionCount() {
+        return visibilityCacheEvictions.get();
+    }
+
+    private void evictOverflow() {
+        while (visibilityCache.size() > maxVisibilityCacheEntries) {
+            VisibilityCacheKey oldest = visibilityInsertionOrder.poll();
+            if (oldest == null) {
+                return;
+            }
+            if (visibilityCache.remove(oldest) != null) {
+                visibilityCacheEvictions.incrementAndGet();
+                incrementCache("evicted");
+            }
+        }
+    }
+
+    private void clearVisibilityCache() {
+        visibilityCache.clear();
+        visibilityInsertionOrder.clear();
+        recordCacheSize();
+    }
+
+    private void incrementCache(String outcome) {
+        if (telemetry != null) {
+            telemetry.increment("gateway.authorization.visibility_cache",
+                    Map.of("outcome", outcome));
+        }
+    }
+
+    private void recordCacheSize() {
+        recordValue("gateway.authorization.visibility_cache.entries",
+                visibilityCache.size());
+    }
+
+    private void recordValue(String metric, long value) {
+        if (telemetry != null) {
+            telemetry.recordValue(metric, value,
+                    Map.of("resource", "principal_visibility"));
+        }
+    }
+
+    private static boolean isAllowed(Principal principal, AclPolicy policy) {
+        boolean roleAllowed = policy.allowedRoles().isEmpty()
+                || principal.roles().stream().anyMatch(policy.allowedRoles()::contains);
+        boolean permissionsAllowed = principal.permissions().contains(PERMISSION_WILDCARD)
+                || new HashSet<>(principal.permissions()).containsAll(policy.requiredPermissions());
+        return roleAllowed && permissionsAllowed;
     }
 
     private record CapabilityKey(String capabilityId, String version) {
     }
 
     private record AclPolicy(Set<String> allowedRoles, Set<String> requiredPermissions) {
+    }
+
+    private record PolicyState(
+            Map<CapabilityKey, AclPolicy> capabilityAcl,
+            boolean loadHealthy,
+            long epoch) {
+    }
+
+    private record VisibilityCacheKey(
+            String subject,
+            long orgId,
+            List<String> roles,
+            List<String> permissions,
+            long epoch) {
+
+        private static VisibilityCacheKey from(Principal principal, long epoch) {
+            List<String> roles = principal.roles().stream().sorted().toList();
+            List<String> permissions = principal.permissions().stream().sorted().toList();
+            return new VisibilityCacheKey(
+                    principal.subject(), principal.orgId(), roles, permissions, epoch);
+        }
     }
 }

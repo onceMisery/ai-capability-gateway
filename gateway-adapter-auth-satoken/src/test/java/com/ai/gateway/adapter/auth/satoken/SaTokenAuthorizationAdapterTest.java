@@ -3,7 +3,9 @@ package com.ai.gateway.adapter.auth.satoken;
 import com.ai.gateway.domain.model.AdminAction;
 import com.ai.gateway.domain.model.CapabilityAclEntry;
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.PolicySnapshot;
 import com.ai.gateway.domain.port.AclRepository;
+import com.ai.gateway.domain.port.TelemetryPort;
 import com.ai.gateway.domain.model.AclPolicyStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,22 @@ import static org.mockito.Mockito.when;
  * @author cmiracle@163.com
  */
 class SaTokenAuthorizationAdapterTest {
+
+    @Test
+    void policySnapshotPinsVisibilityAndEpochFromOneState() {
+        SaTokenAuthorizationAdapter adapter = new SaTokenAuthorizationAdapter(false);
+        adapter.grant("orders.query", "1.0.0", Set.of("operator"), Set.of("order:read"));
+        Principal principal = principal("operator-1", List.of("operator"),
+                List.of("order:read"));
+
+        PolicySnapshot snapshot = adapter.resolvePolicySnapshot(principal);
+
+        assertThat(snapshot.healthy()).isTrue();
+        assertThat(snapshot.policyEpoch()).isEqualTo(snapshot.visibility().policyEpoch());
+        assertThat(snapshot.visibility().visibleCapabilities())
+                .contains(new com.ai.gateway.domain.model.CapabilityReference(
+                        "orders.query", "1.0.0"));
+    }
 
     private Principal principal(String subject, List<String> roles, List<String> permissions) {
         return new Principal(subject, 1L, roles, permissions, Instant.now(), "SA_TOKEN_JWT");
@@ -166,5 +184,20 @@ class SaTokenAuthorizationAdapterTest {
         assertThat(configuration.authorizationPort(repository).authorizeExecution(
                 principal("u1", List.of("user"), List.of()),
                 "order.detail.query", "1.0.0")).isFalse();
+    }
+
+    @Test
+    void visibilityCacheEvictsIncrementallyAtConfiguredCapacity() {
+        SaTokenAuthorizationAdapter adapter = new SaTokenAuthorizationAdapter(
+                false, null, 2, mock(TelemetryPort.class));
+        adapter.grant("order.detail.query", "1.0.0",
+                Set.of("analyst"), Set.of());
+
+        adapter.resolvePolicySnapshot(principal("a1", List.of("analyst"), List.of()));
+        adapter.resolvePolicySnapshot(principal("a2", List.of("analyst"), List.of()));
+        adapter.resolvePolicySnapshot(principal("a3", List.of("analyst"), List.of()));
+
+        assertThat(adapter.visibilityCacheSize()).isEqualTo(2);
+        assertThat(adapter.visibilityCacheEvictionCount()).isEqualTo(1L);
     }
 }

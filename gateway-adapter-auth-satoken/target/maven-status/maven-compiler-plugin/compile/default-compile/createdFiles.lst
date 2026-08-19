@@ -1,0 +1,8 @@
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthorizationAdapter$PolicyState.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthProperties.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthConfiguration.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthenticationAdapter.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthorizationAdapter.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthorizationAdapter$CapabilityKey.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthorizationAdapter$AclPolicy.class
+com\ai\gateway\adapter\auth\satoken\SaTokenAuthorizationAdapter$VisibilityCacheKey.class

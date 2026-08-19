@@ -5,6 +5,7 @@ import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.AclRepository;
 import com.ai.gateway.domain.port.TokenIssuerPort;
+import com.ai.gateway.domain.port.TelemetryPort;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -119,7 +120,17 @@ public class SaTokenAuthConfiguration {
      * @return 授权适配器
      */
     @Bean
-    public AuthorizationPort authorizationPort(AclRepository aclRepository) {
+    public AuthorizationPort authorizationPort(
+            AclRepository aclRepository,
+            TelemetryPort telemetryPort,
+            Environment environment) {
+        int maxEntries = environment.getProperty(
+                "gateway.auth.visibility-cache-max-entries", Integer.class, 10_000);
+        return new SaTokenAuthorizationAdapter(
+                false, aclRepository, maxEntries, telemetryPort);
+    }
+
+    AuthorizationPort authorizationPort(AclRepository aclRepository) {
         return new SaTokenAuthorizationAdapter(false, aclRepository);
     }
 }
