@@ -25,11 +25,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ForkJoinPool;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.function.Supplier;
 
 /** Host-only capability resolver for the fixed gateway_call model contract. */
 public final class AgentCapabilityResolver {
@@ -38,6 +41,18 @@ public final class AgentCapabilityResolver {
     private static final int RECALL_CANDIDATES = 20;
     private static final int MAX_CANDIDATE_CONTEXT_BYTES = 2 * 1024;
     private static final double HIGH_CONFIDENCE_DELTA = 1.0d;
+    private static final Executor DEFAULT_RESOLVE_EXECUTOR = new ThreadPoolExecutor(
+            2,
+            2,
+            0L,
+            TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(64),
+            runnable -> {
+                Thread thread = new Thread(runnable, "gateway-agent-resolve-default");
+                thread.setDaemon(true);
+                return thread;
+            },
+            new ThreadPoolExecutor.AbortPolicy());
 
     private final AuthenticationPort authenticationPort;
     private final AuthorizationPort authorizationPort;
@@ -58,7 +73,7 @@ public final class AgentCapabilityResolver {
                                    TelemetryPort telemetry) {
         this(authenticationPort, authorizationPort, catalogManager, candidateRetriever,
                 textNormalizer, toolReferenceService, telemetry,
-                ForkJoinPool.commonPool(), 100L);
+                DEFAULT_RESOLVE_EXECUTOR, 100L);
     }
 
     public AgentCapabilityResolver(AuthenticationPort authenticationPort,
@@ -86,17 +101,31 @@ public final class AgentCapabilityResolver {
 
     public Resolution resolve(RequestContext requestContext, String query, int requestedTopK) {
         Objects.requireNonNull(requestContext, "requestContext must not be null");
+        long deadlineNanos = newResolveDeadlineNanos();
         Principal principal = authenticationPort.authenticate(requestContext);
-        return resolve(principal, query, requestedTopK);
+        return resolve(principal, query, requestedTopK, deadlineNanos);
     }
 
     /** Internal Host entry point that reuses the Principal authenticated by the Connector. */
     public Resolution resolve(Principal principal, String query, int requestedTopK) {
+        return resolve(principal, query, requestedTopK, newResolveDeadlineNanos());
+    }
+
+    /**
+     * Internal Host entry point with a deadline created before authentication.
+     * The Connector uses this overload so authentication time is part of the
+     * same Resolve budget as policy, retrieval, reranking, and reference issue.
+     */
+    public Resolution resolve(
+            Principal principal, String query, int requestedTopK, long deadlineNanos) {
         Objects.requireNonNull(principal, "principal must not be null");
         long started = System.nanoTime();
-        long deadlineNanos = deadlineAfter(resolveTimeoutNanos);
         String outcome = "error";
         try {
+            if (expired(deadlineNanos, "authentication")) {
+                outcome = "timeout";
+                return Resolution.error("RESOLVE_TIMEOUT", 0L, 0L);
+            }
             ActiveCatalogView.ViewLease viewLease = catalogManager.acquireActiveView();
             if (viewLease == null) {
                 return Resolution.error("CAPABILITY_UNAVAILABLE", 0L, 0L);
@@ -113,7 +142,22 @@ public final class AgentCapabilityResolver {
                         view.catalogVersion(), 0L);
             }
 
-            PolicySnapshot policySnapshot = authorizationPort.resolvePolicySnapshot(principal);
+            DeadlineCall<PolicySnapshot> policyCall = callWithDeadline(
+                    () -> authorizationPort.resolvePolicySnapshot(principal),
+                    deadlineNanos, "authorization");
+            if (policyCall.rejected()) {
+                outcome = "capacity_rejected";
+                return Resolution.error("RESOLVE_CAPACITY_EXCEEDED",
+                        view.catalogVersion(), 0L);
+            }
+            if (policyCall.timedOut()) {
+                outcome = "timeout";
+                return Resolution.error("RESOLVE_TIMEOUT", view.catalogVersion(), 0L);
+            }
+            if (policyCall.failure() != null) {
+                throw propagate(policyCall.failure());
+            }
+            PolicySnapshot policySnapshot = policyCall.value();
             if (policySnapshot == null || !policySnapshot.healthy()
                     || policySnapshot.policyEpoch() <= 0) {
                 return Resolution.error("POLICY_UNAVAILABLE", view.catalogVersion(), 0L);
@@ -142,6 +186,11 @@ public final class AgentCapabilityResolver {
                 outcome = "timeout";
                 return Resolution.error("RESOLVE_TIMEOUT", view.catalogVersion(),
                         visibility.policyEpoch());
+            }
+            if (retrieval.capacityRejected()) {
+                outcome = "capacity_rejected";
+                return Resolution.error("RESOLVE_CAPACITY_EXCEEDED",
+                        view.catalogVersion(), visibility.policyEpoch());
             }
             List<CandidateRetriever.ScoredCapability> recalled = retrieval.results();
             if (recalled == null || recalled.isEmpty()) {
@@ -222,33 +271,76 @@ public final class AgentCapabilityResolver {
             ActiveCatalogView view,
             List<CapabilityManifest> authorized,
             long deadlineNanos) {
-        long remainingNanos = deadlineNanos - System.nanoTime();
-        if (remainingNanos <= 0) {
-            expired(deadlineNanos, "retrieval");
-            return RetrievalOutcome.timeout();
-        }
-        CompletableFuture<List<CandidateRetriever.ScoredCapability>> future =
-                CompletableFuture.supplyAsync(() -> candidateRetriever
-                        instanceof CatalogBoundCandidateRetriever boundRetriever
+        DeadlineCall<List<CandidateRetriever.ScoredCapability>> retrievalCall = callWithDeadline(
+                () -> candidateRetriever instanceof CatalogBoundCandidateRetriever boundRetriever
                         ? boundRetriever.retrieve(normalizedQuery, view, authorized,
                                 RECALL_CANDIDATES)
                         : candidateRetriever.retrieve(normalizedQuery, authorized,
-                                RECALL_CANDIDATES), resolveExecutor);
-        try {
-            return new RetrievalOutcome(
-                    future.get(remainingNanos, TimeUnit.NANOSECONDS), false);
-        } catch (TimeoutException e) {
-            future.cancel(true);
-            expired(deadlineNanos, "retrieval");
-            return RetrievalOutcome.timeout();
-        } catch (InterruptedException e) {
-            future.cancel(true);
-            Thread.currentThread().interrupt();
-            expired(deadlineNanos, "retrieval");
-            return RetrievalOutcome.timeout();
-        } catch (java.util.concurrent.ExecutionException e) {
-            return new RetrievalOutcome(List.of(), false);
+                                RECALL_CANDIDATES),
+                deadlineNanos, "retrieval");
+        if (retrievalCall.rejected()) {
+            return RetrievalOutcome.rejectedOutcome();
         }
+        if (retrievalCall.timedOut()) {
+            return RetrievalOutcome.timeout();
+        }
+        if (retrievalCall.failure() != null) {
+            return new RetrievalOutcome(List.of(), false, false);
+        }
+        return new RetrievalOutcome(retrievalCall.value(), false, false);
+    }
+
+    private <T> DeadlineCall<T> callWithDeadline(
+            Supplier<T> operation, long deadlineNanos, String phase) {
+        long remainingNanos = deadlineNanos - System.nanoTime();
+        if (remainingNanos <= 0) {
+            expired(deadlineNanos, phase);
+            return DeadlineCall.timeoutCall();
+        }
+        CompletableFuture<T> future;
+        try {
+            future = CompletableFuture.supplyAsync(operation, resolveExecutor);
+        } catch (RejectedExecutionException e) {
+            telemetry.increment("gateway.agent.resolve.admission",
+                    Map.of("outcome", "capacity_rejected"));
+            return DeadlineCall.rejectedCall();
+        }
+        try {
+            return DeadlineCall.completedCall(
+                    future.get(remainingNanos, TimeUnit.NANOSECONDS));
+        } catch (TimeoutException e) {
+            cancel(future);
+            expired(deadlineNanos, phase);
+            return DeadlineCall.timeoutCall();
+        } catch (InterruptedException e) {
+            cancel(future);
+            Thread.currentThread().interrupt();
+            expired(deadlineNanos, phase);
+            return DeadlineCall.timeoutCall();
+        } catch (java.util.concurrent.ExecutionException e) {
+            return DeadlineCall.failedCall(e.getCause());
+        }
+    }
+
+    private void cancel(CompletableFuture<?> future) {
+        future.cancel(true);
+        if (resolveExecutor instanceof java.util.concurrent.ThreadPoolExecutor executor) {
+            executor.purge();
+        }
+    }
+
+    private static RuntimeException propagate(Throwable failure) {
+        if (failure instanceof RuntimeException runtimeException) {
+            return runtimeException;
+        }
+        if (failure instanceof Error error) {
+            throw error;
+        }
+        return new IllegalStateException(failure);
+    }
+
+    public long newResolveDeadlineNanos() {
+        return deadlineAfter(resolveTimeoutNanos);
     }
 
     private boolean expired(long deadlineNanos, String phase) {
@@ -467,9 +559,36 @@ public final class AgentCapabilityResolver {
 
     private record RetrievalOutcome(
             List<CandidateRetriever.ScoredCapability> results,
-            boolean timedOut) {
+            boolean timedOut,
+            boolean capacityRejected) {
         private static RetrievalOutcome timeout() {
-            return new RetrievalOutcome(List.of(), true);
+            return new RetrievalOutcome(List.of(), true, false);
+        }
+
+        private static RetrievalOutcome rejectedOutcome() {
+            return new RetrievalOutcome(List.of(), false, true);
+        }
+    }
+
+    private record DeadlineCall<T>(
+            T value,
+            boolean timedOut,
+            boolean rejected,
+            Throwable failure) {
+        private static <T> DeadlineCall<T> completedCall(T value) {
+            return new DeadlineCall<>(value, false, false, null);
+        }
+
+        private static <T> DeadlineCall<T> timeoutCall() {
+            return new DeadlineCall<>(null, true, false, null);
+        }
+
+        private static <T> DeadlineCall<T> rejectedCall() {
+            return new DeadlineCall<>(null, false, true, null);
+        }
+
+        private static <T> DeadlineCall<T> failedCall(Throwable failure) {
+            return new DeadlineCall<>(null, false, false, failure);
         }
     }
 }

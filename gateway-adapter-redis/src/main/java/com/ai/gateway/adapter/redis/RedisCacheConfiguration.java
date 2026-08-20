@@ -18,20 +18,17 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Conditional Spring wiring for the Redis (Redisson) infrastructure
- * components.
+ * Redis（Redisson）基础设施组件的 Spring 条件装配。
  *
- * <p>Activated only when {@code gateway.cache.provider=redis}. When inactive,
- * the gateway falls back to the logging {@code SnapshotNotifier} stub and the
- * direct PostgreSQL {@code CatalogPort} — no Redis dependency at runtime.</p>
+ * <p>仅当 {@code gateway.cache.provider=redis} 时激活。未激活时，网关回退到日志桩
+ * {@code SnapshotNotifier} 与直连 PostgreSQL 的 {@code CatalogPort}——运行时不依赖 Redis。</p>
  *
- * <p>Provides the three milestone-M2 building blocks from the
- * tech-selection doc §4: the pub/sub {@link SnapshotNotifier}, the
- * after-commit {@link CatalogPort} cache decorator (Redis L2 + Caffeine L1),
- * and the {@link SnapshotCacheListener} that hot-reloads snapshots on
- * notification. The same {@link RedissonClient} is reused by milestone M4
- * (distributed locks).</p>
+ * <p>提供技术选型文档 §4 中里程碑 M2 的三个构建块：pub/sub {@link SnapshotNotifier}、
+ * 提交后（after-commit）的 {@link CatalogPort} 缓存装饰器（Redis L2 + Caffeine L1），
+ * 以及收到通知时热加载快照的 {@link SnapshotCacheListener}。同一 {@link RedissonClient}
+ * 由里程碑 M4（分布式锁）复用。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Configuration
@@ -40,13 +37,12 @@ import org.springframework.context.annotation.Primary;
 public class RedisCacheConfiguration {
 
     /**
-     * Creates the shared {@link RedissonClient} using programmatic
-     * single-server configuration (no Spring Boot starter).
+     * 使用编程式单服务器配置创建共享的 {@link RedissonClient}（不引入 Spring Boot starter）。
      *
-     * @param address the Redis address (e.g., {@code redis://127.0.0.1:6379})
-     * @param password the Redis password (empty for none)
-     * @param database the Redis database index
-     * @return the Redisson client
+     * @param address Redis 地址（例如 {@code redis://127.0.0.1:6379}）
+     * @param password Redis 密码（无密码则留空）
+     * @param database Redis 数据库索引
+     * @return Redisson 客户端
      */
     @Bean(destroyMethod = "shutdown")
     public RedissonClient redissonClient(RedisGatewayProperties properties) {
@@ -62,9 +58,9 @@ public class RedisCacheConfiguration {
     }
 
     /**
-     * ObjectMapper for snapshot JSON serialization into Redis String values.
+     * 用于将快照序列化为 Redis 字符串值的 ObjectMapper。
      *
-     * @return a lenient object mapper
+     * @return 宽松模式的 object mapper
      */
     @Bean
     public ObjectMapper redisSnapshotObjectMapper() {
@@ -73,10 +69,10 @@ public class RedisCacheConfiguration {
     }
 
     /**
-     * The pub/sub {@link SnapshotNotifier}.
+     * pub/sub 形式的 {@link SnapshotNotifier}。
      *
-     * @param redissonClient the Redisson client
-     * @return the Redis-backed snapshot notifier
+     * @param redissonClient Redisson 客户端
+     * @return 基于 Redis 的快照通知器
      */
     @Bean
     public SnapshotNotifier snapshotNotifier(RedissonClient redissonClient) {
@@ -84,14 +80,13 @@ public class RedisCacheConfiguration {
     }
 
     /**
-     * The after-commit {@link CatalogPort} cache decorator wrapping the
-     * PostgreSQL catalog port.
+     * 包裹 PostgreSQL 目录端口、在事务提交后生效的 {@link CatalogPort} 缓存装饰器。
      *
-     * @param postgresCatalogPort the PostgreSQL catalog port (qualified)
-     * @param redissonClient the Redisson client
-     * @param redisSnapshotObjectMapper the snapshot object mapper
-     * @param localTtlSeconds the Caffeine L1 TTL in seconds
-     * @return the caching catalog port decorator
+     * @param postgresCatalogPort PostgreSQL 目录端口（限定名）
+     * @param redissonClient Redisson 客户端
+     * @param redisSnapshotObjectMapper 快照 object mapper
+     * @param localTtlSeconds Caffeine L1 的 TTL（秒）
+     * @return 带缓存的目录端口装饰器
      */
     @Bean
     @Primary
@@ -106,13 +101,12 @@ public class RedisCacheConfiguration {
     }
 
     /**
-     * The pub/sub listener that hot-reloads the in-memory snapshot and
-     * rebuilds the retrieval index on notification.
+     * 在收到通知时热加载内存快照并重建检索引擎的 pub/sub 监听器。
      *
-     * @param redissonClient the Redisson client
-     * @param catalogManager the in-memory catalog manager
-     * @param environment the environment this instance serves
-     * @return the snapshot cache listener
+     * @param redissonClient Redisson 客户端
+     * @param catalogManager 内存目录管理器
+     * @param environment 本实例所服务的环境
+     * @return 快照缓存监听器
      */
     @Bean
     public SnapshotCacheListener snapshotCacheListener(
@@ -124,11 +118,10 @@ public class RedisCacheConfiguration {
     }
 
     /**
-     * The Redisson {@code RLock}-backed {@link DistributedLockPort}
-     * (milestone M4).
+     * 基于 Redisson {@code RLock} 的 {@link DistributedLockPort}（里程碑 M4）。
      *
-     * @param redissonClient the Redisson client
-     * @return the distributed lock adapter
+     * @param redissonClient Redisson 客户端
+     * @return 分布式锁适配器
      */
     @Bean
     public DistributedLockPort distributedLockPort(RedissonClient redissonClient) {

@@ -10,7 +10,15 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Adds the admin contract envelope while preserving legacy top-level fields. */
+/**
+ * 为响应追加管理后台契约信封，同时保留旧版顶层字段。
+ *
+ * <p>将传统 Map 响应包装为 {@code {status, data, error}} 结构，并尽量保留原有的
+ * 业务字段以兼容既有客户端。</p>
+ *
+ * @author cmiracle@163.com
+ * @since 0.1.0
+ */
 @ControllerAdvice
 public final class AdminResponseEnvelopeAdvice implements ResponseBodyAdvice<Object> {
 
@@ -43,7 +51,7 @@ public final class AdminResponseEnvelopeAdvice implements ResponseBodyAdvice<Obj
         envelope.put("status", errorStatus ? "ERROR" : "OK");
         envelope.put("data", payload);
         envelope.put("error", errorStatus ? structuredError(legacy) : null);
-        // Preserve non-reserved legacy business fields for existing clients.
+        // 保留非保留的旧版业务字段，以兼容既有客户端。
         payload.forEach(envelope::putIfAbsent);
         return envelope;
     }

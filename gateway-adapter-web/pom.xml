@@ -28,11 +28,9 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
-        <!-- Java 8 time types (java.time.Instant, etc.) must serialize over the
-             HTTP API. Spring Boot auto-registers JavaTimeModule only when this
-             artifact is on the classpath; declaring it explicitly keeps the
-             mapping deterministic across builds. Version is managed by the Spring
-             Boot BOM imported in the parent POM. -->
+        <!-- Java 8 时间类型（java.time.Instant 等）需要能够通过 HTTP API 序列化。
+             Spring Boot 仅当该依赖存在于 classpath 时才会自动注册 JavaTimeModule，
+             显式声明可保证各次构建的映射结果一致。版本由父 POM 引入的 Spring Boot BOM 管理。 -->
         <dependency>
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>

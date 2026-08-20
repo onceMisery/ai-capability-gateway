@@ -9,6 +9,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * {@link RedisGatewayProperties} 的绑定测试，验证在不依赖默认值回退的情况下完整绑定 Redis 配置。
+ *
+ * @author cmiracle@163.com
+ */
 class RedisGatewayPropertiesTest {
 
     @Test

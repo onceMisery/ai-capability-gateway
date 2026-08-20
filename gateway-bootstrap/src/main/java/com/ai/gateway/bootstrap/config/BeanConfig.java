@@ -111,8 +111,11 @@ import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Manual bean assembly for the AI Capability Gateway.
@@ -693,14 +696,26 @@ public class BeanConfig {
 
     @Bean(name = "agentResolveExecutor", destroyMethod = "shutdown")
     public ExecutorService agentResolveExecutor(GatewayProperties gatewayProperties) {
-        int configured = gatewayProperties.getAgent().getResolveMaxConcurrent();
+        GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        int configured = agent.getResolveMaxConcurrent();
         int threads = Math.max(1, Math.min(configured,
                 Runtime.getRuntime().availableProcessors() * 2));
-        return Executors.newFixedThreadPool(threads, runnable -> {
-            Thread thread = new Thread(runnable, "gateway-agent-resolve");
-            thread.setDaemon(true);
-            return thread;
-        });
+        int queueCapacity = agent.getResolveMaxQueue();
+        if (queueCapacity <= 0) {
+            throw new IllegalArgumentException("resolveMaxQueue must be positive");
+        }
+        return new ThreadPoolExecutor(
+                threads,
+                threads,
+                0L,
+                TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(queueCapacity),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "gateway-agent-resolve");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
     @Bean

@@ -8,8 +8,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ai.gateway.adapter.web.GatewayWebProperties;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -17,34 +15,30 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * Servlet filter that rejects requests exceeding a configurable maximum
- * size.
+ * 拒绝超过可配置最大体积的请求的 Servlet 过滤器。
  *
- * <p>The default maximum request size is 64 KiB (65536 bytes), which is
- * sufficient for natural-language queries and write-operation confirmations.
- * Requests larger than the configured limit receive HTTP 413 Payload Too
- * Large.</p>
+ * <p>默认最大请求体积为 64 KiB（65536 字节），足以容纳自然语言查询与写操作确认。
+ * 超过配置上限的请求将收到 HTTP 413 Payload Too Large。</p>
  *
- * <p>The filter wraps the request in a size-checking wrapper that counts
- * bytes as they are read. If the content length is declared in the
- * {@code Content-Length} header and exceeds the limit, the request is
- * rejected immediately without reading the body.</p>
+ * <p>该过滤器将请求包装为体积检测包装器，在读取时逐字节计数。若
+ * {@code Content-Length} 头中声明的体积超过上限，则无需读取请求体即可立即拒绝。</p>
  *
- * <p>This filter runs with high priority (before other filters) to ensure
- * that oversized requests are rejected as early as possible in the
- * processing pipeline.</p>
+ * <p>该过滤器以高优先级运行（位于其他过滤器之前），以确保超体积请求在
+ * 处理管道中尽早被拒绝。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE + 1)
+@Slf4j
 public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
 
-    private static final Logger log = LoggerFactory.getLogger(RequestSizeLimitFilter.class);
-
     /**
-     * The default maximum request size in bytes (64 KiB).
+     * 默认最大请求体积（单位：字节，即 64 KiB）。
      */
     public static final int DEFAULT_MAX_REQUEST_SIZE = 64 * 1024;
 
@@ -52,11 +46,10 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     /**
-     * Constructs a new RequestSizeLimitFilter.
+     * 构造新的 RequestSizeLimitFilter。
      *
-     * @param maxRequestSize the maximum allowed request size in bytes;
-     * defaults to {@value #DEFAULT_MAX_REQUEST_SIZE}
-     * if not configured or non-positive
+     * @param maxRequestSize 允许的最大请求体积（单位：字节）；
+     * 若未配置或为非正数，则回退为 {@value #DEFAULT_MAX_REQUEST_SIZE}
      */
     @Autowired
     public RequestSizeLimitFilter(GatewayWebProperties properties) {
@@ -79,14 +72,14 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
             return;
         }
 
-        // Fast path: check Content-Length header if present
+        // 快速路径：若提供了 Content-Length 头则直接校验
         int contentLength = httpRequest.getContentLength();
         if (contentLength > maxRequestSize) {
             rejectRequest(httpResponse, contentLength);
             return;
         }
 
-        // Wrap the request to monitor actual bytes read
+        // 包装请求以监控实际读取的字节数
         SizeLimitedHttpServletRequestWrapper wrappedRequest =
                 new SizeLimitedHttpServletRequestWrapper(httpRequest, maxRequestSize);
 
@@ -98,11 +91,11 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
     }
 
     /**
-     * Rejects the request with HTTP 413 Payload Too Large.
+     * 以 HTTP 413 Payload Too Large 拒绝请求。
      *
-     * @param response the HTTP response
-     * @param actualSize the actual or declared request size
-     * @throws IOException if writing the response fails
+     * @param response HTTP 响应
+     * @param actualSize 实际或声明声明的请求体积
+     * @throws IOException 写入响应失败时抛出
      */
     private void rejectRequest(HttpServletResponse response, int actualSize)
             throws IOException {
@@ -118,7 +111,7 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
     }
 
     /**
-     * Exception thrown when the actual request body exceeds the maximum size.
+     * 当实际请求体超过最大体积时抛出的异常。
      */
     static class RequestTooLargeException extends RuntimeException {
 

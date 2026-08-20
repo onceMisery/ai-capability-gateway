@@ -240,6 +240,7 @@ public class GatewayProperties {
         private int pendingConfirmationMaxEntries = 10_000;
         private int turnMaxEntries = 10_000;
         private int resolveMaxConcurrent = 64;
+        private int resolveMaxQueue = 64;
         private int catalogMaxCapabilities = 10_000;
         private long catalogMaxIndexBytes = 67_108_864L;
         private long catalogMaxProcessMemoryBytes = 536_870_912L;

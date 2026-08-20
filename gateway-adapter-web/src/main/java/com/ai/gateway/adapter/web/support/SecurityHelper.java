@@ -7,21 +7,21 @@ import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import jakarta.servlet.http.HttpServletRequest;
 import com.ai.gateway.adapter.web.filter.AdminAuthenticationFilter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.RequestAttributes;
 
 import java.util.Map;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * 管理安全管理器，提供 Principal 提取和 authorizeAdmin 门禁检查
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public final class SecurityHelper {
-
-    private static final Logger log = LoggerFactory.getLogger(SecurityHelper.class);
 
     private SecurityHelper() {
         // utility class

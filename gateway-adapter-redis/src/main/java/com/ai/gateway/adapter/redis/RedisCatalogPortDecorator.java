@@ -10,8 +10,7 @@ import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.redisson.api.RBucket;
 import org.redisson.api.RedissonClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
@@ -21,25 +20,21 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Redis caching decorator for {@link CatalogPort}.
+ * {@link CatalogPort} 的 Redis 缓存装饰器。
  *
- * <p>Implements the two-level cache described in the tech-selection doc §4:
- * a local Caffeine L1 (short TTL) in front of a Redis L2, with PostgreSQL as
- * the source of truth. Reads of the current snapshot consult L1, then L2,
- * then fall back to PostgreSQL and back-fill the caches. Snapshot writes do
- * not touch Redis until the publication transaction has committed.</p>
+ * <p>实现技术选型文档 §4 所述的两级缓存：本地 Caffeine L1（短 TTL）前置 Redis L2，
+ * 以 PostgreSQL 作为唯一事实来源。读取当前快照时依次查询 L1、L2，再回退到 PostgreSQL 并回填缓存。
+ * 快照写入在发布事务提交前不会写入 Redis。</p>
  *
- * <p>Historical snapshot reads and capability lookups are delegated straight
- * to PostgreSQL — only the hot {@code loadCurrentSnapshot} path is cached.
- * On any Redis failure the decorator degrades gracefully to PostgreSQL so a
- * cache outage never breaks the gateway.</p>
+ * <p>历史快照读取与能力查找直接委派给 PostgreSQL——仅对热点路径 {@code loadCurrentSnapshot} 做缓存。
+ * 任意 Redis 故障都会优雅降级到 PostgreSQL，确保缓存故障不会中断网关。</p>
  *
+ * @author cmiracle@163.com
  * @see CatalogPort
  * @since 0.1.0
  */
+@Slf4j
 public class RedisCatalogPortDecorator implements CatalogPort {
-
-    private static final Logger log = LoggerFactory.getLogger(RedisCatalogPortDecorator.class);
 
     private final CatalogPort delegate;
     private final RedissonClient redissonClient;
@@ -47,13 +42,13 @@ public class RedisCatalogPortDecorator implements CatalogPort {
     private final Cache<String, CatalogSnapshot> localCache;
 
     /**
-     * Constructs a new decorator.
+     * 构造新的装饰器。
      *
-     * @param delegate the underlying (PostgreSQL) catalog port
-     * @param redissonClient the Redisson client for the L2 cache
-     * @param objectMapper the mapper used to serialize snapshots to JSON
-     * @param localTtlSeconds the Caffeine L1 time-to-live in seconds
-     * @throws NullPointerException if any argument is null
+     * @param delegate 底层（PostgreSQL）目录端口
+     * @param redissonClient 用于 L2 缓存的 Redisson 客户端
+     * @param objectMapper 将快照序列化为 JSON 的映射器
+     * @param localTtlSeconds Caffeine L1 的存活时间（秒）
+     * @throws NullPointerException 任意参数为 {@code null} 时抛出
      */
     public RedisCatalogPortDecorator(CatalogPort delegate,
                                      RedissonClient redissonClient,
@@ -78,13 +73,13 @@ public class RedisCatalogPortDecorator implements CatalogPort {
     public CatalogSnapshot loadCurrentSnapshot(String environment) {
         Objects.requireNonNull(environment, "environment must not be null");
 
-        // L1: local Caffeine
+        // L1：本地 Caffeine
         CatalogSnapshot cached = localCache.getIfPresent(environment);
         if (cached != null) {
             return cached;
         }
 
-        // L2: Redis
+        // L2：Redis
         try {
             RBucket<String> bucket = redissonClient.getBucket(RedisKeys.snapshotLatest(environment));
             String json = bucket.get();
@@ -98,7 +93,7 @@ public class RedisCatalogPortDecorator implements CatalogPort {
                     e.getMessage());
         }
 
-        // Source of truth: PostgreSQL, then back-fill L2 + L1
+        // 事实来源：PostgreSQL，随后回填 L2 + L1
         CatalogSnapshot snapshot = delegate.loadCurrentSnapshot(environment);
         if (snapshot != null && snapshot.snapshotVersion() > 0) {
             try {
@@ -115,7 +110,7 @@ public class RedisCatalogPortDecorator implements CatalogPort {
 
     @Override
     public CatalogSnapshot loadSnapshot(long snapshotVersion) {
-        // Historical snapshots are not cached; delegate to PostgreSQL.
+        // 历史快照不缓存，直接委派给 PostgreSQL
         return delegate.loadSnapshot(snapshotVersion);
     }
 
@@ -126,26 +121,24 @@ public class RedisCatalogPortDecorator implements CatalogPort {
 
     @Override
     public List<SnapshotSummary> listSnapshots(String environment, int limit) {
-        // Historical snapshot summaries are not cached; delegate to PostgreSQL.
+        // 历史快照摘要不缓存，直接委派给 PostgreSQL
         return delegate.listSnapshots(environment, limit);
     }
 
     @Override
     public void saveSnapshot(CatalogSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");
-        // Do not write Redis before the surrounding database transaction commits.
-        // The publication event schedules the after-commit cache update.
+        // 在外部数据库事务提交之前不要写入 Redis。发布事件会安排提交后的缓存更新。
         delegate.saveSnapshot(snapshot);
         localCache.invalidate(snapshot.environment());
     }
 
     /**
-     * Invalidates both cache levels for the given environment.
+     * 使给定环境的各级缓存全部失效。
      *
-     * <p>Invoked when a pub/sub notification signals that the cached snapshot
-     * may be stale.</p>
+     * <p>当 pub/sub 通知表明缓存快照可能已过期时调用。</p>
      *
-     * @param environment the environment whose cached snapshot is invalidated
+     * @param environment 待失效缓存所属的环境
      */
     public void invalidate(String environment) {
         localCache.invalidate(environment);

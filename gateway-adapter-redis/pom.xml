@@ -22,26 +22,25 @@
             <artifactId>gateway-application</artifactId>
         </dependency>
 
-        <!-- Redisson client (programmatic config, no Spring Boot starter to
-             avoid auto-configuration intrusion). -->
+        <!-- Redisson 客户端（采用编程式配置，不引入 Spring Boot starter 以避免自动配置入侵）。 -->
         <dependency>
             <groupId>org.redisson</groupId>
             <artifactId>redisson</artifactId>
         </dependency>
 
-        <!-- Caffeine local L1 cache. -->
+        <!-- Caffeine 本地 L1 缓存。 -->
         <dependency>
             <groupId>com.github.ben-manes.caffeine</groupId>
             <artifactId>caffeine</artifactId>
         </dependency>
 
-        <!-- Jackson for snapshot JSON serialization into Redis String values. -->
+        <!-- Jackson 用于将快照序列化为 Redis 字符串值。 -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
 
-        <!-- Spring context for @Configuration/@Bean conditional wiring. -->
+        <!-- Spring context 用于 @Configuration/@Bean 条件装配。 -->
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
@@ -51,7 +50,7 @@
             <artifactId>spring-tx</artifactId>
         </dependency>
 
-        <!-- Spring Boot autoconfigure for @ConditionalOnProperty wiring. -->
+        <!-- Spring Boot 自动配置，用于 @ConditionalOnProperty 装配。 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
@@ -60,6 +59,11 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
 
         <!-- Test -->

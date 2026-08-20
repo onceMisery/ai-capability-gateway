@@ -24,11 +24,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link RedisCatalogPortDecorator}.
+ * {@link RedisCatalogPortDecorator} 的单元测试。
  *
- * <p>Verifies the two-level cache behavior (Caffeine L1 + Redis L2 +
- * PostgreSQL source of truth) using a mocked Redisson client, so no running
- * Redis is required.</p>
+ * <p>使用 mock 的 Redisson 客户端验证两级缓存行为（Caffeine L1 + Redis L2 +
+ * PostgreSQL 事实来源），因此无需运行中的 Redis。</p>
+ *
+ * @author cmiracle@163.com
  */
 class RedisCatalogPortDecoratorTest {
 
@@ -91,7 +92,7 @@ class RedisCatalogPortDecoratorTest {
         CatalogSnapshot second = decorator.loadCurrentSnapshot(ENV);
 
         assertThat(second.snapshotVersion()).isEqualTo(3);
-        // PostgreSQL hit only once; the second call is served from L1.
+        // PostgreSQL 仅命中一次；第二次调用由 L1 提供
         verify(delegate, times(1)).loadCurrentSnapshot(ENV);
     }
 
@@ -164,7 +165,7 @@ class RedisCatalogPortDecoratorTest {
         decorator.invalidate(ENV);
         decorator.loadCurrentSnapshot(ENV);
 
-        // After invalidation the PostgreSQL source is consulted again.
+        // 失效后再次回源查询 PostgreSQL
         verify(delegate, times(2)).loadCurrentSnapshot(ENV);
         verify(bucket, times(1)).delete();
     }

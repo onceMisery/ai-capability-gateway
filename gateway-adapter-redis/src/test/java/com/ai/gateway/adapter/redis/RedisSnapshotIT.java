@@ -25,6 +25,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 基于 Testcontainers 的 Redis 快照集成测试，验证 pub/sub 推送已发布快照版本，以及第二实例
+ * 在无需 PostgreSQL 的情况下通过缓存读写穿透快照。
+ *
+ * @author cmiracle@163.com
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class RedisSnapshotIT {
 

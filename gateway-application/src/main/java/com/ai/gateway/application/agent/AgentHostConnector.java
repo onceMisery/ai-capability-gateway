@@ -103,11 +103,13 @@ public final class AgentHostConnector {
             return ResolveResult.error("RESOLVE_CAPACITY_EXCEEDED");
         }
         try (permit) {
+            long deadlineNanos = resolver.newResolveDeadlineNanos();
             Principal principal = authenticate(requestContext);
             if (principal == null) {
                 return ResolveResult.error("AUTHENTICATION_FAILED");
             }
-            AgentCapabilityResolver.Resolution resolution = resolver.resolve(principal, query, topK);
+            AgentCapabilityResolver.Resolution resolution = resolver.resolve(
+                    principal, query, topK, deadlineNanos);
             if (resolution.status() == AgentCapabilityResolver.Status.RESOLVED
                     && !resolution.candidates().isEmpty()) {
                 AgentTurnState state = AgentTurnState.from(agentTurnId, requestId, resolution);

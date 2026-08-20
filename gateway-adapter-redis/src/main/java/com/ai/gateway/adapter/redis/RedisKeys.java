@@ -1,12 +1,12 @@
 package com.ai.gateway.adapter.redis;
 
 /**
- * Redis key-space conventions for the gateway infrastructure components.
+ * 网关基础设施组件的 Redis 键空间约定。
  *
- * <p>Centralizes the key and channel names so the snapshot cache, the
- * pub/sub notification channel, and (later) the distributed lock share a
- * consistent namespace, per the tech-selection doc §4.5.</p>
+ * <p>集中管理键与频道名称，使快照缓存、pub/sub 通知频道以及（后续）分布式锁共享一致的
+ * 命名空间 。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public final class RedisKeys {

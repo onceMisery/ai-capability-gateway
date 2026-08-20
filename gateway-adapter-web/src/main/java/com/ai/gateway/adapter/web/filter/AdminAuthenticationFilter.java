@@ -19,7 +19,14 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
 
-/** Enforces authentication and admin authorization for every admin API. */
+/**
+ * 对每个管理 API 强制执行身份认证与管理员授权。
+ *
+ * <p>在请求进入控制器之前校验调用方身份与权限，未通过则直接返回错误信封。</p>
+ *
+ * @author cmiracle@163.com
+ * @since 0.1.0
+ */
 @Order(Ordered.HIGHEST_PRECEDENCE + 20)
 public class AdminAuthenticationFilter extends OncePerRequestFilter {
 

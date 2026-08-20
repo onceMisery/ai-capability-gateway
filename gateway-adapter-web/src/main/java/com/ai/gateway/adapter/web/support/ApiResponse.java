@@ -7,18 +7,19 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Unified API response envelope for the admin console.
+ * 管理后台统一的 API 响应信封。
  *
- * <p>All responses follow the contract {@code {status, data, error}} where:
+ * <p>所有响应均遵循 {@code {status, data, error}} 契约：</p>
  * <ul>
- *   <li>{@code status} is {@code "OK"} for success or {@code "ERROR"} for failure.</li>
- *   <li>{@code data} carries the successful payload (absent on error).</li>
- *   <li>{@code error} carries {@code {errorCode, message}} (absent on success).</li>
+ *   <li>{@code status} 成功为 {@code "OK"}，失败为 {@code "ERROR"}。</li>
+ *   <li>{@code data} 携带成功的业务数据（失败时不存在）。</li>
+ *   <li>{@code error} 携带 {@code {errorCode, message}}（成功时不存在）。</li>
  * </ul>
  *
- * <p>Error codes follow the spec taxonomy (AUTHENTICATION_FAILED,
- * PERMISSION_DENIED, ARGUMENT_VALIDATION_FAILED, etc.).</p>
+ * <p>错误码遵循规范中的分类（AUTHENTICATION_FAILED、PERMISSION_DENIED、
+ * ARGUMENT_VALIDATION_FAILED 等）。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public final class ApiResponse {
@@ -28,10 +29,10 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a successful response with status 200.
+     * 创建状态码为 200 的成功响应。
      *
-     * @param data the response payload
-     * @return 200 OK with {@code {status: "OK", data: ...}}
+     * @param data 响应载荷
+     * @return 200 OK，响应体为 {@code {status: "OK", data: ...}}
      */
     public static ResponseEntity<Map<String, Object>> ok(Object data) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -41,11 +42,11 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a successful response with a custom HTTP status.
+     * 创建带自定义 HTTP 状态码的成功响应。
      *
-     * @param data   the response payload
-     * @param status the HTTP status
-     * @return response with {@code {status: "OK", data: ...}}
+     * @param data   响应载荷
+     * @param status HTTP 状态码
+     * @return 响应体为 {@code {status: "OK", data: ...}}
      */
     public static ResponseEntity<Map<String, Object>> ok(Object data, HttpStatus status) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -55,12 +56,12 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates an error response with the given error code and message.
+     * 使用给定错误码与消息创建错误响应。
      *
-     * @param errorCode the stable error code (e.g., AUTHENTICATION_FAILED)
-     * @param message   the user-facing error message (no internals)
-     * @param status    the HTTP status
-     * @return response with {@code {status: "ERROR", error: {errorCode, message}}}
+     * @param errorCode 稳定的错误码（如 AUTHENTICATION_FAILED）
+     * @param message   面向用户的错误消息（不含内部信息）
+     * @param status    HTTP 状态码
+     * @return 响应体为 {@code {status: "ERROR", error: {errorCode, message}}}
      */
     public static ResponseEntity<Map<String, Object>> error(
             String errorCode, String message, HttpStatus status) {
@@ -74,9 +75,9 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a 400 Bad Request error.
+     * 创建 400 Bad Request 错误响应。
      *
-     * @param message the user-facing error message
+     * @param message 面向用户的错误消息
      * @return 400 BAD REQUEST
      */
     public static ResponseEntity<Map<String, Object>> badRequest(String message) {
@@ -84,9 +85,9 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a 401 Unauthorized error.
+     * 创建 401 Unauthorized 错误响应。
      *
-     * @param message the user-facing error message
+     * @param message 面向用户的错误消息
      * @return 401 UNAUTHORIZED
      */
     public static ResponseEntity<Map<String, Object>> unauthorized(String message) {
@@ -94,9 +95,9 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a 403 Forbidden error.
+     * 创建 403 Forbidden 错误响应。
      *
-     * @param message the user-facing error message
+     * @param message 面向用户的错误消息
      * @return 403 FORBIDDEN
      */
     public static ResponseEntity<Map<String, Object>> forbidden(String message) {
@@ -104,9 +105,9 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a 404 Not Found error.
+     * 创建 404 Not Found 错误响应。
      *
-     * @param message the user-facing error message
+     * @param message 面向用户的错误消息
      * @return 404 NOT FOUND
      */
     public static ResponseEntity<Map<String, Object>> notFound(String message) {
@@ -114,9 +115,9 @@ public final class ApiResponse {
     }
 
     /**
-     * Creates a 409 Conflict error.
+     * 创建 409 Conflict 错误响应。
      *
-     * @param message the user-facing error message
+     * @param message 面向用户的错误消息
      * @return 409 CONFLICT
      */
     public static ResponseEntity<Map<String, Object>> conflict(String message) {
@@ -124,7 +125,7 @@ public final class ApiResponse {
     }
 
     /**
-     * Sanitizes an error message for external exposure.
+     * 对外暴露前清理错误消息中的内部信息。
      */
     private static String sanitizeMessage(String message) {
         if (message == null) {

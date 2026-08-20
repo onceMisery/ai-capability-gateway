@@ -3,39 +3,34 @@ package com.ai.gateway.adapter.redis;
 import com.ai.gateway.domain.port.DistributedLockPort;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Redisson {@code RLock} implementation of {@link DistributedLockPort}.
+ * {@link DistributedLockPort} 基于 Redisson {@code RLock} 的实现。
  *
- * <p>Wraps Redisson's reentrant distributed lock, which provides automatic
- * lease renewal (watchdog) when no explicit lease time is given. Lock names
- * are prefixed with {@code gateway:lock:} to keep them in the gateway
- * key-space.</p>
+ * <p>封装 Redisson 的可重入分布式锁，未指定显式租约时间时提供自动续租（watchdog）。锁名统一
+ * 以 {@code gateway:lock:} 为前缀，归入网关键空间。</p>
  *
- * <p>This is the milestone-M4 building block from the tech-selection doc §7,
- * reusing the shared {@link RedissonClient} introduced in milestone M2.</p>
  *
+ * @author cmiracle@163.com
  * @see DistributedLockPort
  * @since 0.1.0
  */
+@Slf4j
 public class RedissonDistributedLockAdapter implements DistributedLockPort {
-
-    private static final Logger log = LoggerFactory.getLogger(RedissonDistributedLockAdapter.class);
 
     private static final String LOCK_PREFIX = "gateway:lock:";
 
     private final RedissonClient redissonClient;
 
     /**
-     * Constructs a new adapter.
+     * 构造新的适配器。
      *
-     * @param redissonClient the Redisson client; never {@code null}
-     * @throws NullPointerException if {@code redissonClient} is null
+     * @param redissonClient Redisson 客户端，不可为 {@code null}
+     * @throws NullPointerException 当 {@code redissonClient} 为 {@code null} 时抛出
      */
     public RedissonDistributedLockAdapter(RedissonClient redissonClient) {
         this.redissonClient = Objects.requireNonNull(redissonClient,

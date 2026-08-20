@@ -43,8 +43,9 @@ class GatewayPropertiesBindingTest {
                  Map.entry("gateway.agent.tool-ref-secret", "agent-secret"),
                  Map.entry("gateway.agent.tool-ref-ttl-seconds", "90"),
                  Map.entry("gateway.agent.resolve-timeout-ms", "75"),
-                 Map.entry("gateway.agent.pending-confirmation-max-entries", "2000"),
+                Map.entry("gateway.agent.pending-confirmation-max-entries", "2000"),
                 Map.entry("gateway.agent.resolve-max-concurrent", "24"),
+                Map.entry("gateway.agent.resolve-max-queue", "48"),
                 Map.entry("gateway.agent.catalog-max-capabilities", "5000"),
                 Map.entry("gateway.agent.catalog-max-index-bytes", "33554432"),
                 Map.entry("gateway.agent.catalog-max-process-memory-bytes", "268435456"),
@@ -87,6 +88,7 @@ class GatewayPropertiesBindingTest {
         assertThat(properties.getAgent().getResolveTimeoutMs()).isEqualTo(75L);
         assertThat(properties.getAgent().getPendingConfirmationMaxEntries()).isEqualTo(2000);
         assertThat(properties.getAgent().getResolveMaxConcurrent()).isEqualTo(24);
+        assertThat(properties.getAgent().getResolveMaxQueue()).isEqualTo(48);
         assertThat(properties.getAgent().getCatalogMaxCapabilities()).isEqualTo(5000);
         assertThat(properties.getAgent().getCatalogMaxIndexBytes()).isEqualTo(33_554_432L);
         assertThat(properties.getAgent().getCatalogMaxProcessMemoryBytes()).isEqualTo(268_435_456L);

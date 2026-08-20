@@ -4,32 +4,27 @@ import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import org.redisson.api.RTopic;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.listener.MessageListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.InitializingBean;
 
 import java.util.Objects;
 
 /**
- * Subscribes to the Redis snapshot pub/sub channels and hot-reloads the
- * in-memory catalog on notification.
+ * 订阅 Redis 快照 pub/sub 频道，并在收到通知时热加载内存目录。
  *
- * <p>On a "snapshot published" message this listener re-runs the same
- * activation sequence used at startup: it asks the {@link InMemoryCatalogManager}
- * to load and activate the latest snapshot (via the injected
- * {@code CatalogPort}, which is the Redis decorator when caching is enabled)
- * and rebuilds the BM25 retrieval index. This delivers the multi-instance
- * eventual consistency described in the tech-selection doc §4: publish once,
- * every instance converges within seconds.</p>
+ * <p>收到“快照已发布”消息后，该监听器重新执行与启动相同的激活流程：请求
+ * {@link InMemoryCatalogManager} 加载并激活最新快照（经由注入的 {@code CatalogPort}，
+ * 启用缓存时即 Redis 装饰器），并重建 BM25 检索引擎。由此实现技术选型文档 §4 所述的多实例
+ * 最终一致性：发布一次，各实例在数秒内收敛。</p>
  *
+ * @author cmiracle@163.com
  * @see RedisSnapshotNotifier
  * @see RedisCatalogPortDecorator
  * @since 0.1.0
  */
+@Slf4j
 public class SnapshotCacheListener implements InitializingBean, DisposableBean {
-
-    private static final Logger log = LoggerFactory.getLogger(SnapshotCacheListener.class);
 
     private final RedissonClient redissonClient;
     private final InMemoryCatalogManager catalogManager;
@@ -39,12 +34,12 @@ public class SnapshotCacheListener implements InitializingBean, DisposableBean {
     private volatile int suspendedListenerId;
 
     /**
-     * Constructs a new listener.
+     * 构造新的监听器。
      *
-     * @param redissonClient the Redisson client providing the topics
-     * @param catalogManager the in-memory catalog manager (L1) to refresh
-     * @param environment the environment this instance serves
-     * @throws NullPointerException if any argument is null
+     * @param redissonClient 提供频道的 Redisson 客户端
+     * @param catalogManager 待刷新的内存目录管理器（L1）
+     * @param environment 本实例所服务的环境
+     * @throws NullPointerException 任意参数为 {@code null} 时抛出
      */
     public SnapshotCacheListener(RedissonClient redissonClient,
                                  InMemoryCatalogManager catalogManager,

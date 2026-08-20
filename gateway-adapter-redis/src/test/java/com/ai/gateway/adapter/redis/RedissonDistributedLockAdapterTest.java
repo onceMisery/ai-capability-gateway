@@ -20,11 +20,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
- * Unit tests for {@link RedissonDistributedLockAdapter}.
+ * {@link RedissonDistributedLockAdapter} 的单元测试。
  *
- * <p>Verifies lock acquisition/release delegation to Redisson's
- * {@code RLock} using a mocked client (no running Redis required), including
- * the {@code withLock} template behavior.</p>
+ * <p>使用 mock 的 Redisson 客户端（无需运行中的 Redis）验证锁获取/释放对 Redisson
+ * {@code RLock} 的委派，包括 {@code withLock} 模板行为。</p>
+ *
+ * @author cmiracle@163.com
  */
 class RedissonDistributedLockAdapterTest {
 

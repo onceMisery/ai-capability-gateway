@@ -11,26 +11,24 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Builds a framework-agnostic {@link RequestContext} from a Servlet
- * {@link HttpServletRequest}.
+ * 从 Servlet {@link HttpServletRequest} 构建与框架无关的 {@link RequestContext}。
  *
- * <p>This is the single place where the web layer adapts the Servlet API to
- * the Domain layer's request abstraction, keeping {@code gateway-domain}
- * free of any {@code jakarta.servlet} dependency. The produced context
- * carries headers, cookies, query parameters, and the client remote address
- * — exactly the inputs an {@code AuthenticationPort} implementation needs to
- * resolve the caller identity.</p>
+ * <p>这是 Web 层将 Servlet API 适配到 Domain 层请求抽象的唯一位置，使
+ * {@code gateway-domain} 不依赖任何 {@code jakarta.servlet}。构建出的上下文
+ * 携带请求头、Cookie、查询参数以及客户端远程地址——恰好是一个
+ * {@code AuthenticationPort} 实现解析调用方身份所需的全部输入。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
 public class RequestContextFactory {
 
     /**
-     * Creates a {@link RequestContext} from the given servlet request.
+     * 从给定的 Servlet 请求构建 {@link RequestContext}。
      *
-     * @param request the inbound HTTP request; never {@code null}
-     * @return the populated request context; never {@code null}
+     * @param request 入站 HTTP 请求；不得为 {@code null}
+     * @return 填充完成的请求上下文；不得为 {@code null}
      */
     public RequestContext from(HttpServletRequest request) {
         return new RequestContext(

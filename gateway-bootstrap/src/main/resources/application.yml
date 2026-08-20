@@ -152,6 +152,7 @@ gateway:
     pending-confirmation-max-entries: ${GATEWAY_AGENT_PENDING_CONFIRMATION_MAX_ENTRIES:10000}
     turn-max-entries: ${GATEWAY_AGENT_TURN_MAX_ENTRIES:10000}
     resolve-max-concurrent: ${GATEWAY_AGENT_RESOLVE_MAX_CONCURRENT:64}
+    resolve-max-queue: ${GATEWAY_AGENT_RESOLVE_MAX_QUEUE:64}
     catalog-max-capabilities: ${GATEWAY_AGENT_CATALOG_MAX_CAPABILITIES:10000}
     catalog-max-index-bytes: ${GATEWAY_AGENT_CATALOG_MAX_INDEX_BYTES:67108864}
     catalog-max-process-memory-bytes: ${GATEWAY_AGENT_CATALOG_MAX_PROCESS_MEMORY_BYTES:536870912}

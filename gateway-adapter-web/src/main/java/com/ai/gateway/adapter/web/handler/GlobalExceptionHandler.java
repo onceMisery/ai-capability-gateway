@@ -2,8 +2,6 @@ package com.ai.gateway.adapter.web.handler;
 
 import com.ai.gateway.adapter.web.support.ApiResponse;
 import com.ai.gateway.domain.model.ErrorCode;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -16,14 +14,15 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * Global exception handler for the AI Capability Gateway REST API
+ * AI Capability Gateway REST API 的全局异常处理器。
  *
- * <p>Maps domain and framework exceptions to HTTP status codes and stable
- * error codes. External error responses never contain stack traces,
- * internal addresses, interface class names, or sensitive parameters.</p>
+ * <p>将领域异常与框架异常映射为 HTTP 状态码和稳定的错误码。对外错误响应中
+ * 绝不包含堆栈跟踪、内部地址、接口类名或敏感参数。</p>
  *
- * <p>Error code mapping:</p>
+ * <p>错误码映射关系：</p>
  * <ul>
  * <li>AUTHENTICATION_FAILED - 401</li>
  * <li>PERMISSION_DENIED - 403</li>
@@ -38,12 +37,12 @@ import java.util.Map;
  * <li>EXECUTION_UNKNOWN - 409</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
-
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(GatewayException.class)
     public ResponseEntity<Map<String, Object>> handleGatewayException(
@@ -137,7 +136,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Maps a stable ErrorCode to the corresponding HTTP status code.
+     * 将稳定的 ErrorCode 映射为对应的 HTTP 状态码。
      */
     private HttpStatus mapErrorCodeToStatus(ErrorCode errorCode) {
         if (errorCode == null) {
@@ -163,8 +162,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Builds a sanitized error response body. Never contains stack traces,
-     * internal addresses, interface class names, or sensitive parameters.
+     * 构建经过清理的错误响应体。绝不包含堆栈跟踪、内部地址、接口类名或敏感参数。
      */
     private ResponseEntity<Map<String, Object>> buildErrorResponse(
             String errorCode, String message, HttpStatus status) {
@@ -176,7 +174,7 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Sanitizes an error message for external exposure.
+     * 对外暴露前清理错误消息中的内部信息。
      */
     private String sanitizeMessage(String message) {
         if (message == null) {
@@ -191,9 +189,8 @@ public class GlobalExceptionHandler {
     }
 
     /**
-     * Domain exception carrying a stable ErrorCode. Can be thrown by
-     * controllers or adapters to signal a domain-level error that should
-     * be mapped to a specific HTTP status and stable error code.
+     * 携带稳定 ErrorCode 的领域异常。可由控制器或适配器抛出，用于表示
+     * 需要映射到特定 HTTP 状态码与稳定错误码的领域级错误。
      */
     public static class GatewayException extends RuntimeException {
 
