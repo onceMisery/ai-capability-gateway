@@ -102,8 +102,17 @@ public final class AgentCapabilityResolver {
     public Resolution resolve(RequestContext requestContext, String query, int requestedTopK) {
         Objects.requireNonNull(requestContext, "requestContext must not be null");
         long deadlineNanos = newResolveDeadlineNanos();
-        Principal principal = authenticationPort.authenticate(requestContext);
-        return resolve(principal, query, requestedTopK, deadlineNanos);
+        AuthenticationResult authentication = authenticate(requestContext, deadlineNanos);
+        if (authentication.timedOut()) {
+            return Resolution.error("RESOLVE_TIMEOUT", 0L, 0L);
+        }
+        if (authentication.capacityRejected()) {
+            return Resolution.error("RESOLVE_CAPACITY_EXCEEDED", 0L, 0L);
+        }
+        if (authentication.failure() != null) {
+            throw propagate(authentication.failure());
+        }
+        return resolve(authentication.principal(), query, requestedTopK, deadlineNanos);
     }
 
     /** Internal Host entry point that reuses the Principal authenticated by the Connector. */
@@ -343,6 +352,27 @@ public final class AgentCapabilityResolver {
         return deadlineAfter(resolveTimeoutNanos);
     }
 
+    public AuthenticationResult authenticate(
+            RequestContext requestContext, long deadlineNanos) {
+        Objects.requireNonNull(requestContext, "requestContext must not be null");
+        DeadlineCall<Principal> authenticationCall = callWithDeadline(
+                () -> authenticationPort.authenticate(requestContext),
+                deadlineNanos, "authentication");
+        if (authenticationCall.rejected()) {
+            return AuthenticationResult.capacityResult();
+        }
+        if (authenticationCall.timedOut()) {
+            return AuthenticationResult.timeout();
+        }
+        if (authenticationCall.failure() != null) {
+            return AuthenticationResult.failed(authenticationCall.failure());
+        }
+        if (authenticationCall.value() == null) {
+            return AuthenticationResult.failed(null);
+        }
+        return AuthenticationResult.authenticated(authenticationCall.value());
+    }
+
     private boolean expired(long deadlineNanos, String phase) {
         if (System.nanoTime() <= deadlineNanos) {
             return false;
@@ -490,6 +520,39 @@ public final class AgentCapabilityResolver {
     }
 
     public enum Status { RESOLVED, ERROR }
+
+    public record AuthenticationResult(
+            AuthenticationStatus status, Principal principal, Throwable failure) {
+
+        private static AuthenticationResult authenticated(Principal principal) {
+            return new AuthenticationResult(AuthenticationStatus.AUTHENTICATED, principal, null);
+        }
+
+        private static AuthenticationResult timeout() {
+            return new AuthenticationResult(AuthenticationStatus.TIMEOUT, null, null);
+        }
+
+        private static AuthenticationResult capacityResult() {
+            return new AuthenticationResult(
+                    AuthenticationStatus.CAPACITY_EXCEEDED, null, null);
+        }
+
+        private static AuthenticationResult failed(Throwable failure) {
+            return new AuthenticationResult(AuthenticationStatus.FAILED, null, failure);
+        }
+
+        public boolean timedOut() {
+            return status == AuthenticationStatus.TIMEOUT;
+        }
+
+        public boolean capacityRejected() {
+            return status == AuthenticationStatus.CAPACITY_EXCEEDED;
+        }
+    }
+
+    public enum AuthenticationStatus {
+        AUTHENTICATED, FAILED, TIMEOUT, CAPACITY_EXCEEDED
+    }
 
     public record Resolution(
             Status status,

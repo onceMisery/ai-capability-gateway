@@ -11,8 +11,6 @@ import com.ai.gateway.adapter.web.support.SecurityHelper;
 import com.ai.gateway.adapter.web.GatewayWebProperties;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,24 +25,25 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * REST controller for querying the gateway's non-sensitive runtime
- * configuration from the admin console.
+ * 从管理后台查询网关非敏感运行时配置的 REST 控制器。
  *
- * <p>Exposes read-only endpoints under {@code /admin/v1} for:</p>
+ * <p>在 {@code /admin/v1} 下暴露只读端点：</p>
  * <ul>
- * <li>Gateway non-sensitive configuration (GET /admin/v1/config).</li>
- * <li>Cache subsystem status (GET /admin/v1/cache/status).</li>
- * <li>Sentinel rate-limit rules (GET/POST/DELETE /admin/v1/ratelimit/rules).</li>
+ * <li>网关非敏感配置（GET /admin/v1/config）。</li>
+ * <li>缓存子系统状态（GET /admin/v1/cache/status）。</li>
+ * <li>Sentinel 限流规则（GET/POST/DELETE /admin/v1/ratelimit/rules）。</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/admin/v1")
+@Slf4j
 public class SystemConfigController {
-
-    private static final Logger log = LoggerFactory.getLogger(SystemConfigController.class);
 
     private final ConfigQueryUseCase configQueryUseCase;
     private final RateLimitAdminPort rateLimitAdminPort;
@@ -52,15 +51,15 @@ public class SystemConfigController {
     private final AuthorizationPort authorizationPort;
     private final String ratelimitProvider;
 
-    /** Protected resources: threshold may be modified but the rule cannot be deleted. */
+    /** 受保护资源：阈值可修改，但规则不可删除。 */
     private static final Set<String> PROTECTED_RESOURCES = Set.of(
             "gateway:global", "gateway:llm:routing"
     );
 
     /**
-     * Constructs a new SystemConfigController.
+     * 构造新的 SystemConfigController。
      *
-     * @param configQueryUseCase the config query use case
+     * @param configQueryUseCase 配置查询用例
      */
     public SystemConfigController(ConfigQueryUseCase configQueryUseCase,
                                    RateLimitAdminPort rateLimitAdminPort,
@@ -77,7 +76,7 @@ public class SystemConfigController {
     /**
      * GET /admin/v1/config
      *
-     * <p>Returns the gateway's non-sensitive runtime configuration.</p>
+     * <p>返回网关的非敏感运行时配置。</p>
      */
     @GetMapping("/config")
     public ResponseEntity<GatewayConfig> getConfig() {
@@ -87,7 +86,7 @@ public class SystemConfigController {
     /**
      * GET /admin/v1/cache/status
      *
-     * <p>Returns the cache subsystem status.</p>
+     * <p>返回缓存子系统状态。</p>
      */
     @GetMapping("/cache/status")
     public ResponseEntity<CacheStatus> getCacheStatus() {
@@ -97,7 +96,7 @@ public class SystemConfigController {
     /**
      * GET /admin/v1/ratelimit/rules
      *
-     * <p>Returns the current Sentinel rate-limit rules.</p>
+     * <p>返回当前的 Sentinel 限流规则。</p>
      */
     @GetMapping("/ratelimit/rules")
     public ResponseEntity<List<RateLimitRule>> getRateLimitRules() {
@@ -107,7 +106,7 @@ public class SystemConfigController {
     /**
      * POST /admin/v1/ratelimit/rules
      *
-     * <p>Creates or updates a rate-limit rule. In stub mode, returns 409.</p>
+     * <p>创建或更新一条限流规则。stub 模式下返回 409。</p>
      */
     @PostMapping("/ratelimit/rules")
     public ResponseEntity<Map<String, Object>> createRateLimitRule(@RequestBody RateLimitRule rule) {
@@ -127,9 +126,8 @@ public class SystemConfigController {
     /**
      * DELETE /admin/v1/ratelimit/rules/{type}/{resource}
      *
-     * <p>Deletes a rate-limit rule. Protected resources (gateway:global,
-     * gateway:llm:routing) cannot be deleted — only their thresholds may
-     * be modified.</p>
+     * <p>删除一条限流规则。受保护资源（gateway:global、gateway:llm:routing）
+     * 不可删除——仅可修改其阈值。</p>
      */
     @DeleteMapping("/ratelimit/rules/{type}/{resource:.+}")
     public ResponseEntity<Map<String, Object>> deleteRateLimitRule(

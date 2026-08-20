@@ -218,16 +218,21 @@ class AgentCapabilityResolverTest {
         when(authentication.authenticate(any())).thenReturn(principal);
         when(retriever.indexedCatalogVersion()).thenReturn(7L);
 
-        AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                authentication, authorization, manager, retriever, new TextNormalizer(),
-                new ToolReferenceService("k1", key("current-key"), null, null, 120L),
-                mock(TelemetryPort.class));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            AgentCapabilityResolver resolver = new AgentCapabilityResolver(
+                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    new ToolReferenceService("k1", key("current-key"), null, null, 120L),
+                    mock(TelemetryPort.class), executor, 1_000L);
 
-        AgentCapabilityResolver.Resolution result = resolver.resolve(
-                RequestContext.empty(), "Order detail", 5);
+            AgentCapabilityResolver.Resolution result = resolver.resolve(
+                    RequestContext.empty(), "Order detail", 5);
 
-        assertThat(result.status()).isEqualTo(AgentCapabilityResolver.Status.ERROR);
-        assertThat(result.errorCode()).isEqualTo("CATALOG_INDEX_NOT_READY");
+            assertThat(result.status()).isEqualTo(AgentCapabilityResolver.Status.ERROR);
+            assertThat(result.errorCode()).isEqualTo("CATALOG_INDEX_NOT_READY");
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     @Test

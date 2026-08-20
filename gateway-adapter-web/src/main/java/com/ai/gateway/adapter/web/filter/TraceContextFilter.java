@@ -6,8 +6,6 @@ import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -20,74 +18,62 @@ import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * Servlet filter for distributed trace context management.
+ * 用于分布式追踪上下文管理的 Servlet 过滤器。
  *
- * <p>This filter is responsible for:</p>
+ * <p>该过滤器负责：</p>
  * <ol>
- * <li><strong>Trace ID generation</strong> — generates a server-side trace
- * ID for each request. The trace ID is propagated through MDC for
- * structured logging and stored as a request attribute for downstream
- * pipeline stages.</li>
- * <li><strong>Client Request ID correlation</strong> — extracts the
- * client-provided request ID (if any) and uses it solely as a
- * correlation field. The client request ID does not become the
- * trace ID; it is logged alongside the trace ID for debugging and
- * cross-referencing.</li>
- * <li><strong>Span name definition</strong> — defines the 9 canonical
- * trace spans for the natural-language routing pipeline.
- * These span names are stored as request attributes so that downstream
- * instrumentation can create spans with consistent names.</li>
+ * <li><strong>Trace ID 生成</strong> — 为每个请求生成服务端 Trace ID。
+ * Trace ID 通过 MDC 向下游传递以支持结构化日志，并作为请求属性供后续
+ * 处理阶段使用。</li>
+ * <li><strong>Client Request ID 关联</strong> — 提取客户端提供的请求 ID（如有），
+ * 仅作为关联字段使用。客户端请求 ID 不会被当作 Trace ID，仅与 Trace ID
+ * 一并记录以便调试与交叉引用。</li>
+ * <li><strong>Span 名称定义</strong> — 定义自然语言路由管道的 9 个规范追踪
+ * Span。这些 Span 名称作为请求属性保存，供下游埋点创建同名的 Span。</li>
  * </ol>
  *
- * <p>The 9 canonical spans:</p>
+ * <p>9 个规范 Span：</p>
  * <ol>
- * <li>{@code authenticate} — authentication and Principal construction
- *</li>
- * <li>{@code authorize.visibility} — visibility authorization pass 1
- *</li>
- * <li>{@code catalog.retrieve} — BM25 Top-K candidate retrieval
- *</li>
- * <li>{@code llm.route} — LLM capability selection and parameter
- * extraction</li>
- * <li>{@code arguments.validate} — argument binding and schema validation
- *</li>
- * <li>{@code authorize.execute} — execution authorization pass 2
- *</li>
- * <li>{@code adapter.invoke} — protocol adapter invocation</li>
- * <li>{@code result.normalize} — result normalization, projection, and
- * redaction</li>
- * <li>{@code audit.persist} — terminal audit event persistence
- *</li>
+ * <li>{@code authenticate} — 身份认证与 Principal 构建</li>
+ * <li>{@code authorize.visibility} — 可见性鉴权第一道校验</li>
+ * <li>{@code catalog.retrieve} — BM25 Top-K 候选检索</li>
+ * <li>{@code llm.route} — LLM 能力选择与参数提取</li>
+ * <li>{@code arguments.validate} — 参数绑定与 Schema 校验</li>
+ * <li>{@code authorize.execute} — 执行鉴权第二道校验</li>
+ * <li>{@code adapter.invoke} — 协议适配器调用</li>
+ * <li>{@code result.normalize} — 结果归一化、投影与脱敏</li>
+ * <li>{@code audit.persist} — 终态审计事件持久化</li>
  * </ol>
  *
- * <p>Trace attributes record only capability ID, version, snapshot, stable
- * error codes, and durations — never sensitive parameters.</p>
+ * <p>追踪属性仅记录能力 ID、版本、快照、稳定错误码与耗时——绝不记录敏感参数。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @Component
 @Order(Ordered.HIGHEST_PRECEDENCE)
+@Slf4j
 public class TraceContextFilter implements jakarta.servlet.Filter {
 
-    private static final Logger log = LoggerFactory.getLogger(TraceContextFilter.class);
-
-    // MDC keys
+    // MDC 键
     public static final String MDC_TRACE_ID = "traceId";
     public static final String MDC_CLIENT_REQUEST_ID = "clientRequestId";
     public static final String MDC_SPAN_ID = "spanId";
 
-    // Request attribute keys
+    // 请求属性键
     public static final String ATTR_TRACE_ID = "gateway.traceId";
     public static final String ATTR_CLIENT_REQUEST_ID = "gateway.clientRequestId";
     public static final String ATTR_SPAN_NAMES = "gateway.spanNames";
 
-    // HTTP headers
+    // HTTP 头
     private static final String HEADER_CLIENT_REQUEST_ID = "X-Request-Id";
     private static final String HEADER_TRACE_ID = "X-Trace-Id";
 
     /**
-     * The 9 canonical trace spans for the natural-language routing pipeline
+     * 自然语言路由管道的 9 个规范追踪 Span 名称
      */
     public static final List<String> PIPELINE_SPANS = List.of(
             "authenticate",
@@ -123,7 +109,7 @@ public class TraceContextFilter implements jakarta.servlet.Filter {
             return;
         }
 
-        // Generate server-side Trace ID
+        // 生成服务端 Trace ID
         String traceId = httpRequest.getHeader(HEADER_TRACE_ID);
         if (!isValidTraceId(traceId)) {
             traceId = generateTraceId();
@@ -131,24 +117,23 @@ public class TraceContextFilter implements jakarta.servlet.Filter {
             traceId = traceId.toLowerCase(java.util.Locale.ROOT);
         }
 
-        // Extract Client Request ID for correlation only
-        // The client request ID is NOT used as the trace ID.
+        // 仅出于关联目的提取 Client Request ID，该 ID 不会被当作 Trace ID 使用
         String clientRequestId = httpRequest.getHeader(HEADER_CLIENT_REQUEST_ID);
         if (!isValidRequestId(clientRequestId)) {
             clientRequestId = UUID.randomUUID().toString();
         }
 
-        // Set up MDC for structured logging
+        // 配置 MDC 以支持结构化日志
         MDC.put(MDC_TRACE_ID, traceId);
         MDC.put(MDC_CLIENT_REQUEST_ID, clientRequestId);
         MDC.put(MDC_SPAN_ID, "entry");
 
-        // Store trace context in request attributes for downstream access
+        // 将追踪上下文存入请求属性，供下游访问
         httpRequest.setAttribute(ATTR_TRACE_ID, traceId);
         httpRequest.setAttribute(ATTR_CLIENT_REQUEST_ID, clientRequestId);
         httpRequest.setAttribute(ATTR_SPAN_NAMES, PIPELINE_SPANS);
 
-        // Set response headers for trace correlation
+        // 设置响应头以支持追踪关联
         httpResponse.setHeader(HEADER_TRACE_ID, traceId);
         httpResponse.setHeader(HEADER_CLIENT_REQUEST_ID, clientRequestId);
 
@@ -165,7 +150,7 @@ public class TraceContextFilter implements jakarta.servlet.Filter {
             throw e;
         } finally {
             observation.stop();
-            // Clean up MDC to prevent thread-local leakage
+            // 清理 MDC，避免 ThreadLocal 泄漏
             MDC.remove(MDC_TRACE_ID);
             MDC.remove(MDC_CLIENT_REQUEST_ID);
             MDC.remove(MDC_SPAN_ID);
@@ -189,21 +174,21 @@ public class TraceContextFilter implements jakarta.servlet.Filter {
     }
 
     /**
-     * Generates a server-side trace ID.
+     * 生成服务端 Trace ID。
      *
-     * <p>The trace ID is a 32-character hexadecimal string (128 bits),
-     * compatible with W3C Trace Context and OpenTelemetry.</p>
+     * <p>Trace ID 为 32 位十六进制字符串（128 位），兼容 W3C Trace Context
+     * 与 OpenTelemetry。</p>
      *
-     * @return the generated trace ID
+     * @return 生成的 Trace ID
      */
     private String generateTraceId() {
         return UUID.randomUUID().toString().replace("-", "");
     }
 
     /**
-     * Returns the 9 canonical pipeline span names.
+     * 返回 9 个规范管道 Span 名称。
      *
-     * @return an unmodifiable list of span names
+     * @return 不可修改的 Span 名称列表
      */
     public static List<String> getPipelineSpans() {
         return PIPELINE_SPANS;

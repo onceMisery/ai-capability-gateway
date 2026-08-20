@@ -1,0 +1,91 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ai_gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: gateway-demo
+    ports:
+      - "${DEMO_POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U gateway -d ai_gateway"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${DEMO_REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  nacos:
+    image: nacos/nacos-server:v2.4.1
+    environment:
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "false"
+      PREFER_HOST_MODE: hostname
+    ports:
+      - "${DEMO_NACOS_PORT:-8848}:8848"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/v1/console/health/readiness || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  provider:
+    image: eclipse-temurin:21-jre
+    depends_on:
+      nacos:
+        condition: service_healthy
+    volumes:
+      - ../test-provider/target/test-provider-0.1.0-SNAPSHOT.jar:/opt/app/provider.jar:ro
+    command:
+      - java
+      - -jar
+      - /opt/app/provider.jar
+      - --server.port=8081
+      - --dubbo.registry.address=nacos://nacos:8848
+      - --dubbo.protocol.port=20880
+    ports:
+      - "${DEMO_PROVIDER_HTTP_PORT:-8081}:8081"
+      - "${DEMO_PROVIDER_DUBBO_PORT:-20880}:20880"
+
+  gateway:
+    image: eclipse-temurin:21-jre
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+      provider:
+        condition: service_started
+    volumes:
+      - ../../gateway-bootstrap/target/gateway-bootstrap-0.1.0-SNAPSHOT.jar:/opt/app/gateway.jar:ro
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/ai_gateway
+      DB_USERNAME: gateway
+      DB_PASSWORD: gateway-demo
+      GATEWAY_ENV: demo
+      GATEWAY_AUTH_PROVIDER: stub
+      GATEWAY_CACHE_PROVIDER: redis
+      GATEWAY_REDIS_ADDRESS: redis://redis:6379
+      GATEWAY_RATELIMIT_PROVIDER: stub
+      GATEWAY_CONFIRMATION_SECRET: demo-confirmation-secret
+      NACOS_ADDRESS: nacos
+      NACOS_PORT: 8848
+      DUBBO_REGISTRY: nacos://nacos:8848
+      SPRING_PROFILES_ACTIVE: ""
+    command:
+      - java
+      - -jar
+      - /opt/app/gateway.jar
+      - --server.port=8080
+    ports:
+      - "${DEMO_GATEWAY_PORT:-8080}:8080"

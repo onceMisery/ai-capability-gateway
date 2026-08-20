@@ -104,10 +104,18 @@ public final class AgentHostConnector {
         }
         try (permit) {
             long deadlineNanos = resolver.newResolveDeadlineNanos();
-            Principal principal = authenticate(requestContext);
-            if (principal == null) {
+            AgentCapabilityResolver.AuthenticationResult authentication =
+                    resolver.authenticate(requestContext, deadlineNanos);
+            if (authentication.timedOut()) {
+                return ResolveResult.error("RESOLVE_TIMEOUT");
+            }
+            if (authentication.capacityRejected()) {
+                return ResolveResult.error("RESOLVE_CAPACITY_EXCEEDED");
+            }
+            if (authentication.principal() == null) {
                 return ResolveResult.error("AUTHENTICATION_FAILED");
             }
+            Principal principal = authentication.principal();
             AgentCapabilityResolver.Resolution resolution = resolver.resolve(
                     principal, query, topK, deadlineNanos);
             if (resolution.status() == AgentCapabilityResolver.Status.RESOLVED

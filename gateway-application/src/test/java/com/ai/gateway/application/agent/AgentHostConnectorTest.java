@@ -150,7 +150,7 @@ class AgentHostConnectorTest {
         fixtures.connector.call(RequestContext.empty(), "turn-1", "call-1", "ref-1",
                 Map.of(), "zh-CN", "idem-1");
 
-        verify(fixtures.authentication, times(2)).authenticate(any());
+        verify(fixtures.authentication, times(1)).authenticate(any());
     }
 
     @Test
@@ -162,6 +162,7 @@ class AgentHostConnectorTest {
         fixtures.connector.resolve(
                 RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
 
+        verify(fixtures.resolver).authenticate(RequestContext.empty(), deadlineNanos);
         verify(fixtures.resolver).resolve(
                 fixtures.principal, "query order", 5, deadlineNanos);
     }
@@ -172,11 +173,9 @@ class AgentHostConnectorTest {
         Principal anotherOrganization = new Principal(
                 fixtures.principal.subject(), 8L, fixtures.principal.roles(),
                 fixtures.principal.permissions(), Instant.now(), "test");
-        when(fixtures.authentication.authenticate(any()))
-                .thenReturn(fixtures.principal, anotherOrganization);
-
         fixtures.connector.resolve(
                 RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
+        when(fixtures.authentication.authenticate(any())).thenReturn(anotherOrganization);
         AgentHostConnector.CallResult result = fixtures.connector.call(
                 RequestContext.empty(), "turn-1", "call-1", "ref-1", Map.of(),
                 "zh-CN", "idem-1");
@@ -206,6 +205,11 @@ class AgentHostConnectorTest {
         private Fixtures() {
             when(authentication.authenticate(any())).thenReturn(principal);
             when(resolver.newResolveDeadlineNanos()).thenReturn(Long.MAX_VALUE);
+            when(resolver.authenticate(
+                    any(), org.mockito.ArgumentMatchers.anyLong()))
+                    .thenReturn(new AgentCapabilityResolver.AuthenticationResult(
+                            AgentCapabilityResolver.AuthenticationStatus.AUTHENTICATED,
+                            principal, null));
             when(resolver.resolve(any(Principal.class), anyString(),
                     org.mockito.ArgumentMatchers.eq(5),
                     org.mockito.ArgumentMatchers.anyLong()))

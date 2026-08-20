@@ -2,8 +2,6 @@ package com.ai.gateway.adapter.web.controller;
 
 import com.ai.gateway.application.console.AuditQueryUseCase;
 import com.ai.gateway.application.console.StatsQueryUseCase;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -14,32 +12,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * REST controller for monitoring and audit queries from the admin console.
+ * 从管理后台进行监控与审计查询的 REST 控制器。
  *
- * <p>Exposes endpoints under {@code /admin/v1} for:</p>
+ * <p>在 {@code /admin/v1} 下暴露端点：</p>
  * <ul>
- * <li>Audit event queries with filtering and pagination.</li>
- * <li>Time-series statistics by result code.</li>
- * <li>Per-capability aggregated statistics.</li>
+ * <li>带过滤与分页的审计事件查询。</li>
+ * <li>按结果码划分的时间序列统计。</li>
+ * <li>按能力聚合的统计。</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/admin/v1")
+@Slf4j
 public class MonitorQueryController {
-
-    private static final Logger log = LoggerFactory.getLogger(MonitorQueryController.class);
 
     private final AuditQueryUseCase auditQueryUseCase;
     private final StatsQueryUseCase statsQueryUseCase;
 
     /**
-     * Constructs a new MonitorQueryController.
+     * 构造新的 MonitorQueryController。
      *
-     * @param auditQueryUseCase the audit query use case
-     * @param statsQueryUseCase the stats query use case
+     * @param auditQueryUseCase 审计查询用例
+     * @param statsQueryUseCase 统计查询用例
      */
     public MonitorQueryController(AuditQueryUseCase auditQueryUseCase,
                                    StatsQueryUseCase statsQueryUseCase) {
@@ -50,7 +50,7 @@ public class MonitorQueryController {
     /**
      * GET /admin/v1/audits
      *
-     * <p>Queries audit events with filtering and pagination.</p>
+     * <p>带过滤与分页地查询审计事件。</p>
      */
     @GetMapping("/audits")
     public ResponseEntity<Map<String, Object>> queryAudits(
@@ -73,7 +73,7 @@ public class MonitorQueryController {
     /**
      * GET /admin/v1/stats/time-series
      *
-     * <p>Returns time-series data grouped by result code.</p>
+     * <p>返回按结果码分组的时间序列数据。</p>
      */
     @GetMapping("/stats/time-series")
     public ResponseEntity<List<Map<String, Object>>> timeSeriesStats(
@@ -86,7 +86,7 @@ public class MonitorQueryController {
     /**
      * GET /admin/v1/stats/capabilities
      *
-     * <p>Returns per-capability aggregated statistics.</p>
+     * <p>返回按能力聚合的统计。</p>
      */
     @GetMapping("/stats/capabilities")
     public ResponseEntity<List<Map<String, Object>>> capabilityStats(

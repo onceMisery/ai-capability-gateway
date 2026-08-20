@@ -1,0 +1,18 @@
+providers:
+  com.ai.gateway.testprovider.OrderQueryApi:
+    registryRef: nacos-main
+    serviceVersion: 1.0.0
+    group: ""
+    serialization: fastjson2
+    resilience:
+      timeoutMs: 3000
+      retries: 1
+      maxConcurrent: 50
+
+envelopeProfiles:
+  standard-result-v1:
+    codePath: /code
+    successValues:
+      - "200"
+    dataPath: /value
+    messagePath: /message

@@ -128,9 +128,8 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
     }
 
     /**
-     * Wrapper for HttpServletRequest that monitors the number of bytes read
-     * from the input stream and throws {@link RequestTooLargeException} if
-     * the limit is exceeded.
+     * HttpServletRequest 的包装器，监控从输入流读取的字节数，
+     * 一旦超过上限即抛出 {@link RequestTooLargeException}。
      */
     static class SizeLimitedHttpServletRequestWrapper
             extends jakarta.servlet.http.HttpServletRequestWrapper {
@@ -164,8 +163,8 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
     }
 
     /**
-     * ServletInputStream wrapper that counts bytes read and throws
-     * {@link RequestTooLargeException} when the limit is exceeded.
+     * ServletInputStream 的包装器，统计已读取字节数，
+     * 超限时抛出 {@link RequestTooLargeException}。
      */
     static class SizeLimitedServletInputStream extends jakarta.servlet.ServletInputStream {
 

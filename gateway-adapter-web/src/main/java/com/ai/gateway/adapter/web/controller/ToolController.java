@@ -26,7 +26,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Structured capability discovery and invocation API. */
+/**
+ * 结构化的能力发现与调用 API。
+ *
+ * @author cmiracle@163.com
+ * @since 0.1.0
+ */
 @RestController
 @RequestMapping("/api/v1")
 public final class ToolController {
@@ -58,7 +63,7 @@ public final class ToolController {
         return ResponseEntity.ok(Map.of("tools", structuredInvocationUseCase.listTools(context)));
     }
 
-    /** Resolves a request-scoped, model-visible tool set plus host bindings. */
+    /** 解析请求作用域、对模型可见的工具集以及宿主绑定（host bindings）。 */
     @PostMapping("/tools:resolve")
     public ResponseEntity<Map<String, Object>> resolve(
             @Valid @RequestBody ResolveRequest body,
@@ -83,7 +88,7 @@ public final class ToolController {
         return ResponseEntity.ok(response);
     }
 
-    /** Calls a host-selected capability through the unified Agent dispatcher. */
+    /** 通过统一的 Agent 调度器调用宿主选定的能力。 */
     @PostMapping("/tools/{capabilityId}:call")
     public ResponseEntity<Map<String, Object>> call(
             @PathVariable String capabilityId,

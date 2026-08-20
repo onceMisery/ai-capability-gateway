@@ -10,8 +10,6 @@ import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.adapter.web.support.ApiResponse;
 import com.ai.gateway.adapter.web.support.SecurityHelper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,33 +24,34 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * REST controller for managing capability ACL entries, roles, and permissions
- * from the admin console.
+ * 从管理后台管理能力 ACL 条目、角色与权限的 REST 控制器。
  *
- * <p>Exposes CRUD endpoints under {@code /admin/v1} for:</p>
+ * <p>在 {@code /admin/v1} 下暴露 CRUD 端点：</p>
  * <ul>
- * <li>Role management (GET/POST/PUT/DELETE /admin/v1/roles).</li>
- * <li>Permission management (GET/POST/DELETE /admin/v1/permissions).</li>
- * <li>Capability ACL management (GET/PUT /admin/v1/acl/capabilities).</li>
+ * <li>角色管理（GET/POST/PUT/DELETE /admin/v1/roles）。</li>
+ * <li>权限管理（GET/POST/DELETE /admin/v1/permissions）。</li>
+ * <li>能力 ACL 管理（GET/PUT /admin/v1/acl/capabilities）。</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/admin/v1")
+@Slf4j
 public class AclAdminController {
-
-    private static final Logger log = LoggerFactory.getLogger(AclAdminController.class);
 
     private final AclManageUseCase aclManageUseCase;
     private final AuthorizationPort authorizationPort;
     private final AuthenticationPort authenticationPort;
 
     /**
-     * Constructs a new AclAdminController.
+     * 构造新的 AclAdminController。
      *
-     * @param aclManageUseCase the ACL manage use case
+     * @param aclManageUseCase ACL 管理用例
      */
     public AclAdminController(AclManageUseCase aclManageUseCase,
                                AuthorizationPort authorizationPort,
@@ -67,7 +66,7 @@ public class AclAdminController {
     // ================================================================
 
     /**
-     * GET /admin/v1/acl/capabilities — list all ACL entries
+     * GET /admin/v1/acl/capabilities — 列出全部 ACL 条目
      */
     @GetMapping("/acl/capabilities")
     public ResponseEntity<List<CapabilityAclEntry>> listAclCapabilities() {
@@ -87,7 +86,7 @@ public class AclAdminController {
     }
 
     /**
-     * PUT /admin/v1/acl/capabilities — capabilityId/version in body
+     * PUT /admin/v1/acl/capabilities — capabilityId/version 位于请求体中
      */
     @PutMapping("/acl/capabilities")
     public ResponseEntity<Map<String, Object>> saveAclCapability(
@@ -99,7 +98,7 @@ public class AclAdminController {
     }
 
     /**
-     * GET /admin/v1/acl/policy — get the current ACL policy overview
+     * GET /admin/v1/acl/policy — 获取当前 ACL 策略概览
      */
     @GetMapping("/acl/policy")
     public ResponseEntity<Map<String, Object>> getAclPolicy() {
@@ -130,7 +129,7 @@ public class AclAdminController {
     }
 
     /**
-     * DELETE /admin/v1/acl/capabilities/{capabilityId}/{version}
+     * DELETE /admin/v1/acl/capabilities/{capabilityId}/{version} — 删除指定 ACL 条目
      */
     @DeleteMapping("/acl/capabilities/{capabilityId}/{version}")
     public ResponseEntity<Map<String, Object>> deleteAclEntry(
@@ -148,7 +147,7 @@ public class AclAdminController {
     // ================================================================
 
     /**
-     * GET /admin/v1/roles
+     * GET /admin/v1/roles — 列出全部角色
      */
     @GetMapping("/roles")
     public ResponseEntity<List<Role>> listRoles() {
@@ -156,7 +155,7 @@ public class AclAdminController {
     }
 
     /**
-     * GET /admin/v1/roles/{name}
+     * GET /admin/v1/roles/{name} — 获取指定角色
      */
     @GetMapping("/roles/{name}")
     public ResponseEntity<Role> getRole(@PathVariable String name) {
@@ -166,7 +165,7 @@ public class AclAdminController {
     }
 
     /**
-     * POST /admin/v1/roles
+     * POST /admin/v1/roles — 创建角色
      */
     @PostMapping("/roles")
     public ResponseEntity<Map<String, Object>> createRole(@RequestBody Map<String, Object> body) {
@@ -181,7 +180,7 @@ public class AclAdminController {
     }
 
     /**
-     * PUT /admin/v1/roles/{name}
+     * PUT /admin/v1/roles/{name} — 更新角色
      */
     @PutMapping("/roles/{name}")
     public ResponseEntity<Map<String, Object>> updateRole(
@@ -197,7 +196,7 @@ public class AclAdminController {
     }
 
     /**
-     * DELETE /admin/v1/roles/{name}
+     * DELETE /admin/v1/roles/{name} — 删除角色
      */
     @DeleteMapping("/roles/{name}")
     public ResponseEntity<Map<String, Object>> deleteRole(@PathVariable String name) {
@@ -221,7 +220,7 @@ public class AclAdminController {
     // ================================================================
 
     /**
-     * GET /admin/v1/permissions
+     * GET /admin/v1/permissions — 列出全部权限
      */
     @GetMapping("/permissions")
     public ResponseEntity<List<Permission>> listPermissions() {
@@ -229,7 +228,7 @@ public class AclAdminController {
     }
 
     /**
-     * POST /admin/v1/permissions
+     * POST /admin/v1/permissions — 创建权限
      */
     @PostMapping("/permissions")
     public ResponseEntity<Map<String, Object>> createPermission(@RequestBody Map<String, Object> body) {
@@ -242,7 +241,7 @@ public class AclAdminController {
     }
 
     /**
-     * DELETE /admin/v1/permissions/{name}
+     * DELETE /admin/v1/permissions/{name} — 删除权限
      */
     @DeleteMapping("/permissions/{name}")
     public ResponseEntity<Map<String, Object>> deletePermission(@PathVariable String name) {

@@ -1,0 +1,25 @@
+policies:
+  order.detail.read:
+    owner:
+      team: order-platform
+      contact: order-platform@example.com
+    permissions:
+      - order:detail:read
+    principalClaims:
+      /orgId:
+        type: integer
+        required: true
+    examples:
+      positive:
+        - 查询订单 A100 的详情
+        - 查看订单 B200 当前状态
+        - 订单 C300 的金额是多少
+      negative:
+        - 创建一笔新订单
+        - 取消订单 D400
+      synonyms:
+        - 订单详情
+        - 订单信息
+    tags:
+      - order
+      - query

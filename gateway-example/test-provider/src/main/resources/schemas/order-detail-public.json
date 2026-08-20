@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["orderNo", "status", "amount", "customerName"],
+  "properties": {
+    "orderNo": {
+      "type": "string",
+      "maxLength": 64
+    },
+    "status": {
+      "type": "string",
+      "maxLength": 32
+    },
+    "amount": {
+      "type": "number",
+      "minimum": 0
+    },
+    "customerName": {
+      "type": "string",
+      "maxLength": 128,
+      "x-sensitive": true
+    }
+  }
+}

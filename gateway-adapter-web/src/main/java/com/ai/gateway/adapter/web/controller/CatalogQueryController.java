@@ -4,8 +4,6 @@ import com.ai.gateway.application.console.CapabilityQueryUseCase;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CapabilitySummary;
 import com.ai.gateway.domain.model.SnapshotSummary;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -14,33 +12,33 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * REST controller for querying capability manifests and catalog snapshots
- * from the admin console.
+ * 从管理后台查询能力清单与目录快照的 REST 控制器。
  *
- * <p>Exposes read-only endpoints under {@code /admin/v1} for:</p>
+ * <p>在 {@code /admin/v1} 下暴露只读端点：</p>
  * <ul>
- * <li>Capability manifest listing and detail queries.</li>
- * <li>Catalog snapshot history queries.</li>
+ * <li>能力清单列表与详情查询。</li>
+ * <li>目录快照历史查询。</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/admin/v1")
+@Slf4j
 public class CatalogQueryController {
-
-    private static final Logger log = LoggerFactory.getLogger(CatalogQueryController.class);
 
     private final CapabilityQueryUseCase capabilityQueryUseCase;
 
     /**
-     * Constructs a new CatalogQueryController.
+     * 构造新的 CatalogQueryController。
      *
-     * @param capabilityQueryUseCase the capability query use case
+     * @param capabilityQueryUseCase 能力查询用例
      */
     public CatalogQueryController(CapabilityQueryUseCase capabilityQueryUseCase) {
         this.capabilityQueryUseCase = Objects.requireNonNull(capabilityQueryUseCase);
@@ -49,7 +47,7 @@ public class CatalogQueryController {
     /**
      * GET /admin/v1/capabilities
      *
-     * <p>Returns all capability manifests as summaries.</p>
+     * <p>以摘要形式返回全部能力清单。</p>
      */
     @GetMapping("/capabilities")
     public ResponseEntity<List<CapabilitySummary>> listCapabilities() {
@@ -60,7 +58,7 @@ public class CatalogQueryController {
     /**
      * GET /admin/v1/capabilities/{id}/versions/{version}
      *
-     * <p>Returns the full manifest detail for a specific capability.</p>
+     * <p>返回指定能力的完整清单详情。</p>
      */
     @GetMapping("/capabilities/{id}/versions/{version}")
     public ResponseEntity<?> getCapabilityDetail(
@@ -76,7 +74,7 @@ public class CatalogQueryController {
     /**
      * GET /admin/v1/releases
      *
-     * <p>Returns snapshot summaries for the given environment.</p>
+     * <p>返回指定环境的快照摘要列表。</p>
      */
     @GetMapping("/releases")
     public ResponseEntity<List<SnapshotSummary>> listSnapshots(

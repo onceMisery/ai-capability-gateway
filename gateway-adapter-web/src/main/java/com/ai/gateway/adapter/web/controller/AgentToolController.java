@@ -25,7 +25,12 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Trusted Agent Host API for pre-resolve, delayed Schema, and fixed calls. */
+/**
+ * 面向可信 Agent Host 的 API，提供预解析（pre-resolve）、延迟 Schema 与固定调用能力。
+ *
+ * @author cmiracle@163.com
+ * @since 0.1.0
+ */
 @RestController
 @RequestMapping("/api/v1/agent")
 @RequiredArgsConstructor
@@ -151,7 +156,7 @@ public class AgentToolController {
                 : ResponseEntity.ok(response);
     }
 
-    /** Trusted UI event. This endpoint is intentionally absent from MCP tools/list. */
+    /** 受信任的 UI 事件。该端点的设计意图是不出现在 MCP tools/list 中。 */
     @PostMapping("/operations/{operationId}:confirm")
     public ResponseEntity<Map<String, Object>> confirm(
             @PathVariable @Size(max = 128) String operationId,
@@ -170,7 +175,7 @@ public class AgentToolController {
                 : ResponseEntity.status(hostEventStatus(result.state())).body(response);
     }
 
-    /** Trusted UI event. This endpoint is intentionally absent from MCP tools/list. */
+    /** 受信任的 UI 事件。该端点的设计意图是不出现在 MCP tools/list 中。 */
     @PostMapping("/operations/{operationId}:cancel")
     public ResponseEntity<Map<String, Object>> cancel(
             @PathVariable @Size(max = 128) String operationId,
@@ -189,7 +194,7 @@ public class AgentToolController {
                 : ResponseEntity.status(hostEventStatus(result.state())).body(response);
     }
 
-    /** Canonical write status query; never returns private confirmation state. */
+    /** 规范的写操作状态查询；绝不返回私有确认状态。 */
     @GetMapping("/operations/{operationId}")
     public ResponseEntity<Map<String, Object>> status(
             @PathVariable @Size(max = 128) String operationId,

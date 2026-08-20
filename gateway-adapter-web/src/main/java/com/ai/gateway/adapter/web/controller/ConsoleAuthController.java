@@ -4,8 +4,6 @@ import com.ai.gateway.application.console.ConsoleAuthUseCase;
 import com.ai.gateway.adapter.web.support.SecurityHelper;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.port.AuthenticationPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,18 +14,20 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * 管理后台认证控制器
  *
  * <p>提供登录、登出、whoami、认证模式探测端点，支持 stub 和 sa-token 两种模式。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/admin/v1/console/auth")
+@Slf4j
 public class ConsoleAuthController {
-
-    private static final Logger log = LoggerFactory.getLogger(ConsoleAuthController.class);
 
     private final ConsoleAuthUseCase consoleAuthUseCase;
     private final AuthenticationPort authenticationPort;

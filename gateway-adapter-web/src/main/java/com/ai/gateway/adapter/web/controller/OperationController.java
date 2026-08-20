@@ -31,33 +31,31 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * REST controller for the write-operation API.
+ * 写操作 API 的 REST 控制器。
  *
- * <p>This controller exposes four endpoints for the two-phase Prepare/Confirm
- * write-operation protocol:</p>
+ * <p>该控制器为两阶段 Prepare/Confirm 写操作协议暴露四个端点：</p>
  * <ul>
- * <li>{@code POST /api/v1/natural-language/actions:prepare} — prepares a
- * write operation and returns a confirmation token.</li>
- * <li>{@code POST /api/v1/operations/{operationId}:confirm} — confirms and
- * executes a prepared operation using the confirmation token
- *.</li>
- * <li>{@code POST /api/v1/operations/{operationId}:cancel} — cancels a
- * prepared operation before confirmation.</li>
- * <li>{@code GET /api/v1/operations/{operationId}} — queries the current
- * status of a write operation.</li>
+ * <li>{@code POST /api/v1/natural-language/actions:prepare} — 预准备写操作
+ * 并返回确认令牌。</li>
+ * <li>{@code POST /api/v1/operations/{operationId}:confirm} — 使用确认令牌
+ * 确认并执行已预准备的操作。</li>
+ * <li>{@code POST /api/v1/operations/{operationId}:cancel} — 在确认前取消
+ * 已预准备的写操作。</li>
+ * <li>{@code GET /api/v1/operations/{operationId}} — 查询写操作的当前状态。</li>
  * </ul>
  *
- * <p>The controller never exposes encrypted arguments, server signatures,
- * or internal stack traces.</p>
+ * <p>该控制器绝不暴露加密参数、服务端签名或内部堆栈跟踪。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/api/v1")
+@Slf4j
 public class OperationController {
-
-    private static final Logger log = LoggerFactory.getLogger(OperationController.class);
 
     private static final String AUTH_HEADER = "Authorization";
 

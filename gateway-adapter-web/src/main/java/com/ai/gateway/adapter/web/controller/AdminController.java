@@ -19,8 +19,7 @@ import com.ai.gateway.adapter.web.support.SecurityHelper;
 import com.ai.gateway.domain.model.AdminAction;
 import com.fasterxml.jackson.databind.JsonNode;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -46,31 +45,26 @@ import java.util.Map;
  * management, catalog publication, rollback, capability suspension, and audit
  * querying:</p>
  * <ul>
- * <li>{@code POST /admin/v1/manifests:import} — import a manifest through
- * the 10-step validation pipeline .</li>
+ * <li>{@code POST /admin/v1/manifests:import} — 通过 10 步校验流水线导入清单。</li>
  * <li>{@code POST /admin/v1/capabilities/{id}/versions/{version}:validate}
- * — re-validate an existing manifest version .</li>
+ * — 重新校验既有清单版本。</li>
  * <li>{@code POST /admin/v1/capabilities/{id}/versions/{version}:approve}
- * — approve a validated manifest .</li>
- * <li>{@code POST /admin/v1/releases:publish} — publish a new snapshot
- * .</li>
- * <li>{@code POST /admin/v1/releases:rollback} — rollback to a historical
- * snapshot .</li>
- * <li>{@code POST /admin/v1/capabilities/{id}:suspend} — emergency suspend
- * a capability .</li>
- * <li>{@code GET /admin/v1/releases/{snapshotVersion}} — retrieve a
- * snapshot by version.</li>
- * <li>{@code GET /admin/v1/audits} — query audit events .</li>
+ * — 审批已通过校验的清单。</li>
+ * <li>{@code POST /admin/v1/releases:publish} — 发布新快照。</li>
+ * <li>{@code POST /admin/v1/releases:rollback} — 回滚至历史快照。</li>
+ * <li>{@code POST /admin/v1/capabilities/{id}:suspend} — 紧急下线能力。</li>
+ * <li>{@code GET /admin/v1/releases/{snapshotVersion}} — 按版本获取快照。</li>
+ * <li>{@code GET /admin/v1/audits} — 查询审计事件。</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/admin/v1")
 @RequiredArgsConstructor
+@Slf4j
 public class AdminController {
-
-    private static final Logger log = LoggerFactory.getLogger(AdminController.class);
 
     private final ManifestImportUseCase manifestImportUseCase;
     private final ManifestApprovalUseCase manifestApprovalUseCase;
@@ -85,10 +79,10 @@ public class AdminController {
     private final ManifestDocumentMapper manifestDocumentMapper;
 
     /**
-     * Imports a Capability Manifest through the 10-step validation pipeline
+     * 通过 10 步校验流水线导入能力清单。
      *
-     * @param document the raw capability manifest document
-     * @return the import result with validation report and manifest digest
+     * @param document 原始能力清单文档
+     * @return 含校验报告与清单摘要的导入结果
      */
     @PostMapping("/manifests:import")
     public ResponseEntity<Map<String, Object>> importManifest(
@@ -144,11 +138,11 @@ public class AdminController {
     }
 
     /**
-     * Re-validates an existing manifest version
+     * 重新校验既有清单版本。
      *
-     * @param id the capability identifier
-     * @param version the semantic version
-     * @return the validation result
+     * @param id 能力标识
+     * @param version 语义化版本号
+     * @return 校验结果
      */
     @PostMapping("/capabilities/{id}/versions/{version}:validate")
     public ResponseEntity<Map<String, Object>> validate(
@@ -174,12 +168,12 @@ public class AdminController {
     }
 
     /**
-     * Approves a validated manifest
+     * 审批已通过校验的清单。
      *
-     * @param id the capability identifier
-     * @param version the semantic version
-     * @param request the approval request containing the approver identity
-     * @return the approval result with confirmation summary
+     * @param id 能力标识
+     * @param version 语义化版本号
+     * @param request 含审批人身份的审批请求
+     * @return 含确认摘要的审批结果
      */
     @PostMapping("/capabilities/{id}/versions/{version}:approve")
     public ResponseEntity<Map<String, Object>> approve(
@@ -217,10 +211,10 @@ public class AdminController {
     }
 
     /**
-     * Publishes a new catalog snapshot to the specified environment
+     * 向指定环境发布新的目录快照。
      *
-     * @param request the publish request containing the target environment
-     * @return the publish result with the new snapshot version
+     * @param request 含目标环境的发布请求
+     * @return 含新快照版本的发布结果
      */
     @PostMapping("/releases:publish")
     public ResponseEntity<Map<String, Object>> publish(
@@ -254,10 +248,10 @@ public class AdminController {
     }
 
     /**
-     * Rolls back the catalog to a historical snapshot version
+     * 将目录回滚至历史快照版本。
      *
-     * @param request the rollback request containing the target version and environment
-     * @return the rollback result with the new snapshot version
+     * @param request 含目标版本与环境信息的回滚请求
+     * @return 含新快照版本的回滚结果
      */
     @PostMapping("/releases:rollback")
     public ResponseEntity<Map<String, Object>> rollback(
@@ -286,11 +280,11 @@ public class AdminController {
     }
 
     /**
-     * Suspends a capability immediately
+     * 立即下线指定能力。
      *
-     * @param id the capability identifier to suspend
-     * @param request the suspend request containing the reason and operator
-     * @return the suspension result
+     * @param id 待下线能力标识
+     * @param request 含下线原因与操作人的请求
+     * @return 下线结果
      */
     @PostMapping("/capabilities/{id}:suspend")
     public ResponseEntity<Map<String, Object>> suspend(
@@ -323,10 +317,10 @@ public class AdminController {
     }
 
     /**
-     * Retrieves a catalog snapshot by version
+     * 按版本获取目录快照。
      *
-     * @param snapshotVersion the snapshot version number
-     * @return the catalog snapshot
+     * @param snapshotVersion 快照版本号
+     * @return 目录快照
      */
     @GetMapping("/releases/{snapshotVersion}")
     public ResponseEntity<Map<String, Object>> getSnapshot(
@@ -350,7 +344,7 @@ public class AdminController {
         body.put("digest", snapshot.digest());
         body.put("capabilityCount", snapshot.capabilities().size());
 
-        // List capability IDs and versions without exposing full manifest details
+        // 仅列出能力 ID 与版本，不暴露完整清单细节
         List<Map<String, String>> capabilities = snapshot.capabilities().stream()
                 .map(m -> Map.of(
                         "id", m.metadata().id(),
@@ -363,10 +357,10 @@ public class AdminController {
     }
 
     /**
-     * Builds a validation report response body
+     * 构建校验报告的响应体。
      *
-     * @param report the validation report
-     * @return the response body map
+     * @param report 校验报告
+     * @return 响应体 Map
      */
     private Map<String, Object> buildValidationReportBody(ValidationReport report) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -377,10 +371,10 @@ public class AdminController {
     }
 
     /**
-     * Sanitizes an error message for external exposure
+     * 对外暴露前清理错误消息中的内部信息。
      *
-     * @param message the raw error message
-     * @return the sanitized message safe for external exposure
+     * @param message 原始错误消息
+     * @return 可安全对外暴露的清理后消息
      */
     private String sanitizeErrorMessage(String message) {
         if (message == null) {
@@ -396,9 +390,9 @@ public class AdminController {
     }
 
     /**
-     * Request body for POST /capabilities/{id}/versions/{version}:approve
+     * POST /capabilities/{id}/versions/{version}:approve 的请求体。
      *
-     * @param approver the approver identity
+     * @param approver 审批人身份
      */
     public record ApproveRequest(
             @Size(max = 256)
@@ -407,11 +401,10 @@ public class AdminController {
     }
 
     /**
-     * Request body for POST /releases:publish
+     * POST /releases:publish 的请求体。
      *
-     * @param environment the target environment
-     * @param capabilities the capabilities selected for publication; if empty,
-     *                     all APPROVED capabilities are published
+     * @param environment 目标环境
+     * @param capabilities 待发布的能力列表；若为空则发布全部 APPROVED 能力
      */
     public record PublishRequest(
             @Size(max = 64)
@@ -422,10 +415,10 @@ public class AdminController {
     }
 
     /**
-     * A capability selected for publication in the publish request.
+     * 发布请求中选定的待发布能力。
      *
-     * @param capabilityId the unique capability identifier
-     * @param version the version to publish
+     * @param capabilityId 唯一能力标识
+     * @param version 待发布版本
      */
     public record SelectedCapabilityRequest(
             @NotBlank
@@ -438,10 +431,10 @@ public class AdminController {
     }
 
     /**
-     * Request body for POST /releases:rollback
+     * POST /releases:rollback 的请求体。
      *
-     * @param targetSnapshotVersion the historical snapshot version to roll back to
-     * @param environment the target environment
+     * @param targetSnapshotVersion 回滚目标历史快照版本
+     * @param environment 目标环境
      */
     public record RollbackRequest(
             @Min(1)
@@ -452,10 +445,10 @@ public class AdminController {
     }
 
     /**
-     * Request body for POST /capabilities/{id}:suspend
+     * POST /capabilities/{id}:suspend 的请求体。
      *
-     * @param reason the suspension reason
-     * @param operator the operator performing the suspension
+     * @param reason 下线原因
+     * @param operator 执行下线的操作人
      */
     public record SuspendRequest(
             @NotBlank
