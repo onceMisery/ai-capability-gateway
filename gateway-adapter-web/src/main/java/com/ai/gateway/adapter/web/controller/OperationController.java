@@ -14,8 +14,6 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -67,16 +65,15 @@ public class OperationController {
     private final RequestContextFactory requestContextFactory;
 
     /**
-     * Constructs a new OperationController.
+     * 构造新的 OperationController。
      *
-     * @param prepareUseCase the operation prepare use case
-     * @param confirmUseCase the operation confirm use case
-     * @param statusUseCase the operation status query use case
-     * @param authenticationPort the authentication port for Principal construction
-     * @param operationRepository the operation repository for cancel operations
-     * @param requestContextFactory the factory adapting servlet requests to
-     * the domain {@link RequestContext}
-     * @throws NullPointerException if any argument is null
+     * @param prepareUseCase 写操作预准备用例
+     * @param confirmUseCase 写操作确认用例
+     * @param cancelUseCase 写操作取消用例
+     * @param statusUseCase 写操作状态查询用例
+     * @param authenticationPort 用于构建 Principal 的身份认证端口
+     * @param requestContextFactory 将 Servlet 请求适配为领域 {@link RequestContext} 的工厂
+     * @throws NullPointerException 任意参数为 null 时抛出
      */
     public OperationController(OperationPrepareUseCase prepareUseCase,
                                 OperationConfirmUseCase confirmUseCase,
@@ -99,13 +96,11 @@ public class OperationController {
     }
 
     /**
-     * Prepares a write operation for confirmation.
+     * 预准备一个待确认的写操作。
      *
-     * @param request the prepare request containing text, locale, timezone
-     * @param authHeader the Authorization header (Bearer token)
-     * @param servletRequest the underlying servlet request used to build the
-     * {@link RequestContext}
-     * @return the prepare result with operationId, confirmation token, and summary
+     * @param request 含文本、locale、timezone 的预准备请求
+     * @param servletRequest 用于构建 {@link RequestContext} 的底层 Servlet 请求
+     * @return 含 operationId、确认令牌与摘要的预准备结果
      */
     @PostMapping("/natural-language/actions:prepare")
     public ResponseEntity<Map<String, Object>> prepare(
