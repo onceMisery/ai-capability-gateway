@@ -114,6 +114,11 @@ class ResilientAdaptersTest {
                                    Map<String, String> tags) {
             durations.add(metric);
         }
+
+        @Override
+        public void recordValue(String metric, long value, Map<String, String> tags) {
+            // These tests only assert resilience timing and counters.
+        }
     }
 
     private static final class CountingInvocationAdapter implements InvocationAdapter {

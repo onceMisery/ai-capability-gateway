@@ -16,19 +16,17 @@ import com.networknt.schema.SpecVersion;
 import com.networknt.schema.ValidationMessage;
 
 /**
- * Offline schema validation utility for Capability Manifests (design document ).
+ * Capability Manifest 离线 Schema 校验器。
  *
- * <p>Loads {@code capability-manifest-v1.schema.json} (JSON Schema 2020-12) from the
- * classpath and validates Manifest documents against it. This performs only the
- * machine-checkable structural validation; cross-field semantic
- * constraints are enforced separately by the Contract Validator.</p>
+ * <p>从 classpath 加载 JSON Schema 2020-12 版本的
+ * {@code capability-manifest-v1.schema.json}，只校验机器可判定的文档结构；
+ * 跨字段语义约束仍由领域契约校验器负责。</p>
  *
- * <p>Instances are immutable and safe to reuse; the schema is parsed once at
- * construction time.</p>
+ * <p>实例不可变且可复用，Schema 只在构造时解析一次。</p>
  */
 public final class ManifestSchemaValidator {
 
-    /** Classpath location of the Capability Manifest JSON Schema. */
+    /** Capability Manifest JSON Schema 的 classpath 路径。 */
     private static final String SCHEMA_CLASSPATH = "/schema/capability-manifest-v1.schema.json";
 
     private final ObjectMapper jsonMapper = new ObjectMapper()
@@ -51,11 +49,11 @@ public final class ManifestSchemaValidator {
     }
 
     /**
-     * Validates a Manifest supplied as JSON.
+     * 校验 JSON 格式的 Manifest 文档。
      *
-     * @param manifestJson the Manifest document serialized as JSON
-     * @return a list of human-readable validation errors; empty when the document is valid
-     * @throws IOException if the input cannot be parsed as JSON
+     * @param manifestJson JSON 格式的 Manifest 文档
+     * @return 可读的校验错误列表；为空表示文档合法
+     * @throws IOException 输入无法解析为 JSON 时抛出
      */
     public List<String> validate(String manifestJson) throws IOException {
         JsonNode node = jsonMapper.readTree(manifestJson);
@@ -63,11 +61,11 @@ public final class ManifestSchemaValidator {
     }
 
     /**
-     * Validates a Manifest supplied as YAML by first converting it to a JSON tree.
+     * 将 YAML 格式的 Manifest 转换为 JSON 树后执行校验。
      *
-     * @param manifestYaml the Manifest document serialized as YAML
-     * @return a list of human-readable validation errors; empty when the document is valid
-     * @throws IOException if the input cannot be parsed as YAML
+     * @param manifestYaml YAML 格式的 Manifest 文档
+     * @return 可读的校验错误列表；为空表示文档合法
+     * @throws IOException 输入无法解析为 YAML 时抛出
      */
     public List<String> validateYaml(String manifestYaml) throws IOException {
         JsonNode node = yamlMapper.readTree(manifestYaml);

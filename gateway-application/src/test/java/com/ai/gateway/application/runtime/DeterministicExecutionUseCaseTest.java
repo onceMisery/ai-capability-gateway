@@ -3,6 +3,7 @@ package com.ai.gateway.application.runtime;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
+import com.ai.gateway.domain.model.ExecutionAuditContext;
 import com.ai.gateway.domain.model.InvocationResult;
 import com.ai.gateway.domain.model.OutputContract;
 import com.ai.gateway.domain.model.OutputMode;
@@ -40,8 +41,8 @@ class DeterministicExecutionUseCaseTest {
 
         assertThat(result.errorCode()).isEqualTo(ErrorCode.PERMISSION_DENIED.name());
         assertThat(result.summary()).doesNotContain("authorization database leaked");
-        verify(fixture.audit).recordTerminal(eq("req-auth"), eq("order.query"),
-                eq("1.0.0"), eq(ErrorCode.PERMISSION_DENIED.name()), anyLong(), anyString());
+        verify(fixture.audit).recordTerminal(any(ExecutionAuditContext.class),
+                eq(ErrorCode.PERMISSION_DENIED.name()), anyLong(), anyString());
         verifyNoInteractions(fixture.invocation);
     }
 
@@ -58,8 +59,13 @@ class DeterministicExecutionUseCaseTest {
 
         assertThat(result.errorCode()).isEqualTo(ErrorCode.PROTOCOL_ERROR.name());
         assertThat(result.summary()).doesNotContain("provider secret leaked");
-        verify(fixture.audit).recordTerminal(eq("req-provider"), eq("order.query"),
-                eq("1.0.0"), eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
+        verify(fixture.audit).recordStarted(argThat(context ->
+                context.requestId().equals("req-provider")
+                        && context.subjectDigest().equals("principal-digest")
+                        && context.orgId() == 7L
+                        && context.snapshotVersion() == 3L));
+        verify(fixture.audit).recordTerminal(any(ExecutionAuditContext.class),
+                eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
     }
 
     @Test
@@ -76,8 +82,8 @@ class DeterministicExecutionUseCaseTest {
 
         assertThat(result.errorCode()).isEqualTo(ErrorCode.PROTOCOL_ERROR.name());
         assertThat(result.summary()).doesNotContain("provider response contained a secret");
-        verify(fixture.audit).recordTerminal(eq("req-result"), eq("order.query"),
-                eq("1.0.0"), eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
+        verify(fixture.audit).recordTerminal(any(ExecutionAuditContext.class),
+                eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
     }
 
     @Test
@@ -93,8 +99,8 @@ class DeterministicExecutionUseCaseTest {
 
         assertThat(result.errorCode()).isEqualTo(ErrorCode.PROTOCOL_ERROR.name());
         assertThat(result.summary()).doesNotContain("Cannot invoke");
-        verify(fixture.audit).recordTerminal(eq("req-governance"), eq("order.query"),
-                eq("1.0.0"), eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
+        verify(fixture.audit).recordTerminal(any(ExecutionAuditContext.class),
+                eq(ErrorCode.PROTOCOL_ERROR.name()), anyLong(), anyString());
     }
 
     @Test
@@ -114,8 +120,8 @@ class DeterministicExecutionUseCaseTest {
                 .execute("req-too-large", fixture.plan(), fixture.principal(), fixture.manifest);
 
         assertThat(result.errorCode()).isEqualTo(ErrorCode.RESULT_TOO_LARGE.name());
-        verify(fixture.audit).recordTerminal(eq("req-too-large"), eq("order.query"),
-                eq("1.0.0"), eq(ErrorCode.RESULT_TOO_LARGE.name()), anyLong(), anyString());
+        verify(fixture.audit).recordTerminal(any(ExecutionAuditContext.class),
+                eq(ErrorCode.RESULT_TOO_LARGE.name()), anyLong(), anyString());
     }
 
     private static final class Fixture {

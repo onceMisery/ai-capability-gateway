@@ -126,8 +126,11 @@ public class SaTokenAuthConfiguration {
             Environment environment) {
         int maxEntries = environment.getProperty(
                 "gateway.auth.visibility-cache-max-entries", Integer.class, 10_000);
+        long maxBytes = environment.getProperty(
+                "gateway.auth.visibility-cache-max-bytes", Long.class,
+                64L * 1024L * 1024L);
         return new SaTokenAuthorizationAdapter(
-                false, aclRepository, maxEntries, telemetryPort);
+                false, aclRepository, maxEntries, maxBytes, telemetryPort);
     }
 
     AuthorizationPort authorizationPort(AclRepository aclRepository) {

@@ -15,7 +15,6 @@ import org.apache.lucene.document.TextField;
 import org.apache.lucene.index.DirectoryReader;
 import org.apache.lucene.index.IndexWriter;
 import org.apache.lucene.index.IndexWriterConfig;
-import org.apache.lucene.index.Term;
 import org.apache.lucene.queryparser.classic.MultiFieldQueryParser;
 import org.apache.lucene.queryparser.classic.QueryParser;
 import org.apache.lucene.search.BooleanClause;
@@ -23,17 +22,19 @@ import org.apache.lucene.search.BooleanQuery;
 import org.apache.lucene.search.IndexSearcher;
 import org.apache.lucene.search.Query;
 import org.apache.lucene.search.ScoreDoc;
-import org.apache.lucene.search.TermQuery;
+import org.apache.lucene.search.TermInSetQuery;
 import org.apache.lucene.search.TopDocs;
 import org.apache.lucene.search.similarities.BM25Similarity;
 import org.apache.lucene.store.ByteBuffersDirectory;
 import org.apache.lucene.store.Directory;
+import org.apache.lucene.util.BytesRef;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -89,7 +90,8 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * @see CatalogSnapshot
  * @since 0.1.0
  */
-public final class LuceneCandidateRetriever implements CandidateRetriever {
+public final class LuceneCandidateRetriever
+        implements CandidateRetriever, CatalogBoundCandidateRetriever {
 
     private static final Logger log = LoggerFactory.getLogger(LuceneCandidateRetriever.class);
 
@@ -133,10 +135,7 @@ public final class LuceneCandidateRetriever implements CandidateRetriever {
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
 
     // Volatile references for safe publication after write lock release
-    private volatile IndexSearcher currentSearcher;
-    private volatile DirectoryReader currentReader;
-    private volatile Directory currentDirectory;
-    private volatile Map<String, CapabilityManifest> currentCapabilities = Map.of();
+    private volatile IndexHandle currentIndex;
     private volatile long indexedSnapshotVersion = -1;
 
     /**
@@ -169,48 +168,76 @@ public final class LuceneCandidateRetriever implements CandidateRetriever {
         log.info("Rebuilding BM25 index for snapshot version {}, {} capabilities",
                 snapshot.snapshotVersion(), snapshot.capabilities().size());
 
+        IndexHandle newIndex = buildIndex(snapshot);
         lock.writeLock().lock();
         try {
-            // Close old resources
-            closeCurrentResources();
-
-            // Create new in-memory directory
-            Directory newDir = new ByteBuffersDirectory();
-            IndexWriterConfig config = new IndexWriterConfig(analyzer);
-            config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
-            config.setSimilarity(new BM25Similarity());
-
-            Map<String, CapabilityManifest> newCapabilities = new HashMap<>();
-
-            try (IndexWriter writer = new IndexWriter(newDir, config)) {
-                for (CapabilityManifest manifest : snapshot.capabilities()) {
-                    String capKey = manifest.metadata().id() + ":"
-                            + manifest.metadata().version();
-                    newCapabilities.put(capKey, manifest);
-                    Document doc = createDocument(manifest, capKey);
-                    writer.addDocument(doc);
-                }
-            }
-
-            // Open reader and searcher
-            DirectoryReader newReader = DirectoryReader.open(newDir);
-            IndexSearcher newSearcher = new IndexSearcher(newReader);
-            newSearcher.setSimilarity(new BM25Similarity());
-
-            // Atomically swap references
-            this.currentDirectory = newDir;
-            this.currentReader = newReader;
-            this.currentSearcher = newSearcher;
-            this.currentCapabilities = Map.copyOf(newCapabilities);
-            this.indexedSnapshotVersion = snapshot.snapshotVersion();
+            IndexHandle oldIndex = this.currentIndex;
+            publishIndexLocked(newIndex);
+            closeIndex(oldIndex);
 
             log.info("BM25 index rebuilt: {} documents indexed, snapshot version={}",
-                    newCapabilities.size(), snapshot.snapshotVersion());
+                    newIndex.capabilities().size(), snapshot.snapshotVersion());
         } catch (Exception e) {
+            closeIndex(newIndex);
             log.error("Failed to rebuild BM25 index for snapshot version {}: {}",
                     snapshot.snapshotVersion(), e.getMessage(), e);
         } finally {
             lock.writeLock().unlock();
+        }
+    }
+
+    /** Publishes a prebuilt handle for an atomic catalog-view refresh. */
+    public void publishIndex(IndexHandle index) {
+        Objects.requireNonNull(index, "index must not be null");
+        lock.writeLock().lock();
+        try {
+            publishIndexLocked(index);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    private void publishIndexLocked(IndexHandle index) {
+        this.currentIndex = index;
+        this.indexedSnapshotVersion = index.snapshotVersion();
+    }
+
+    /** Builds an immutable index without changing the currently active index. */
+    public IndexHandle buildIndex(CatalogSnapshot snapshot) {
+        Objects.requireNonNull(snapshot, "snapshot must not be null");
+        Directory newDirectory = new ByteBuffersDirectory();
+        try {
+            IndexWriterConfig config = new IndexWriterConfig(analyzer);
+            config.setOpenMode(IndexWriterConfig.OpenMode.CREATE);
+            config.setSimilarity(new BM25Similarity());
+
+            Map<String, CapabilityManifest> capabilities = new HashMap<>();
+            try (IndexWriter writer = new IndexWriter(newDirectory, config)) {
+                for (CapabilityManifest manifest : snapshot.capabilities()) {
+                    String capKey = manifest.metadata().id() + ":"
+                            + manifest.metadata().version();
+                    if (capabilities.put(capKey, manifest) != null) {
+                        throw new IllegalArgumentException("duplicate capability binding: " + capKey);
+                    }
+                    writer.addDocument(createDocument(manifest, capKey));
+                }
+            }
+            DirectoryReader reader = DirectoryReader.open(newDirectory);
+            IndexSearcher searcher = new IndexSearcher(reader);
+            searcher.setSimilarity(new BM25Similarity());
+            long sizeBytes = 0L;
+            for (String file : newDirectory.listAll()) {
+                sizeBytes = Math.addExact(sizeBytes, newDirectory.fileLength(file));
+            }
+            return new IndexHandle(snapshot.snapshotVersion(), newDirectory, reader,
+                    searcher, Map.copyOf(capabilities), sizeBytes, reader.numDocs());
+        } catch (Exception e) {
+            try {
+                newDirectory.close();
+            } catch (Exception closeFailure) {
+                log.warn("Failed to close incomplete BM25 index: {}", closeFailure.getMessage());
+            }
+            throw new IllegalStateException("failed to build BM25 index", e);
         }
     }
 
@@ -221,6 +248,11 @@ public final class LuceneCandidateRetriever implements CandidateRetriever {
      * @return the indexed snapshot version
      */
     public long getIndexedSnapshotVersion() {
+        return indexedSnapshotVersion;
+    }
+
+    @Override
+    public long indexedCatalogVersion() {
         return indexedSnapshotVersion;
     }
 
@@ -237,60 +269,67 @@ public final class LuceneCandidateRetriever implements CandidateRetriever {
 
         lock.readLock().lock();
         try {
-            IndexSearcher searcher = currentSearcher;
-            if (searcher == null) {
+            IndexHandle index = currentIndex;
+            if (index == null) {
                 log.warn("BM25 index not yet built; returning empty results");
                 return List.of();
             }
-
-            // Build the authorization filter query (non-bypassable)
-            // Only authorized capabilities participate in scoring and Top-K truncation
-            BooleanQuery.Builder filterBuilder = new BooleanQuery.Builder();
-            for (CapabilityManifest manifest : authorizedCapabilities) {
-                String capKey = manifest.metadata().id() + ":"
-                        + manifest.metadata().version();
-                filterBuilder.add(
-                        new TermQuery(new Term(FIELD_CAP_KEY, capKey)),
-                        BooleanClause.Occur.SHOULD
-                );
-            }
-            filterBuilder.setMinimumNumberShouldMatch(1);
-            Query authFilter = filterBuilder.build();
-
-            // Build the text query using MultiFieldQueryParser with boosts
-            MultiFieldQueryParser parser = new MultiFieldQueryParser(SEARCH_FIELDS, analyzer, FIELD_BOOSTS);
-            String escapedText = QueryParser.escape(normalizedText);
-            Query textQuery = parser.parse(escapedText);
-
-            // Combine: MUST match text, FILTER to authorized capabilities only
-            BooleanQuery.Builder fullQuery = new BooleanQuery.Builder();
-            fullQuery.add(textQuery, BooleanClause.Occur.MUST);
-            fullQuery.add(authFilter, BooleanClause.Occur.FILTER);
-            Query combinedQuery = fullQuery.build();
-
-            // Search Top-K
-            TopDocs topDocs = searcher.search(combinedQuery, topK);
-            ScoreDoc[] scoreDocs = topDocs.scoreDocs;
-
-            List<ScoredCapability> results = new ArrayList<>(scoreDocs.length);
-            Map<String, CapabilityManifest> caps = currentCapabilities;
-            for (ScoreDoc scoreDoc : scoreDocs) {
-                Document doc = searcher.doc(scoreDoc.doc);
-                String capKey = doc.get(FIELD_CAP_KEY);
-                CapabilityManifest manifest = caps.get(capKey);
-                if (manifest != null) {
-                    results.add(new ScoredCapability(manifest, scoreDoc.score));
-                }
-            }
-
-            log.debug("BM25 retrieval: text='{}', authorized={}, topK={}, results={}",
-                    normalizedText, authorizedCapabilities.size(), topK, results.size());
-            return results;
+            return retrieve(index, normalizedText, authorizedCapabilities, topK);
         } catch (Exception e) {
             log.error("BM25 retrieval failed: {}", e.getMessage(), e);
             return List.of();
         } finally {
             lock.readLock().unlock();
+        }
+    }
+
+    @Override
+    public List<ScoredCapability> retrieve(String normalizedText,
+                                           ActiveCatalogView view,
+                                           List<CapabilityManifest> authorizedCapabilities,
+                                           int topK) {
+        Objects.requireNonNull(view, "view must not be null");
+        if (view.indexHandle() == null) {
+            return List.of();
+        }
+        return retrieve(view.indexHandle(), normalizedText, authorizedCapabilities, topK);
+    }
+
+    private List<ScoredCapability> retrieve(IndexHandle index,
+                                            String normalizedText,
+                                            List<CapabilityManifest> authorizedCapabilities,
+                                            int topK) {
+        try {
+            // TermInSetQuery avoids Boolean max-clause failures for large ACL sets.
+            List<BytesRef> authorizedKeys = authorizedCapabilities.stream()
+                    .map(manifest -> manifest.metadata().id() + ":"
+                            + manifest.metadata().version())
+                    .distinct()
+                    .map(BytesRef::new)
+                    .toList();
+            Query authFilter = new TermInSetQuery(FIELD_CAP_KEY, authorizedKeys);
+            MultiFieldQueryParser parser = new MultiFieldQueryParser(SEARCH_FIELDS, analyzer, FIELD_BOOSTS);
+            Query textQuery = parser.parse(QueryParser.escape(normalizedText));
+            BooleanQuery.Builder fullQuery = new BooleanQuery.Builder();
+            fullQuery.add(textQuery, BooleanClause.Occur.MUST);
+            fullQuery.add(authFilter, BooleanClause.Occur.FILTER);
+
+            TopDocs topDocs = index.searcher().search(fullQuery.build(), topK);
+            List<ScoredCapability> results = new ArrayList<>(topDocs.scoreDocs.length);
+            for (ScoreDoc scoreDoc : topDocs.scoreDocs) {
+                Document doc = index.searcher().doc(scoreDoc.doc);
+                CapabilityManifest manifest = index.capabilities().get(doc.get(FIELD_CAP_KEY));
+                if (manifest != null) {
+                    results.add(new ScoredCapability(manifest, scoreDoc.score));
+                }
+            }
+            log.debug("BM25 retrieval: text='{}', authorized={}, topK={}, results={}",
+                    normalizedText, authorizedCapabilities.size(), topK, results.size());
+            return results;
+        } catch (Exception e) {
+            log.error("BM25 retrieval failed for catalog version {}: {}",
+                    index.snapshotVersion(), e.getMessage(), e);
+            return List.of();
         }
     }
 
@@ -358,22 +397,77 @@ public final class LuceneCandidateRetriever implements CandidateRetriever {
         return "";
     }
 
-    /**
-     * Closes the current index reader and directory resources.
-     * Called under the write lock.
-     */
-    private void closeCurrentResources() {
+    private void closeIndex(IndexHandle index) {
+        if (index == null) {
+            return;
+        }
         try {
-            if (currentReader != null) {
-                currentReader.close();
-            }
+            index.close();
         } catch (Exception e) {
             log.warn("Failed to close old index reader: {}", e.getMessage());
         }
-        // ByteBuffersDirectory doesn't need explicit close, but we null it out
-        currentReader = null;
-        currentSearcher = null;
-        currentDirectory = null;
-        currentCapabilities = Map.of();
+    }
+
+    /** Immutable Lucene resources associated with one catalog version. */
+    public static final class IndexHandle implements AutoCloseable {
+        private final long snapshotVersion;
+        private final Directory directory;
+        private final DirectoryReader reader;
+        private final IndexSearcher searcher;
+        private final Map<String, CapabilityManifest> capabilities;
+        private final long sizeBytes;
+        private final int documentCount;
+        private final AtomicBoolean closed = new AtomicBoolean();
+
+        private IndexHandle(long snapshotVersion, Directory directory,
+                            DirectoryReader reader, IndexSearcher searcher,
+                            Map<String, CapabilityManifest> capabilities,
+                            long sizeBytes, int documentCount) {
+            this.snapshotVersion = snapshotVersion;
+            this.directory = directory;
+            this.reader = reader;
+            this.searcher = searcher;
+            this.capabilities = capabilities;
+            this.sizeBytes = sizeBytes;
+            this.documentCount = documentCount;
+        }
+
+        public long snapshotVersion() {
+            return snapshotVersion;
+        }
+
+        public long sizeBytes() {
+            return sizeBytes;
+        }
+
+        public int documentCount() {
+            return documentCount;
+        }
+
+        public boolean isClosed() {
+            return closed.get();
+        }
+
+        private IndexSearcher searcher() {
+            if (closed.get()) {
+                throw new IllegalStateException("catalog index handle is closed");
+            }
+            return searcher;
+        }
+
+        private Map<String, CapabilityManifest> capabilities() {
+            return capabilities;
+        }
+
+        @Override
+        public void close() throws Exception {
+            if (closed.compareAndSet(false, true)) {
+                try {
+                    reader.close();
+                } finally {
+                    directory.close();
+                }
+            }
+        }
     }
 }

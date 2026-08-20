@@ -20,6 +20,12 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * 验证 Outbox 与审计保留的安全语义：默认中继器不会把日志当成成功的导出，保留 SQL 要求已成功
+ * 导出的 outbox 记录，失败的导出保持待处理并在重试时成功。
+ *
+ * @author cmiracle@163.com
+ */
 class OutboxSafetyTest {
 
     @Test

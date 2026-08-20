@@ -1,5 +1,6 @@
 package com.ai.gateway.application.controlplane;
 
+import com.ai.gateway.application.agent.CapabilityPublicProjectionService;
 import com.ai.gateway.domain.model.CapabilityLifecycle;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
@@ -15,6 +16,7 @@ import org.mockito.InOrder;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Answers.RETURNS_DEEP_STUBS;
@@ -25,6 +27,33 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class CatalogPublishUseCaseTest {
+
+    @Test
+    void publicationRejectsCapabilityWithoutGovernedAgentProjection() {
+        ManifestRepository repository = mock(ManifestRepository.class);
+        CatalogPort catalog = mock(CatalogPort.class);
+        SnapshotNotifier notifier = mock(SnapshotNotifier.class);
+        CapabilityManifest unsafe = manifest("order.query", "1.0.0");
+        ManifestRepository.ManifestDetail unsafeDetail =
+                detail(unsafe, CapabilityLifecycle.APPROVED);
+        when(repository.findAllWithDetails()).thenReturn(List.of(unsafeDetail));
+        CapabilityPublicProjectionService projectionService =
+                mock(CapabilityPublicProjectionService.class);
+        when(projectionService.project(unsafe)).thenReturn(Optional.empty());
+
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction(),
+                projectionService);
+
+        CatalogPublishUseCase.PublishResult result = useCase.publish("production");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).contains("Agent public projection governance rejected");
+        verify(catalog, never()).saveSnapshot(org.mockito.ArgumentMatchers.any());
+        verify(repository, never()).updateLifecycle(org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any());
+    }
 
     @Test
     void publishAllApprovedManifestsWhenNoSelectionProvided() {

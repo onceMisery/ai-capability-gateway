@@ -20,13 +20,12 @@ import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 /**
- * JDBC implementation of {@link StatsQueryPort} backed by PostgreSQL.
+ * {@link StatsQueryPort} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Executes aggregate queries against the {@code audit_event} table to
- * produce time-series and capability-level statistics for the admin
- * console monitoring dashboard. Results are cached for 30 seconds
- * using Caffeine.</p>
+ * <p>对 {@code audit_event} 表执行聚合查询，为管理控制台监控面板生成时间序列与能力级别的
+ * 统计信息。结果使用 Caffeine 缓存 30 秒。</p>
  *
+ * @author cmiracle@163.com
  * @see StatsQueryPort
  * @since 0.1.0
  */
@@ -61,13 +60,13 @@ public class JdbcStatsQueryAdapter implements StatsQueryPort {
 
     private final JdbcTemplate jdbcTemplate;
 
-    // 30-second cache for stats queries
+    // 统计查询的 30 秒缓存
     private final LoadingCache<StatsCacheKey, List<Map<String, Object>>> statsCache;
 
     /**
-     * Constructs a new JdbcStatsQueryAdapter.
+     * 构造一个新的 JdbcStatsQueryAdapter。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcStatsQueryAdapter(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
@@ -80,18 +79,18 @@ public class JdbcStatsQueryAdapter implements StatsQueryPort {
 
     @Override
     public List<Map<String, Object>> timeSeriesByResultCode(long fromEpochMs, long toEpochMs) {
-        // Use bucketed query for time-series
+        // 时间序列使用按桶（bucket）查询
         Timestamp from = Timestamp.from(Instant.ofEpochMilli(fromEpochMs));
         Timestamp to = Timestamp.from(Instant.ofEpochMilli(toEpochMs));
 
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(
                 SQL_TIME_SERIES_BUCKETED, from, to);
 
-        // Transform to { time, resultCode, count } format
+        // 转换为 { time, resultCode, count } 格式
         List<Map<String, Object>> result = new ArrayList<>();
         for (Map<String, Object> row : rows) {
             Map<String, Object> point = new HashMap<>();
-            // bucket is a Timestamp from date_trunc
+            // bucket 是 date_trunc 生成的 Timestamp
             Object bucketObj = row.get("bucket");
             if (bucketObj instanceof Timestamp ts) {
                 point.put("time", ts.toInstant().toEpochMilli());
@@ -119,7 +118,7 @@ public class JdbcStatsQueryAdapter implements StatsQueryPort {
     }
 
     /**
-     * Cache key for stats queries.
+     * 统计查询的缓存键。
      */
     private record StatsCacheKey(String queryType, long fromEpochMs, long toEpochMs) {
         StatsCacheKey {

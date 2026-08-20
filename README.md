@@ -1,5 +1,9 @@
 # AI Capability Gateway
 
+## 真实 Demo
+
+端到端演示统一入口为 [`gateway-example/demo/README.md`](gateway-example/demo/README.md)。它提供无需 Docker 的 offline 生成校验流程，以及使用 PostgreSQL、Redis、Nacos、Dubbo Provider 和真实网关 API 的 runtime 流程。不要把历史 README 中的手工管理 API 命令当作当前主流程。
+
 AI 能力网关是受治理的能力目录与可信执行平面：把微服务 API 转换为可发现、可授权、可验证、可审计的能力。结构化工具调用是稳定入口，自然语言只是可选的候选选择适配器；所有入口最终经过同一套确定性执行链路完成认证、授权、参数注入、Schema 校验、Dubbo 调用、结果脱敏和审计。
 
 ## 核心设计理念

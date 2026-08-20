@@ -76,6 +76,8 @@ gateway:
   # share the same jwt-secret-key. Set the env var GATEWAY_AUTH_JWT_SECRET
   # on both sides to an identical value.
   auth:
+    visibility-cache-max-entries: ${GATEWAY_AUTH_VISIBILITY_CACHE_MAX_ENTRIES:10000}
+    visibility-cache-max-bytes: ${GATEWAY_AUTH_VISIBILITY_CACHE_MAX_BYTES:67108864}
     provider: ${GATEWAY_AUTH_PROVIDER:}
     sa-token:
       token-name: Authorization
@@ -139,6 +141,27 @@ gateway:
 
   operation:
     confirmation-secret: ${GATEWAY_CONFIRMATION_SECRET:}
+
+  agent:
+    tool-ref-current-key-id: ${GATEWAY_AGENT_TOOL_REF_KEY_ID:k1}
+    tool-ref-secret: ${GATEWAY_AGENT_TOOL_REF_SECRET:}
+    tool-ref-previous-key-id: ${GATEWAY_AGENT_TOOL_REF_PREVIOUS_KEY_ID:}
+    tool-ref-previous-secret: ${GATEWAY_AGENT_TOOL_REF_PREVIOUS_SECRET:}
+    tool-ref-ttl-seconds: ${GATEWAY_AGENT_TOOL_REF_TTL_SECONDS:120}
+    resolve-timeout-ms: ${GATEWAY_AGENT_RESOLVE_TIMEOUT_MS:100}
+    pending-confirmation-max-entries: ${GATEWAY_AGENT_PENDING_CONFIRMATION_MAX_ENTRIES:10000}
+    turn-max-entries: ${GATEWAY_AGENT_TURN_MAX_ENTRIES:10000}
+    resolve-max-concurrent: ${GATEWAY_AGENT_RESOLVE_MAX_CONCURRENT:64}
+    catalog-max-capabilities: ${GATEWAY_AGENT_CATALOG_MAX_CAPABILITIES:10000}
+    catalog-max-index-bytes: ${GATEWAY_AGENT_CATALOG_MAX_INDEX_BYTES:67108864}
+    catalog-max-process-memory-bytes: ${GATEWAY_AGENT_CATALOG_MAX_PROCESS_MEMORY_BYTES:536870912}
+    catalog-build-timeout-ms: ${GATEWAY_AGENT_CATALOG_BUILD_TIMEOUT_MS:5000}
+    catalog-lease-hold-timeout-ms: ${GATEWAY_AGENT_CATALOG_LEASE_HOLD_TIMEOUT_MS:1000}
+    catalog-io-max-rows: ${GATEWAY_AGENT_CATALOG_IO_MAX_ROWS:10000}
+    catalog-io-query-timeout-ms: ${GATEWAY_AGENT_CATALOG_IO_QUERY_TIMEOUT_MS:3000}
+    catalog-io-max-payload-bytes: ${GATEWAY_AGENT_CATALOG_IO_MAX_PAYLOAD_BYTES:134217728}
+    mcp-max-sessions: ${GATEWAY_AGENT_MCP_MAX_SESSIONS:1000}
+    mcp-session-idle-seconds: ${GATEWAY_AGENT_MCP_SESSION_IDLE_SECONDS:1800}
   
   # Rate limits
   rate-limits:

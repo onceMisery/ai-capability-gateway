@@ -3,14 +3,12 @@ package com.ai.gateway.bootstrap.config;
 import com.ai.gateway.domain.model.AdminAction;
 import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.CapabilityVisibility;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
-import com.ai.gateway.domain.port.SnapshotNotifier;
 import com.ai.gateway.domain.port.TokenIssuerPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,8 +37,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Configuration
 @ConditionalOnProperty(name = "gateway.auth.provider", havingValue = "stub", matchIfMissing = true)
 public class StubAuthConfiguration {
-
-    private static final Logger log = LoggerFactory.getLogger(StubAuthConfiguration.class);
 
     private static final String BEARER_PREFIX = "Bearer ";
     private final StubTokenService tokenService = new StubTokenService();
@@ -91,6 +87,16 @@ public class StubAuthConfiguration {
     public AuthorizationPort authorizationPort() {
         return new AuthorizationPort() {
             @Override
+            public CapabilityVisibility resolveVisibility(Principal principal) {
+                return CapabilityVisibility.all(1L);
+            }
+
+            @Override
+            public long currentPolicyEpoch() {
+                return 1L;
+            }
+
+            @Override
             public List<CapabilityManifest> filterVisibleCapabilities(
                     Principal principal, List<CapabilityManifest> candidates) {
                 // Initial release: all authenticated users see all capabilities
@@ -113,31 +119,6 @@ public class StubAuthConfiguration {
             @Override
             public AclPolicyStatus aclPolicyStatus() {
                 return new AclPolicyStatus(true, 0, "ALLOW");
-            }
-        };
-    }
-
-    /**
-     * Stub {@link SnapshotNotifier} that only logs notifications.
-     *
-     * <p>Active when {@code gateway.cache.provider} is unset or {@code stub}.
-     * Selecting {@code gateway.cache.provider=redis} activates the Redis
-     * pub/sub notifier in {@code RedisCacheConfiguration} instead.</p>
-     *
-     * @return the stub snapshot notifier
-     */
-    @Bean
-    @ConditionalOnProperty(name = "gateway.cache.provider", havingValue = "stub", matchIfMissing = true)
-    public SnapshotNotifier snapshotNotifier() {
-        return new SnapshotNotifier() {
-            @Override
-            public void notifySnapshotPublished(long snapshotVersion) {
-                log.info("Snapshot published notification (stub): version={}", snapshotVersion);
-            }
-
-            @Override
-            public void notifySnapshotSuspended(long snapshotVersion) {
-                log.warn("Snapshot suspended notification (stub): version={}", snapshotVersion);
             }
         };
     }

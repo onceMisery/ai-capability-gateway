@@ -3,6 +3,7 @@ package com.ai.gateway.application.runtime;
 import com.ai.gateway.domain.model.DeadlineBudget;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
+import com.ai.gateway.domain.model.ExecutionAuditContext;
 import com.ai.gateway.domain.model.InvocationRequest;
 import com.ai.gateway.domain.model.InvocationResult;
 import com.ai.gateway.domain.model.PayloadLimits;
@@ -180,6 +181,8 @@ public final class DeterministicExecutionUseCase {
         java.util.Objects.requireNonNull(plan, "plan must not be null");
         java.util.Objects.requireNonNull(principal, "principal must not be null");
         java.util.Objects.requireNonNull(manifest, "manifest must not be null");
+        ExecutionAuditContext auditContext =
+                ExecutionAuditContext.forExecution(requestId, plan, principal);
         long startTime = System.currentTimeMillis();
         log.info("Deterministic execution started: executionId={}, capability={}",
                 plan.executionId(), plan.capabilityId());
@@ -195,8 +198,7 @@ public final class DeterministicExecutionUseCase {
             boundArguments = plan.resolvedProtocolArguments();
         } catch (Exception e) {
             log.error("Parameter processing failed: capability={}", plan.capabilityId());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
                     System.currentTimeMillis() - startTime,
                     "{\"reason\":\"parameter_processing_failed\"}");
@@ -213,8 +215,7 @@ public final class DeterministicExecutionUseCase {
         } catch (Exception e) {
             log.error("Execution authorization data source failed: capability={}",
                     plan.capabilityId());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(), ErrorCode.PERMISSION_DENIED.name(),
+            auditPort.recordTerminal(auditContext, ErrorCode.PERMISSION_DENIED.name(),
                     System.currentTimeMillis() - startTime,
                     "{\"reason\":\"authorization_unavailable\"}");
             return new ExecutionResult(null,
@@ -223,8 +224,7 @@ public final class DeterministicExecutionUseCase {
         }
         if (!authorized) {
             log.warn("Execution authorization denied: capability={}", plan.capabilityId());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     ErrorCode.PERMISSION_DENIED.name(),
                     System.currentTimeMillis() - startTime,
                     "{}");
@@ -235,8 +235,7 @@ public final class DeterministicExecutionUseCase {
 
         // --- Phase 2: Protocol invocation ---
         // Record STARTED audit event
-        auditPort.recordStarted(requestId, plan.capabilityId(),
-                plan.capabilityVersion(), plan.manifestDigest());
+        auditPort.recordStarted(auditContext);
 
         // Construct the invocation request
         long providerTimeout = plan.resiliencePolicy().timeoutMs();
@@ -265,8 +264,7 @@ public final class DeterministicExecutionUseCase {
             invocationResult = invocationAdapter.invoke(invocationRequest);
         } catch (Exception e) {
             log.error("Protocol invocation failed: capability={}", plan.capabilityId());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     ErrorCode.PROTOCOL_ERROR.name(),
                     System.currentTimeMillis() - startTime,
                     "{\"reason\":\"provider_invocation_failed\"}");
@@ -278,8 +276,7 @@ public final class DeterministicExecutionUseCase {
         // Check for protocol-level errors
         if (invocationResult.errorCode() != null) {
             log.warn("Provider returned error: code={}", invocationResult.errorCode());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     invocationResult.errorCode().name(),
                     System.currentTimeMillis() - startTime,
                     "{\"protocolStatus\":\"" + invocationResult.protocolStatus() + "\"}");
@@ -302,8 +299,7 @@ public final class DeterministicExecutionUseCase {
             normalizedResult = normalizer.normalize(invocationResult);
         } catch (PayloadLimitExceededException e) {
             log.warn("Result exceeds Payload budget: capability={}", plan.capabilityId());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(), ErrorCode.RESULT_TOO_LARGE.name(),
+            auditPort.recordTerminal(auditContext, ErrorCode.RESULT_TOO_LARGE.name(),
                     System.currentTimeMillis() - startTime,
                     "{\"reason\":\"payload_budget_exceeded\"}");
             return new ExecutionResult(null,
@@ -311,8 +307,7 @@ public final class DeterministicExecutionUseCase {
                     "Provider result exceeds the configured payload budget");
         } catch (Exception e) {
             log.error("Result governance failed: capability={}", plan.capabilityId());
-            auditPort.recordTerminal(requestId, plan.capabilityId(),
-                    plan.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     ErrorCode.PROTOCOL_ERROR.name(),
                     System.currentTimeMillis() - startTime,
                     "{\"reason\":\"result_governance_failed\"}");
@@ -323,8 +318,7 @@ public final class DeterministicExecutionUseCase {
 
         // Record the terminal audit event
         long durationMs = System.currentTimeMillis() - startTime;
-        auditPort.recordTerminal(requestId, plan.capabilityId(),
-                plan.capabilityVersion(), "SUCCEEDED", durationMs,
+        auditPort.recordTerminal(auditContext, "SUCCEEDED", durationMs,
                 "{\"snapshotVersion\":" + plan.snapshotVersion() + "}");
 
         log.info("Deterministic execution completed: executionId={}, durationMs={}",

@@ -3,7 +3,9 @@ package com.ai.gateway.domain.port;
 import com.ai.gateway.domain.model.AdminAction;
 import com.ai.gateway.domain.model.AclPolicyStatus;
 import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.CapabilityVisibility;
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.PolicySnapshot;
 
 import java.util.List;
 
@@ -45,6 +47,27 @@ import java.util.List;
  * @since 0.1.0
  */
 public interface AuthorizationPort {
+
+    /**
+     * Atomically resolves the principal visibility and the policy epoch that produced it.
+     * Agent request paths must pin this object instead of combining independent reads.
+     */
+    default PolicySnapshot resolvePolicySnapshot(Principal principal) {
+        return PolicySnapshot.from(resolveVisibility(principal));
+    }
+
+    /**
+     * Returns a principal-scoped visibility set bound to the current policy epoch.
+     * Implementations that do not provide a set-based index fail closed.
+     */
+    default CapabilityVisibility resolveVisibility(Principal principal) {
+        return CapabilityVisibility.unavailable(currentPolicyEpoch());
+    }
+
+    /** Returns the monotonic epoch of the active authorization policy. */
+    default long currentPolicyEpoch() {
+        return 0L;
+    }
 
     /**
      * Filters the candidate capability list to only those visible to the

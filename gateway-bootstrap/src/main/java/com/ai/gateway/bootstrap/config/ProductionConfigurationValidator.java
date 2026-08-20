@@ -71,6 +71,8 @@ public final class ProductionConfigurationValidator implements InitializingBean 
                 "gateway.auth.sa-token.jwt-secret-key");
         requireStrongSecret(environment, violations,
                 "gateway.operation.confirmation-secret");
+        requireStrongSecret(environment, violations,
+                "gateway.agent.tool-ref-secret");
 
         String adminUsername = value(environment, "gateway.auth.console-admin.username");
         String adminPassword = value(environment, "gateway.auth.console-admin.password");

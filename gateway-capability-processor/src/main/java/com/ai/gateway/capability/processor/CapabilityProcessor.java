@@ -17,9 +17,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.source.doctree.DocCommentTree;
 import com.sun.source.doctree.DocTree;
+import com.sun.source.doctree.LiteralTree;
 import com.sun.source.doctree.ParamTree;
 import com.sun.source.doctree.TextTree;
 import com.sun.source.util.DocTrees;
+import com.sun.source.util.SimpleDocTreeVisitor;
 
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.Filer;
@@ -72,6 +74,23 @@ public final class CapabilityProcessor extends AbstractProcessor {
                     + "(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$");
     private static final Set<String> RESERVED_PATH_SEGMENTS = Set.of(
             "class", "@type", "@class", "proto", "__proto__", "constructor", "prototype");
+    private static final SimpleDocTreeVisitor<String, Void> DOC_TEXT_VISITOR =
+            new SimpleDocTreeVisitor<>() {
+                @Override
+                public String visitText(TextTree node, Void unused) {
+                    return node.getBody();
+                }
+
+                @Override
+                public String visitLiteral(LiteralTree node, Void unused) {
+                    return node.getBody().accept(DOC_TEXT_VISITOR, null);
+                }
+
+                @Override
+                protected String defaultAction(DocTree node, Void unused) {
+                    return node.toString();
+                }
+            };
 
     private final Map<String, CapabilityDescriptor> descriptors = new TreeMap<>();
     private final Map<String, String> annotatedMethods = new TreeMap<>();
@@ -400,8 +419,7 @@ public final class CapabilityProcessor extends AbstractProcessor {
 
     private static String normalizeDocTrees(List<? extends DocTree> trees) {
         return trees.stream()
-                .map(tree -> tree instanceof TextTree textTree
-                        ? textTree.getBody() : tree.toString())
+                .map(tree -> tree.accept(DOC_TEXT_VISITOR, null))
                 .collect(Collectors.joining())
                 .replaceAll("\\s+", " ")
                 .trim();

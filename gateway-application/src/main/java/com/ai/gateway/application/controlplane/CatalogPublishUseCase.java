@@ -1,5 +1,6 @@
 package com.ai.gateway.application.controlplane;
 
+import com.ai.gateway.application.agent.CapabilityPublicProjectionService;
 import com.ai.gateway.domain.model.CapabilityLifecycle;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
@@ -51,6 +52,7 @@ public final class CatalogPublishUseCase {
     private final SnapshotNotifier snapshotNotifier;
     private final LifecycleStateMachine lifecycleStateMachine;
     private final TransactionPort transactionPort;
+    private final CapabilityPublicProjectionService publicProjectionService;
 
     /**
      * Constructs a new CatalogPublishUseCase with the required dependencies.
@@ -67,6 +69,17 @@ public final class CatalogPublishUseCase {
                                  SnapshotNotifier snapshotNotifier,
                                  LifecycleStateMachine lifecycleStateMachine,
                                  TransactionPort transactionPort) {
+        this(manifestRepository, catalogPort, snapshotNotifier, lifecycleStateMachine,
+                transactionPort, null);
+    }
+
+    /** Constructs the publication use case with Agent projection governance enabled. */
+    public CatalogPublishUseCase(ManifestRepository manifestRepository,
+                                 CatalogPort catalogPort,
+                                 SnapshotNotifier snapshotNotifier,
+                                 LifecycleStateMachine lifecycleStateMachine,
+                                 TransactionPort transactionPort,
+                                 CapabilityPublicProjectionService publicProjectionService) {
         this.manifestRepository = java.util.Objects.requireNonNull(
                 manifestRepository, "manifestRepository must not be null");
         this.catalogPort = java.util.Objects.requireNonNull(
@@ -77,6 +90,7 @@ public final class CatalogPublishUseCase {
                 lifecycleStateMachine, "lifecycleStateMachine must not be null");
         this.transactionPort = java.util.Objects.requireNonNull(
                 transactionPort, "transactionPort must not be null");
+        this.publicProjectionService = publicProjectionService;
     }
 
     /**
@@ -142,6 +156,19 @@ public final class CatalogPublishUseCase {
 
             if (manifestsToPublish.isEmpty()) {
                 return new PublishResult(false, 0, "No approved manifests to publish");
+            }
+            if (publicProjectionService != null) {
+                List<String> rejectedAgentCapabilities = manifestsToPublish.stream()
+                        .filter(manifest -> publicProjectionService.project(manifest).isEmpty())
+                        .map(manifest -> manifest.metadata().id() + ":"
+                                + manifest.metadata().version())
+                        .sorted()
+                        .toList();
+                if (!rejectedAgentCapabilities.isEmpty()) {
+                    return new PublishResult(false, 0,
+                            "Agent public projection governance rejected: "
+                                    + String.join(", ", rejectedAgentCapabilities));
+                }
             }
             for (CapabilityManifest manifest : manifestsToPublish) {
                 lifecycleStateMachine.validateTransition(

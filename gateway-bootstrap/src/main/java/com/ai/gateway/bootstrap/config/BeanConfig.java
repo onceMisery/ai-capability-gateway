@@ -4,6 +4,20 @@ import com.ai.gateway.adapter.llm.HttpLlmRouterAdapter;
 import com.ai.gateway.adapter.llm.LlmRequestBuilder;
 import com.ai.gateway.adapter.llm.LlmResponseParser;
 import com.ai.gateway.adapter.llm.PromptTemplateRegistry;
+import com.ai.gateway.application.agent.AgentCapabilityResolver;
+import com.ai.gateway.application.agent.AgentHostToolCallUseCase;
+import com.ai.gateway.application.agent.AgentModelResultMapper;
+import com.ai.gateway.application.agent.AgentHostConnector;
+import com.ai.gateway.application.agent.AgentResolveAdmissionController;
+import com.ai.gateway.application.agent.AgentTurnStore;
+import com.ai.gateway.application.agent.InMemoryAgentTurnStore;
+import com.ai.gateway.application.agent.CapabilityPublicProjectionService;
+import com.ai.gateway.application.agent.InMemoryPendingConfirmationStore;
+import com.ai.gateway.application.agent.PendingConfirmationStore;
+import com.ai.gateway.application.agent.ToolReferenceService;
+import com.ai.gateway.adapter.mcp.McpGatewayAdapter;
+import com.ai.gateway.adapter.mcp.McpRequestContextFilter;
+import com.ai.gateway.adapter.mcp.McpWebMvcTransportAdapter;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import com.ai.gateway.application.catalog.LuceneCandidateRetriever;
 import com.ai.gateway.application.console.AclManageUseCase;
@@ -31,6 +45,8 @@ import com.ai.gateway.application.resilience.ResilientInvocationAdapter;
 import com.ai.gateway.application.resilience.ResilientLlmRouter;
 import com.ai.gateway.bootstrap.telemetry.MicrometerTelemetryAdapter;
 import com.ai.gateway.application.runtime.ClarificationUseCase;
+import com.ai.gateway.application.runtime.AgentToolCallUseCase;
+import com.ai.gateway.application.runtime.AgentToolCatalogUseCase;
 import com.ai.gateway.application.runtime.DeterministicExecutionUseCase;
 import com.ai.gateway.application.runtime.NaturalLanguageQueryUseCase;
 import com.ai.gateway.application.runtime.StructuredInvocationUseCase;
@@ -80,15 +96,23 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.web.servlet.function.RouterFunction;
+import org.springframework.web.servlet.function.ServerResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ai.gateway.adapter.dubbo.DubboInvocationAdapter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 
 import java.time.Instant;
 import java.time.format.DateTimeParseException;
+import java.nio.charset.StandardCharsets;
+import java.security.SecureRandom;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 /**
  * Manual bean assembly for the AI Capability Gateway.
@@ -226,7 +250,6 @@ public class BeanConfig {
     @Bean
     public org.springframework.boot.ApplicationRunner catalogStartupLoader(
             InMemoryCatalogManager catalogManager,
-            com.ai.gateway.application.catalog.LuceneCandidateRetriever candidateRetriever,
             com.ai.gateway.adapter.dubbo.DubboReferenceManager dubboReferenceManager,
             GatewayProperties gatewayProperties,
             @org.springframework.beans.factory.annotation.Value("${dubbo.registry.address:nacos://nacos.dev.com:8848}") String dubboRegistryAddress) {
@@ -239,11 +262,6 @@ public class BeanConfig {
             if (loaded) {
                 log.info("Catalog snapshot loaded successfully on startup: version={}",
                         catalogManager.getCurrentSnapshotVersion());
-                // Rebuild the BM25 retrieval index from the loaded snapshot
-                var snapshot = catalogManager.getCurrentSnapshot();
-                if (snapshot != null) {
-                    candidateRetriever.rebuildIndex(snapshot);
-                }
             } else {
                 log.warn("No catalog snapshot available on startup (first run or no publish yet)");
             }
@@ -368,8 +386,21 @@ public class BeanConfig {
      * coordinates index rebuilding.
      */
     @Bean
-    public InMemoryCatalogManager inMemoryCatalogManager(CatalogPort catalogPort) {
-        return new InMemoryCatalogManager(catalogPort);
+    public InMemoryCatalogManager inMemoryCatalogManager(
+            CatalogPort catalogPort,
+            CapabilityPublicProjectionService projectionService,
+            LuceneCandidateRetriever candidateRetriever,
+            TelemetryPort telemetryPort,
+            GatewayProperties gatewayProperties,
+            @org.springframework.beans.factory.annotation.Qualifier("catalogRefreshExecutor")
+            ExecutorService catalogRefreshExecutor) {
+        GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        return new InMemoryCatalogManager(
+                catalogPort, projectionService, candidateRetriever, telemetryPort,
+                agent.getCatalogMaxCapabilities(), agent.getCatalogMaxIndexBytes(),
+                agent.getCatalogMaxProcessMemoryBytes(), agent.getCatalogBuildTimeoutMs(),
+                agent.getCatalogLeaseHoldTimeoutMs(),
+                catalogRefreshExecutor);
     }
 
     /**
@@ -378,6 +409,20 @@ public class BeanConfig {
     @Bean
     public LuceneCandidateRetriever luceneCandidateRetriever() {
         return new LuceneCandidateRetriever();
+    }
+
+    /**
+     * Isolates database snapshot reads and Lucene/View construction from
+     * request and Redis listener threads. A single worker also prevents
+     * overlapping generations from doubling the catalog build footprint.
+     */
+    @Bean(name = "catalogRefreshExecutor", destroyMethod = "shutdown")
+    public ExecutorService catalogRefreshExecutor() {
+        return Executors.newFixedThreadPool(1, runnable -> {
+            Thread thread = new Thread(runnable, "gateway-catalog-refresh");
+            thread.setDaemon(true);
+            return thread;
+        });
     }
 
     // ======================================================================
@@ -469,13 +514,15 @@ public class BeanConfig {
             CatalogPort catalogPort,
             SnapshotNotifier snapshotNotifier,
             LifecycleStateMachine lifecycleStateMachine,
-            TransactionPort transactionPort) {
+            TransactionPort transactionPort,
+            CapabilityPublicProjectionService publicProjectionService) {
         return new CatalogPublishUseCase(
                 manifestRepository,
                 catalogPort,
                 snapshotNotifier,
                 lifecycleStateMachine,
-                transactionPort);
+                transactionPort,
+                publicProjectionService);
     }
 
     /**
@@ -585,13 +632,200 @@ public class BeanConfig {
             CatalogPort catalogPort,
             SchemaValidator schemaValidator,
             TypeConverterRegistry typeConverterRegistry,
+            com.ai.gateway.domain.port.AuditPort auditPort,
             DeterministicExecutionUseCase deterministicExecutionUseCase,
             GatewayProperties gatewayProperties,
             PayloadLimits payloadLimits) {
         return new StructuredInvocationUseCase(authenticationPort, authorizationPort,
-                catalogPort, schemaValidator, typeConverterRegistry,
+                catalogPort, schemaValidator, typeConverterRegistry, auditPort,
                 deterministicExecutionUseCase, gatewayProperties.getEnvironment(),
                 payloadLimits);
+    }
+
+    /** Agent-facing discovery keeps only a small authorized Top-K in context. */
+    @Bean
+    public AgentToolCatalogUseCase agentToolCatalogUseCase(
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            InMemoryCatalogManager catalogManager,
+            CandidateRetriever candidateRetriever,
+            AliasGenerator aliasGenerator,
+            GatewayProperties gatewayProperties) {
+        return new AgentToolCatalogUseCase(authenticationPort, authorizationPort,
+                catalogManager, candidateRetriever, new TextNormalizer(), aliasGenerator,
+                gatewayProperties.getEnvironment());
+    }
+
+    /** Unified Agent read/prepare dispatcher. */
+    @Bean
+    public AgentToolCallUseCase agentToolCallUseCase(
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            CatalogPort catalogPort,
+            StructuredInvocationUseCase structuredInvocationUseCase,
+            OperationPrepareUseCase operationPrepareUseCase,
+            GatewayProperties gatewayProperties) {
+        return new AgentToolCallUseCase(authenticationPort, authorizationPort, catalogPort,
+                structuredInvocationUseCase, operationPrepareUseCase,
+                gatewayProperties.getEnvironment());
+    }
+
+    @Bean
+    public CapabilityPublicProjectionService capabilityPublicProjectionService() {
+        return new CapabilityPublicProjectionService();
+    }
+
+    @Bean
+    public ToolReferenceService toolReferenceService(GatewayProperties gatewayProperties) {
+        GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        byte[] currentKey = toolReferenceKey(
+                agent.getToolRefSecret(), gatewayProperties.getEnvironment());
+        byte[] previousKey = agent.getToolRefPreviousKeyId() == null
+                || agent.getToolRefPreviousKeyId().isBlank()
+                ? null
+                : toolReferenceKey(agent.getToolRefPreviousSecret(),
+                        gatewayProperties.getEnvironment());
+        return new ToolReferenceService(
+                agent.getToolRefCurrentKeyId(), currentKey,
+                agent.getToolRefPreviousKeyId(), previousKey,
+                agent.getToolRefTtlSeconds());
+    }
+
+    @Bean(name = "agentResolveExecutor", destroyMethod = "shutdown")
+    public ExecutorService agentResolveExecutor(GatewayProperties gatewayProperties) {
+        int configured = gatewayProperties.getAgent().getResolveMaxConcurrent();
+        int threads = Math.max(1, Math.min(configured,
+                Runtime.getRuntime().availableProcessors() * 2));
+        return Executors.newFixedThreadPool(threads, runnable -> {
+            Thread thread = new Thread(runnable, "gateway-agent-resolve");
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    @Bean
+    public AgentCapabilityResolver agentCapabilityResolver(
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            InMemoryCatalogManager catalogManager,
+            CandidateRetriever candidateRetriever,
+            ToolReferenceService toolReferenceService,
+            TelemetryPort telemetryPort,
+            @org.springframework.beans.factory.annotation.Qualifier("agentResolveExecutor")
+            ExecutorService agentResolveExecutor,
+            GatewayProperties gatewayProperties) {
+        return new AgentCapabilityResolver(
+                authenticationPort, authorizationPort, catalogManager, candidateRetriever,
+                new TextNormalizer(), toolReferenceService, telemetryPort,
+                agentResolveExecutor, gatewayProperties.getAgent().getResolveTimeoutMs());
+    }
+
+    @Bean
+    public AgentHostToolCallUseCase agentHostToolCallUseCase(
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            InMemoryCatalogManager catalogManager,
+            ToolReferenceService toolReferenceService,
+            AgentToolCallUseCase agentToolCallUseCase,
+            TelemetryPort telemetryPort) {
+        return new AgentHostToolCallUseCase(
+                authenticationPort, authorizationPort, catalogManager,
+                toolReferenceService, agentToolCallUseCase, telemetryPort);
+    }
+
+    @Bean
+    public PendingConfirmationStore pendingConfirmationStore(
+            GatewayProperties gatewayProperties,
+            TelemetryPort telemetryPort) {
+        return new InMemoryPendingConfirmationStore(
+                gatewayProperties.getAgent().getPendingConfirmationMaxEntries(), telemetryPort);
+    }
+
+    @Bean
+    public AgentModelResultMapper agentModelResultMapper(
+            PendingConfirmationStore pendingConfirmationStore) {
+        return new AgentModelResultMapper(pendingConfirmationStore);
+    }
+
+    @Bean
+    public AgentTurnStore agentTurnStore(GatewayProperties gatewayProperties,
+                                         TelemetryPort telemetryPort) {
+        return new InMemoryAgentTurnStore(
+                gatewayProperties.getAgent().getTurnMaxEntries(), telemetryPort);
+    }
+
+    @Bean
+    public AgentResolveAdmissionController agentResolveAdmissionController(
+            GatewayProperties gatewayProperties, TelemetryPort telemetryPort) {
+        return new AgentResolveAdmissionController(
+                gatewayProperties.getAgent().getResolveMaxConcurrent(), telemetryPort);
+    }
+
+    @Bean
+    public AgentHostConnector agentHostConnector(
+            AuthenticationPort authenticationPort,
+            AgentCapabilityResolver resolver,
+            AgentHostToolCallUseCase callUseCase,
+            AgentModelResultMapper modelResultMapper,
+            AgentTurnStore turnStore,
+            PendingConfirmationStore confirmationStore,
+            OperationConfirmUseCase confirmUseCase,
+            OperationCancelUseCase cancelUseCase,
+            OperationStatusUseCase statusUseCase,
+            TelemetryPort telemetryPort,
+            AgentResolveAdmissionController resolveAdmission) {
+        return new AgentHostConnector(authenticationPort, resolver, callUseCase,
+                modelResultMapper, turnStore, confirmationStore,
+                confirmUseCase, cancelUseCase, statusUseCase, telemetryPort,
+                resolveAdmission);
+    }
+
+    @Bean
+    public McpGatewayAdapter mcpGatewayAdapter(
+            AgentHostConnector connector) {
+        return new McpGatewayAdapter(connector);
+    }
+
+    @Bean
+    public McpWebMvcTransportAdapter mcpWebMvcTransportAdapter(
+            ObjectMapper objectMapper,
+            McpGatewayAdapter gatewayAdapter,
+            AuthenticationPort authenticationPort,
+            TelemetryPort telemetryPort,
+            GatewayProperties gatewayProperties) {
+        GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        return new McpWebMvcTransportAdapter(
+                objectMapper, gatewayAdapter, authenticationPort, telemetryPort,
+                agent.getMcpMaxSessions(),
+                java.time.Duration.ofSeconds(agent.getMcpSessionIdleSeconds()));
+    }
+
+    @Bean
+    public RouterFunction<ServerResponse> mcpRouterFunction(
+            McpWebMvcTransportAdapter transportAdapter) {
+        return transportAdapter.routerFunction();
+    }
+
+    @Bean
+    public FilterRegistrationBean<McpRequestContextFilter> mcpRequestContextFilter() {
+        FilterRegistrationBean<McpRequestContextFilter> registration =
+                new FilterRegistrationBean<>(new McpRequestContextFilter());
+        registration.addUrlPatterns("/mcp/*");
+        registration.setOrder(-100);
+        return registration;
+    }
+
+    private static byte[] toolReferenceKey(String configuredSecret, String environment) {
+        if (configuredSecret != null && !configuredSecret.isBlank()) {
+            return configuredSecret.getBytes(StandardCharsets.UTF_8);
+        }
+        if ("production".equalsIgnoreCase(environment)) {
+            throw new IllegalStateException(
+                    "gateway.agent.tool-ref-secret is required in production");
+        }
+        byte[] generated = new byte[32];
+        new SecureRandom().nextBytes(generated);
+        return generated;
     }
 
     @Bean
@@ -640,7 +874,8 @@ public class BeanConfig {
             AuthenticationPort authenticationPort,
             ConfirmationTokenCodec confirmationTokenCodec,
             ArgumentPayloadCodec argumentPayloadCodec,
-            PayloadLimits payloadLimits) {
+            PayloadLimits payloadLimits,
+            GatewayProperties gatewayProperties) {
         return new OperationPrepareUseCase(
                 naturalLanguageQueryUseCase,
                 typeConverterRegistry,
@@ -652,7 +887,8 @@ public class BeanConfig {
                 authenticationPort,
                 confirmationTokenCodec,
                 argumentPayloadCodec,
-                payloadLimits);
+                payloadLimits,
+                gatewayProperties.getEnvironment());
     }
 
     /**

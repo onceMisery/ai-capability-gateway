@@ -3,8 +3,7 @@ package com.ai.gateway.adapter.postgresql.outbox;
 import com.ai.gateway.domain.port.OutboxPort.OutboxEvent;
 import com.ai.gateway.domain.port.OutboxExporterPort;
 import org.springframework.beans.factory.ObjectProvider;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -13,29 +12,23 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Background relay that polls the transactional outbox and exports events
- * to an external sink.
+ * 后台中继器，轮询事务性 Outbox 并将事件导出到外部目标。
  *
- * <p>The relay implements at-least-once delivery semantics: events are
- * polled from the outbox, exported to the downstream system, and marked as
- * exported only on success. If the downstream system is unavailable, events
- * accumulate locally and an alert is raised — events are never discarded
- *.</p>
+ * <p>中继器实现至少一次（at-least-once）投递语义：事件从 Outbox 中轮询出来，导出到下游系统，
+ * 仅当成功时才标记为已导出。若下游系统不可用，事件会在本地累积并触发告警——事件绝不会被丢弃。</p>
  *
- * <p><b>Backpressure:</b> if the local backlog exceeds a configurable
- * threshold, a warning is logged on each poll cycle. The relay does not
- * discard events; it continues to retry until the downstream system recovers.</p>
+ * <p><b>背压：</b> 若本地积压超过可配置的阈值，每个轮询周期都会记录一条告警。中继器不会丢弃
+ * 事件，而是持续重试直到下游系统恢复。</p>
  *
- * <p>The actual export logic (for example, publishing to Kafka or sending to
- * a SIEM) is delegated to a configured {@link OutboxExporterPort}. Without
- * an exporter, the relay deliberately leaves events pending.</p>
+ * <p>实际的导出逻辑（例如发布到 Kafka 或发送到 SIEM）委托给配置的 {@link OutboxExporterPort}。
+ * 若没有导出器，中继器会刻意将事件保持为待处理状态。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class OutboxRelay {
-
-    private static final Logger log = LoggerFactory.getLogger(OutboxRelay.class);
 
     private static final int DEFAULT_BATCH_SIZE = 100;
     private static final int DEFAULT_BACKLOG_ALERT_THRESHOLD = 1000;
@@ -50,9 +43,9 @@ public class OutboxRelay {
     private final OutboxExporterPort exporter;
 
     /**
-     * Constructs a new OutboxRelay with default configuration.
+     * 使用默认配置构造一个新的 OutboxRelay。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     @org.springframework.beans.factory.annotation.Autowired
     public OutboxRelay(JdbcTemplate jdbcTemplate, ObjectProvider<OutboxExporterPort> exporterProvider) {
@@ -65,11 +58,11 @@ public class OutboxRelay {
     }
 
     /**
-     * Constructs a new OutboxRelay with custom configuration.
+     * 使用自定义配置构造一个新的 OutboxRelay。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
-     * @param batchSize the maximum number of events to poll per cycle
-     * @param backlogAlertThreshold the pending count threshold for backpressure alerts
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
+     * @param batchSize 每个轮询周期最多轮询的事件数
+     * @param backlogAlertThreshold 触发背压告警的待处理数量阈值
      */
     public OutboxRelay(JdbcTemplate jdbcTemplate, int batchSize, int backlogAlertThreshold) {
         this(jdbcTemplate, null, batchSize, backlogAlertThreshold);
@@ -86,14 +79,14 @@ public class OutboxRelay {
     }
 
     /**
-     * Periodically polls the outbox and exports pending events.
+     * 周期性轮询 Outbox 并导出待处理事件。
      *
-     * <p>Runs every 5 seconds by default. Each cycle:</p>
+     * <p>默认每 5 秒运行一次。每个周期：</p>
      * <ol>
-     * <li>Checks the pending backlog and alerts if above threshold.</li>
-     * <li>Polls a batch of unexported events.</li>
-     * <li>Exports each event to the external sink.</li>
-     * <li>Marks successfully exported events as exported.</li>
+     * <li>检查待处理积压，若超过阈值则告警。</li>
+     * <li>轮询一批未导出的事件。</li>
+     * <li>将每个事件导出到外部目标。</li>
+     * <li>将成功导出的事件标记为已导出。</li>
      * </ol>
      */
     @Scheduled(fixedDelay = 5000)
@@ -131,10 +124,9 @@ public class OutboxRelay {
     }
 
     /**
-     * Checks the pending backlog and logs an alert if above threshold.
+     * 检查待处理积压，并在超过阈值时记录告警。
      *
-     * <p>: if the downstream system is unavailable, the local
-     * Outbox accumulates and alerts; events must not be dropped.</p>
+     * <p>说明：若下游系统不可用，本地 Outbox 会累积并告警；事件绝不能被丢弃。</p>
      */
     private void checkBacklog() {
         Long pendingCount = jdbcTemplate.queryForObject(SQL_COUNT_PENDING, Long.class);

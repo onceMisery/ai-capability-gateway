@@ -13,14 +13,14 @@ import java.sql.SQLException;
 import java.sql.Types;
 
 /**
- * Utility for serializing Java objects to PostgreSQL JSONB values and
- * deserializing JSONB column values back to Java objects.
+ * 将 Java 对象序列化为 PostgreSQL 的 JSONB 值、以及将 JSONB 列值反序列化回
+ * Java 对象的工具类。
  *
- * <p>Uses a shared {@link ObjectMapper} instance (thread-safe after
- * configuration) to avoid repeated allocation. JSONB values are bound
- * to {@link PreparedStatement} parameters via {@link PGobject} so the
- * PostgreSQL driver sends the correct binary type.</p>
+ * <p>使用一个共享的 {@link ObjectMapper} 实例（配置完成后线程安全）以避免重复
+ * 分配。JSONB 值通过 {@link PGobject} 绑定到 {@link PreparedStatement} 参数，
+ * 以便 PostgreSQL 驱动发送正确的二进制类型。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public final class JsonbSupport {
@@ -34,11 +34,11 @@ public final class JsonbSupport {
     }
 
     /**
-     * Serializes the given object to a JSON string.
+     * 将给定的对象序列化为 JSON 字符串。
      *
-     * @param obj the object to serialize
-     * @return the JSON string, or {@code null} if {@code obj} is {@code null}
-     * @throws RuntimeException if serialization fails
+     * @param obj 待序列化的对象
+     * @return JSON 字符串；若 {@code obj} 为 {@code null} 则返回 {@code null}
+     * @throws RuntimeException 序列化失败时抛出
      */
     public static String toJson(Object obj) {
         if (obj == null) {
@@ -52,13 +52,13 @@ public final class JsonbSupport {
     }
 
     /**
-     * Deserializes a JSON string to the specified type.
+     * 将 JSON 字符串反序列化为指定类型。
      *
-     * @param json the JSON string
-     * @param type the target type
-     * @param <T> the target type
-     * @return the deserialized object, or {@code null} if {@code json} is {@code null}
-     * @throws RuntimeException if deserialization fails
+     * @param json JSON 字符串
+     * @param type 目标类型
+     * @param <T> 目标类型
+     * @return 反序列化后的对象；若 {@code json} 为 {@code null} 则返回 {@code null}
+     * @throws RuntimeException 反序列化失败时抛出
      */
     public static <T> T fromJson(String json, Class<T> type) {
         if (json == null) {
@@ -72,13 +72,13 @@ public final class JsonbSupport {
     }
 
     /**
-     * Deserializes a JSON string to the specified type reference.
+     * 将 JSON 字符串反序列化为指定的 TypeReference 类型。
      *
-     * @param json the JSON string
-     * @param typeRef the type reference
-     * @param <T> the target type
-     * @return the deserialized object, or {@code null} if {@code json} is {@code null}
-     * @throws RuntimeException if deserialization fails
+     * @param json JSON 字符串
+     * @param typeRef 类型引用
+     * @param <T> 目标类型
+     * @return 反序列化后的对象；若 {@code json} 为 {@code null} 则返回 {@code null}
+     * @throws RuntimeException 反序列化失败时抛出
      */
     public static <T> T fromJson(String json, TypeReference<T> typeRef) {
         if (json == null) {
@@ -92,13 +92,12 @@ public final class JsonbSupport {
     }
 
     /**
-     * Binds a JSON string to a {@link PreparedStatement} parameter as a
-     * PostgreSQL JSONB value.
+     * 将 JSON 字符串作为 PostgreSQL 的 JSONB 值绑定到 {@link PreparedStatement} 参数。
      *
-     * @param ps the prepared statement
-     * @param index the 1-based parameter index
-     * @param json the JSON string; if {@code null}, SQL NULL is bound
-     * @throws SQLException if binding fails
+     * @param ps 预编译语句
+     * @param index 基于 1 的参数索引
+     * @param json JSON 字符串；若为 {@code null} 则绑定 SQL NULL
+     * @throws SQLException 绑定失败时抛出
      */
     public static void setJsonb(PreparedStatement ps, int index, String json) throws SQLException {
         if (json == null) {
@@ -112,12 +111,12 @@ public final class JsonbSupport {
     }
 
     /**
-     * Serializes the given object and binds it as a JSONB parameter.
+     * 序列化给定对象并将其作为 JSONB 参数绑定。
      *
-     * @param ps the prepared statement
-     * @param index the 1-based parameter index
-     * @param obj the object to serialize and bind
-     * @throws SQLException if binding fails
+     * @param ps 预编译语句
+     * @param index 基于 1 的参数索引
+     * @param obj 待序列化并绑定的对象
+     * @throws SQLException 绑定失败时抛出
      */
     public static void setJsonbObject(PreparedStatement ps, int index, Object obj) throws SQLException {
         setJsonb(ps, index, toJson(obj));

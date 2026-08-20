@@ -111,7 +111,6 @@ public class RedisCacheConfiguration {
      *
      * @param redissonClient the Redisson client
      * @param catalogManager the in-memory catalog manager
-     * @param candidateRetriever the retrieval index rebuilder
      * @param environment the environment this instance serves
      * @return the snapshot cache listener
      */
@@ -119,10 +118,9 @@ public class RedisCacheConfiguration {
     public SnapshotCacheListener snapshotCacheListener(
             RedissonClient redissonClient,
             InMemoryCatalogManager catalogManager,
-            LuceneCandidateRetriever candidateRetriever,
             RedisGatewayProperties properties) {
         return new SnapshotCacheListener(
-                redissonClient, catalogManager, candidateRetriever, properties.getEnvironment());
+                redissonClient, catalogManager, properties.getEnvironment());
     }
 
     /**

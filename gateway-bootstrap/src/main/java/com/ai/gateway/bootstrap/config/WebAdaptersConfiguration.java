@@ -1,6 +1,7 @@
 package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.adapter.web.controller.AclAdminController;
+import com.ai.gateway.adapter.web.controller.AgentToolController;
 import com.ai.gateway.adapter.web.GatewayWebProperties;
 import com.ai.gateway.adapter.web.controller.AdminController;
 import com.ai.gateway.adapter.web.controller.CatalogQueryController;
@@ -10,10 +11,12 @@ import com.ai.gateway.adapter.web.controller.MonitorQueryController;
 import com.ai.gateway.adapter.web.controller.NaturalLanguageController;
 import com.ai.gateway.adapter.web.controller.OperationController;
 import com.ai.gateway.adapter.web.controller.SystemConfigController;
+import com.ai.gateway.adapter.web.controller.ToolController;
 import com.ai.gateway.adapter.web.filter.RequestSizeLimitFilter;
 import com.ai.gateway.adapter.web.filter.AdminAuthenticationFilter;
 import com.ai.gateway.adapter.web.filter.TraceContextFilter;
 import com.ai.gateway.adapter.web.handler.GlobalExceptionHandler;
+import com.ai.gateway.adapter.web.manifest.ManifestDocumentMapper;
 import com.ai.gateway.adapter.web.support.RequestContextFactory;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -32,12 +35,15 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @EnableConfigurationProperties(GatewayWebProperties.class)
 @Import({
         RequestContextFactory.class,
+        ManifestDocumentMapper.class,
         AdminController.class,
+        ToolController.class,
         NaturalLanguageController.class,
         OperationController.class,
         HealthController.class,
         ConsoleAuthController.class,
         AclAdminController.class,
+        AgentToolController.class,
         MonitorQueryController.class,
         CatalogQueryController.class,
         SystemConfigController.class,

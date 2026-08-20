@@ -11,6 +11,8 @@ import com.ai.gateway.adapter.postgresql.repository.JdbcEnvelopeProfileRegistry;
 import com.ai.gateway.adapter.postgresql.repository.JdbcInteractionRepository;
 import com.ai.gateway.adapter.postgresql.repository.JdbcManifestRepository;
 import com.ai.gateway.adapter.postgresql.repository.JdbcOperationRepository;
+import com.ai.gateway.adapter.postgresql.repository.CatalogReadBudget;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -39,4 +41,17 @@ import org.springframework.context.annotation.Import;
         OutboxRelay.class,
 })
 public class PostgresqlAdaptersConfiguration {
+
+    @Bean
+    public CatalogReadBudget catalogReadBudget(GatewayProperties properties) {
+        GatewayProperties.Agent agent = properties.getAgent();
+        long timeoutMs = agent.getCatalogIoQueryTimeoutMs();
+        if (timeoutMs <= 0L) {
+            throw new IllegalArgumentException("catalogIoQueryTimeoutMs must be positive");
+        }
+        long timeoutSecondsValue = Math.min(Integer.MAX_VALUE, (timeoutMs - 1L) / 1000L + 1L);
+        int timeoutSeconds = Math.toIntExact(Math.max(1L, timeoutSecondsValue));
+        return new CatalogReadBudget(agent.getCatalogIoMaxRows(), timeoutSeconds,
+                agent.getCatalogIoMaxPayloadBytes());
+    }
 }

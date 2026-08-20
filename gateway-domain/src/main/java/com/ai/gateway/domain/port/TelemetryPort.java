@@ -11,4 +11,7 @@ public interface TelemetryPort {
     void increment(String metric, Map<String, String> tags);
 
     void recordDuration(String metric, long durationNanos, Map<String, String> tags);
+
+    /** Records the latest value of a bounded runtime resource. */
+    void recordValue(String metric, long value, Map<String, String> tags);
 }

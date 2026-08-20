@@ -12,6 +12,7 @@ import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.model.SystemContext;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.AuthenticationPort;
+import com.ai.gateway.domain.port.AuditPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.SchemaValidator;
@@ -44,6 +45,7 @@ public final class StructuredInvocationUseCase {
     private final CatalogPort catalogPort;
     private final SchemaValidator schemaValidator;
     private final TypeConverterRegistry typeConverterRegistry;
+    private final AuditPort auditPort;
     private final DeterministicExecutionUseCase deterministicExecutionUseCase;
     private final String environment;
     private final PayloadLimits payloadLimits;
@@ -54,10 +56,11 @@ public final class StructuredInvocationUseCase {
                                        CatalogPort catalogPort,
                                        SchemaValidator schemaValidator,
                                        TypeConverterRegistry typeConverterRegistry,
+                                       AuditPort auditPort,
                                        DeterministicExecutionUseCase deterministicExecutionUseCase,
                                        String environment) {
         this(authenticationPort, authorizationPort, catalogPort, schemaValidator,
-                typeConverterRegistry, deterministicExecutionUseCase, environment,
+                typeConverterRegistry, auditPort, deterministicExecutionUseCase, environment,
                 PayloadLimits.defaults());
     }
 
@@ -69,6 +72,7 @@ public final class StructuredInvocationUseCase {
      * @param catalogPort 能力目录端口
      * @param schemaValidator Schema 校验器
      * @param typeConverterRegistry 类型转换器注册表
+     * @param auditPort 审计端口
      * @param deterministicExecutionUseCase 确定性执行用例
      * @param environment 运行环境
      * @param payloadLimits 统一 Payload 预算
@@ -78,6 +82,7 @@ public final class StructuredInvocationUseCase {
                                        CatalogPort catalogPort,
                                        SchemaValidator schemaValidator,
                                        TypeConverterRegistry typeConverterRegistry,
+                                       AuditPort auditPort,
                                        DeterministicExecutionUseCase deterministicExecutionUseCase,
                                        String environment,
                                        PayloadLimits payloadLimits) {
@@ -86,6 +91,7 @@ public final class StructuredInvocationUseCase {
         this.catalogPort = Objects.requireNonNull(catalogPort);
         this.schemaValidator = Objects.requireNonNull(schemaValidator);
         this.typeConverterRegistry = Objects.requireNonNull(typeConverterRegistry);
+        this.auditPort = Objects.requireNonNull(auditPort);
         this.deterministicExecutionUseCase = Objects.requireNonNull(deterministicExecutionUseCase);
         this.environment = Objects.requireNonNull(environment);
         this.payloadLimits = Objects.requireNonNull(payloadLimits);
@@ -112,7 +118,6 @@ public final class StructuredInvocationUseCase {
         } catch (RuntimeException e) {
             return error(ErrorCode.AUTHENTICATION_FAILED, "Authentication failed", 0L);
         }
-
         CatalogSnapshot snapshot = catalogPort.loadCurrentSnapshot(environment);
         if (snapshot == null || snapshot.snapshotVersion() <= 0) {
             return error(ErrorCode.CAPABILITY_UNAVAILABLE, "Capability catalog unavailable", 0L);
@@ -132,6 +137,41 @@ public final class StructuredInvocationUseCase {
         if (manifest.spec().risk() != RiskLevel.READ_ONLY) {
             return error(ErrorCode.CONFIRMATION_REQUIRED,
                     "Write capabilities require the Prepare/Confirm protocol", snapshot.snapshotVersion());
+        }
+
+        return invokeResolved(requestId, principal, snapshot, manifest, modelArguments, locale);
+    }
+
+    /**
+     * Invokes a manifest already pinned by a trusted in-memory catalog view.
+     * Authentication and visibility selection must happen before this boundary;
+     * full Schema validation and execution authorization still happen here.
+     */
+    public Result invokeResolved(String requestId,
+                                 Principal principal,
+                                 CatalogSnapshot snapshot,
+                                 CapabilityManifest manifest,
+                                 Map<String, Object> modelArguments,
+                                 String locale) {
+        requireText(requestId, "requestId");
+        Objects.requireNonNull(principal, "principal must not be null");
+        Objects.requireNonNull(snapshot, "snapshot must not be null");
+        Objects.requireNonNull(manifest, "manifest must not be null");
+        Objects.requireNonNull(modelArguments, "modelArguments must not be null");
+        requireText(locale, "locale");
+        String capabilityId = manifest.metadata().id();
+        String capabilityVersion = manifest.metadata().version();
+        if (manifest.spec().risk() != RiskLevel.READ_ONLY) {
+            return error(ErrorCode.CONFIRMATION_REQUIRED,
+                    "Write capabilities require the Prepare/Confirm protocol",
+                    snapshot.snapshotVersion());
+        }
+        try {
+            auditPort.recordAccepted(
+                    requestId, Sha256Digest.sha256Hex(principal.subject()), principal.orgId());
+        } catch (RuntimeException e) {
+            return error(ErrorCode.AUTHENTICATION_FAILED,
+                    "Audit persistence failed", snapshot.snapshotVersion());
         }
 
         ValidationReport report;

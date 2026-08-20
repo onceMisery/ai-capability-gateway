@@ -1,6 +1,7 @@
 package com.ai.gateway.domain.port;
 
 import com.ai.gateway.domain.model.AuditEvent;
+import com.ai.gateway.domain.model.ExecutionAuditContext;
 
 /**
  * Port for persisting audit events with Fail Closed semantics.
@@ -69,12 +70,9 @@ public interface AuditPort {
      * be persisted before returning data to the client. Terminal state
      * persistence failure must not return Provider data.</p>
      *
-     * @param requestId the unique request identifier
-     * @param capabilityId the capability identifier
-     * @param capabilityVersion the capability semantic version
-     * @param manifestDigest the SHA-256 digest of the invoked Manifest
+     * @param context 执行审计上下文，包含身份、租户、能力和固定快照
      */
-    void recordStarted(String requestId, String capabilityId, String capabilityVersion, String manifestDigest);
+    void recordStarted(ExecutionAuditContext context);
 
     /**
      * Records a terminal audit event after the Provider call completes.
@@ -83,17 +81,15 @@ public interface AuditPort {
      * returning data to the client. Sensitive parameters are recorded
      * only as redacted summaries or irreversible hashes.</p>
      *
-     * @param requestId the unique request identifier
-     * @param capabilityId the capability identifier
-     * @param capabilityVersion the capability semantic version
+     * @param context 执行审计上下文，必须与 STARTED 阶段使用同一份上下文
      * @param resultCode the stable result code (e.g., an {@link com.ai.gateway.domain.model.ErrorCode} name)
      * @param durationMs the call duration in milliseconds
      * @param detailsJson the controlled diagnostic summary as JSON;
      * never contains stacks, internal addresses,
      * or sensitive params
      */
-    void recordTerminal(String requestId, String capabilityId, String capabilityVersion,
-                        String resultCode, long durationMs, String detailsJson);
+    void recordTerminal(ExecutionAuditContext context, String resultCode,
+                        long durationMs, String detailsJson);
 
     /**
      * Records a custom audit event.

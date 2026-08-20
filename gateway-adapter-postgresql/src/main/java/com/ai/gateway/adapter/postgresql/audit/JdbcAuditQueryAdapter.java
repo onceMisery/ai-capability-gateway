@@ -15,12 +15,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * JDBC implementation of {@link AuditQueryPort} backed by PostgreSQL.
+ * {@link AuditQueryPort} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Queries the {@code audit_event} table with dynamic WHERE clause
- * construction based on the provided criteria. Results are ordered by
- * timestamp descending (newest first) with pagination.</p>
+ * <p>根据提供的查询条件动态构造 WHERE 子句来查询 {@code audit_event} 表。结果按时间戳
+ * 降序（最新在前）排序并分页。</p>
  *
+ * @author cmiracle@163.com
  * @see AuditQueryPort
  * @since 0.1.0
  */
@@ -39,9 +39,9 @@ public class JdbcAuditQueryAdapter implements AuditQueryPort {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * Constructs a new JdbcAuditQueryAdapter.
+     * 构造一个新的 JdbcAuditQueryAdapter。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcAuditQueryAdapter(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");

@@ -1,7 +1,6 @@
 package com.ai.gateway.adapter.postgresql.outbox;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -9,30 +8,24 @@ import org.springframework.stereotype.Component;
 import java.util.Objects;
 
 /**
- * Scheduled data retention cleanup for expired interaction sessions and
- * aged audit events.
+ * 定时执行的数据保留清理，用于删除已过期的交互会话以及过期的审计事件。
  *
- * <p>Runs periodically to delete:</p>
+ * <p>周期性运行以删除：</p>
  * <ul>
- * <li><b>Expired NL interactions:</b> records where {@code expires_at}
- * has passed. These are short-lived clarification sessions
- * that are no longer valid.</li>
- * <li><b>Aged audit events:</b> records older than the configurable
- * retention period (default 90 days). Audit events are exported to
- * an external SIEM via the outbox before deletion, so the business
- * table can be pruned to control storage growth.</li>
+ * <li><b>已过期的 NL 交互：</b> {@code expires_at} 已超时的记录。这些是短期有效的澄清
+ * 会话，不再有效。</li>
+ * <li><b>过期的审计事件：</b> 超过可配置保留期（默认 90 天）的记录。审计事件在删除前会通过
+ * outbox 导出到外部 SIEM，因此业务表可被裁剪以控制存储增长。</li>
  * </ul>
  *
- * <p>The retention period for audit events is configurable. In production,
- * this value should be set based on compliance requirements and the
- * capacity conclusions from .</p>
+ * <p>审计事件的保留期可配置。在生产环境中，该值应基于合规要求以及容量结论进行设置。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class DataRetentionScheduler {
-
-    private static final Logger log = LoggerFactory.getLogger(DataRetentionScheduler.class);
 
     private static final int DEFAULT_AUDIT_RETENTION_DAYS = 90;
 
@@ -49,10 +42,9 @@ public class DataRetentionScheduler {
     private final int auditRetentionDays;
 
     /**
-     * Constructs a new DataRetentionScheduler with the default 90-day
-     * audit retention period.
+     * 使用默认 90 天审计保留期构造一个新的 DataRetentionScheduler。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     @org.springframework.beans.factory.annotation.Autowired
     public DataRetentionScheduler(JdbcTemplate jdbcTemplate) {
@@ -60,12 +52,10 @@ public class DataRetentionScheduler {
     }
 
     /**
-     * Constructs a new DataRetentionScheduler with a custom audit retention
-     * period.
+     * 使用自定义审计保留期构造一个新的 DataRetentionScheduler。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
-     * @param auditRetentionDays the number of days to retain audit events
-     * before deletion
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
+     * @param auditRetentionDays 审计事件删除前的保留天数
      */
     public DataRetentionScheduler(JdbcTemplate jdbcTemplate, int auditRetentionDays) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
@@ -73,11 +63,9 @@ public class DataRetentionScheduler {
     }
 
     /**
-     * Periodically cleans up expired interaction sessions and aged audit
-     * events.
+     * 周期性清理已过期的交互会话与过期的审计事件。
      *
-     * <p>Runs every 24 hours by default. The cleanup is idempotent and
-     * safe to run concurrently — each DELETE is an independent operation.</p>
+     * <p>默认每 24 小时运行一次。清理操作是幂等的，可安全并发执行——每条 DELETE 都是独立操作。</p>
      */
     @Scheduled(fixedDelay = 86_400_000)
     public void cleanup() {
@@ -86,10 +74,9 @@ public class DataRetentionScheduler {
     }
 
     /**
-     * Deletes expired NL interaction sessions.
+     * 删除已过期的 NL 交互会话。
      *
-     * <p>: clarification interactions have a short TTL. Expired
-     * sessions are no longer valid and can be safely removed.</p>
+     * <p>说明：澄清交互具有较短的 TTL。已过期的会话不再有效，可安全移除。</p>
      */
     private void cleanupExpiredInteractions() {
         try {
@@ -104,12 +91,10 @@ public class DataRetentionScheduler {
     }
 
     /**
-     * Deletes audit events older than the retention period.
+     * 删除超过保留期的审计事件。
      *
-     * <p>: audit events are exported to an external SIEM via
-     * the outbox before deletion. The business table can be pruned to
-     * control storage growth. The retention period is configurable based
-     * on compliance requirements and capacity conclusions.</p>
+     * <p>说明：审计事件在删除前会通过 outbox 导出到外部 SIEM。业务表可被裁剪以控制存储增长。
+     * 保留期可基于合规要求与容量结论进行配置。</p>
      */
     private void cleanupAgedAuditEvents() {
         try {

@@ -5,6 +5,7 @@ dependency-tree.txt
 .playwright/
 test-results/
 playwright-report/
+.work/
 .idea
 
 # Local configuration overlays — contain real credentials. NEVER commit.

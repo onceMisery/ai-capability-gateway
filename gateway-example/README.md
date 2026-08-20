@@ -1,5 +1,7 @@
 # Gateway Example — AI 能力网关使用示例
 
+> 权威端到端演示入口为 [`demo/README.md`](demo/README.md)，本文件只保留模块说明和扩展场景参考。
+
 本聚合模块（pom）提供 AI 能力网关的端到端演示套件，包含两个子模块：
 
 - **`test-client`**：HTTP API 客户端、自然语言查询演示、管理工作流演示、Manifest 编写指南以及 Manifest 结构验证测试。
@@ -52,123 +54,27 @@ cd ai-capability-gateway
 mvn clean install -DskipTests
 ```
 
-### 仅编译 gateway-example 聚合模块（含 test-client + test-provider）
+### 编译 test-client 和 test-provider
 
 ```bash
-mvn compile -pl gateway-example -am
+mvn -pl gateway-example/test-provider,gateway-example/test-client -am compile
 ```
 
-## 端到端运行（完整流程）
+## 端到端运行（唯一入口）
 
-以下步骤演示从启动服务到自然语言查询返回真实数据的完整链路。
+完整流程由 `gateway-example/demo` 统一编排，不再维护另一套手工启动和 curl 命令。
 
-### 前提条件
-
-- Nacos 运行在 `localhost:8848`
-- PostgreSQL 运行在 `localhost:5432`（数据库 `ai_gateway`）
-- LLM API 可用（或配置 mock）
-
-### Step 1: 启动 Test Provider
-
-Test Provider 提供两个真实 Dubbo 接口，注册到 Nacos：
+```powershell
+.\gateway-example\demo\demo.ps1 -Mode offline
+.\gateway-example\demo\demo.ps1 -Mode runtime
+```
 
 ```bash
-# 终端 1（在 gateway-example/test-provider 子模块下运行）
-mvn -pl gateway-example/test-provider spring-boot:run
+bash gateway-example/demo/demo.sh offline
+bash gateway-example/demo/demo.sh runtime
 ```
 
-启动后注册的服务：
-- `com.ai.gateway.testprovider.OrderQueryApi`（端口 20880）
-- `com.ai.gateway.testprovider.PurchaseListApi`（端口 20880）
-
-### Step 2: 启动网关
-
-```bash
-# 终端 2
-mvn -pl gateway-bootstrap spring-boot:run
-```
-
-网关启动在 `http://localhost:8080`。
-
-### Step 3: 导入 Manifest
-
-```bash
-curl -X POST http://localhost:8080/api/v1/admin/manifests \
-  -H "Authorization: Bearer any-token" \
-  -H "Content-Type: application/x-yaml" \
-  --data-binary @gateway-example/test-client/src/main/resources/manifests/order-detail-query.yaml
-```
-
-预期响应：`{"capabilityId": "order.detail.query", "version": "1.0.0", "status": "VALIDATED"}`
-
-### Step 4: 确认
-
-```bash
-curl -X POST http://localhost:8080/api/v1/admin/manifests/order.detail.query/1.0.0/approve \
-  -H "Authorization: Bearer any-token"
-```
-
-预期响应：`{"status": "APPROVED"}`
-
-### Step 5: 发布到 production
-
-```bash
-curl -X POST http://localhost:8080/api/v1/admin/snapshots:publish \
-  -H "Authorization: Bearer any-token" \
-  -H "Content-Type: application/json" \
-  -d '{"environment": "production"}'
-```
-
-预期响应：`{"snapshotVersion": 1, "environment": "production", "capabilityCount": 1}`
-
-### Step 6: 自然语言查询
-
-```bash
-curl -X POST http://localhost:8080/api/v1/natural-language/queries \
-  -H "Authorization: Bearer any-token" \
-  -H "Content-Type: application/json" \
-  -d '{"requestId": "e2e-001", "text": "查询订单 SO202607210001", "locale": "zh-CN"}'
-```
-
-预期响应：
-
-```json
-{
-  "status": "COMPLETED",
-  "data": {
-    "orderNo": "SO202607210001",
-    "status": "PAID",
-    "amount": 199.99,
-    "customerName": "Test C*******"
-  },
-  "summary": "Capability order.detail.query executed successfully",
-  "snapshotVersion": 1
-}
-```
-
-### Step 7: 验证采购列表查询（可选）
-
-```bash
-# 导入第二个 Manifest
-curl -X POST http://localhost:8080/api/v1/admin/manifests \
-  -H "Authorization: Bearer any-token" \
-  -H "Content-Type: application/x-yaml" \
-  --data-binary @gateway-example/test-client/src/main/resources/manifests/purchase-list-query.yaml
-
-# 确认 + 发布
-curl -X POST http://localhost:8080/api/v1/admin/manifests/purchase.list.query/1.0.0/approve \
-  -H "Authorization: Bearer any-token"
-curl -X POST http://localhost:8080/api/v1/admin/snapshots:publish \
-  -H "Authorization: Bearer any-token" \
-  -H "Content-Type: application/json" \
-  -d '{"environment": "production"}'
-
-# 查询
-curl -X POST http://localhost:8080/api/v1/natural-language/queries \
-  -H "Authorization: Bearer any-token" \
-  -H "Content-Type: application/json" \
-  -d '{"requestId": "e2e-002", "text": "查看待采购商品", "locale": "zh-CN"}'
-```
+详细前置条件、端口覆盖、断言内容、清理方式和故障排查见 [`demo/README.md`](demo/README.md)。
 
 ### Test Provider 测试场景
 

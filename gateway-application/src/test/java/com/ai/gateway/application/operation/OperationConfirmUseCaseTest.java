@@ -6,6 +6,7 @@ import com.ai.gateway.domain.model.InvocationResult;
 import com.ai.gateway.domain.model.OperationRecord;
 import com.ai.gateway.domain.model.OperationState;
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.ExecutionAuditContext;
 import com.ai.gateway.domain.port.AuditPort;
 import com.ai.gateway.domain.port.ArgumentPayloadCodec;
 import com.ai.gateway.domain.port.AuthorizationPort;
@@ -127,9 +128,7 @@ class OperationConfirmUseCaseTest {
         verify(repository).casUpdateState("op-1", OperationState.EXECUTING,
                 OperationState.FAILED, 1L);
         verify(auditPort, atLeastOnce()).recordTerminal(
-                org.mockito.ArgumentMatchers.eq("op-1"),
-                org.mockito.ArgumentMatchers.eq("order.create"),
-                org.mockito.ArgumentMatchers.eq("1.0.0"),
+                org.mockito.ArgumentMatchers.any(ExecutionAuditContext.class),
                 org.mockito.ArgumentMatchers.eq("ARGUMENT_VALIDATION_FAILED"),
                 org.mockito.ArgumentMatchers.anyLong(),
                 org.mockito.ArgumentMatchers.anyString());
@@ -156,8 +155,9 @@ class OperationConfirmUseCaseTest {
         ConfirmationToken token = token("valid-token", "valid-signature");
         when(confirmationTokenCodec.verify("valid-token")).thenReturn(token);
         doThrow(new IllegalStateException("audit unavailable"))
-                .when(auditPort).recordStarted("op-1", "order.create", "1.0.0",
-                        record.manifestDigest());
+                .when(auditPort).recordStarted(org.mockito.ArgumentMatchers.argThat(context ->
+                        context.requestId().equals("op-1")
+                                && context.snapshotVersion() == record.snapshotVersion()));
 
         OperationConfirmUseCase.ConfirmResult result =
                 useCase.confirm("op-1", token, principal);

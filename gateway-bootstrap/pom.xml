@@ -21,6 +21,10 @@
         </dependency>
         <dependency>
             <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-adapter-mcp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
             <artifactId>gateway-adapter-web</artifactId>
         </dependency>
         <dependency>

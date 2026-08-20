@@ -2,6 +2,8 @@ package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.adapter.postgresql.repository.JdbcCatalogPort;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.port.SnapshotNotifier;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
@@ -25,6 +27,7 @@ import org.springframework.context.annotation.Primary;
  */
 @Configuration
 @Import(JdbcCatalogPort.class)
+@Slf4j
 public class DirectCatalogConfiguration {
 
     /**
@@ -42,5 +45,30 @@ public class DirectCatalogConfiguration {
     @ConditionalOnProperty(name = "gateway.cache.provider", havingValue = "stub", matchIfMissing = true)
     public CatalogPort catalogPort(@Qualifier("postgresCatalogPort") CatalogPort postgresCatalogPort) {
         return postgresCatalogPort;
+    }
+
+    /**
+     * 创建不依赖 Redis 的快照通知器。
+     *
+     * <p>该 Bean 归属于目录缓存策略，与认证提供方无关。因此
+     * {@code sa-token + cache=stub} 和 {@code auth=stub + cache=stub}
+     * 两种组合都可以正常启动。</p>
+     *
+     * @return 仅记录日志的快照通知器
+     */
+    @Bean
+    @ConditionalOnProperty(name = "gateway.cache.provider", havingValue = "stub", matchIfMissing = true)
+    public SnapshotNotifier snapshotNotifier() {
+        return new SnapshotNotifier() {
+            @Override
+            public void notifySnapshotPublished(long snapshotVersion) {
+                log.info("Snapshot published notification (stub): version={}", snapshotVersion);
+            }
+
+            @Override
+            public void notifySnapshotSuspended(long snapshotVersion) {
+                log.warn("Snapshot suspended notification (stub): version={}", snapshotVersion);
+            }
+        };
     }
 }

@@ -109,6 +109,7 @@ public class AclAdminController {
         AclPolicyStatus status = authorizationPort.aclPolicyStatus();
         return ResponseEntity.ok(Map.of(
                 "aclLoadHealthy", status.loadHealthy(),
+                "policyEpoch", authorizationPort.currentPolicyEpoch(),
                 "aclEntryCount", status.loadedEntryCount(),
                 "emptyAclDecision", status.emptyAclDecision(),
                 "aclEntries", entries,
@@ -175,6 +176,7 @@ public class AclAdminController {
         @SuppressWarnings("unchecked")
         List<String> permissions = (List<String>) body.getOrDefault("permissions", List.of());
         aclManageUseCase.saveRole(name, description, permissions);
+        authorizationPort.refreshAcl();
         return ResponseEntity.ok(Map.of("message", "Role saved"));
     }
 
@@ -190,6 +192,7 @@ public class AclAdminController {
         @SuppressWarnings("unchecked")
         List<String> permissions = (List<String>) body.getOrDefault("permissions", List.of());
         aclManageUseCase.saveRole(name, description, permissions);
+        authorizationPort.refreshAcl();
         return ResponseEntity.ok(Map.of("message", "Role updated"));
     }
 
@@ -209,6 +212,7 @@ public class AclAdminController {
         }
 
         aclManageUseCase.deleteRole(name);
+        authorizationPort.refreshAcl();
         return ApiResponse.ok(Map.of("message", "Role deleted"));
     }
 
@@ -233,6 +237,7 @@ public class AclAdminController {
         String name = (String) body.get("name");
         String description = (String) body.getOrDefault("description", "");
         aclManageUseCase.savePermission(name, description);
+        authorizationPort.refreshAcl();
         return ResponseEntity.ok(Map.of("message", "Permission saved"));
     }
 
@@ -252,6 +257,7 @@ public class AclAdminController {
         }
 
         aclManageUseCase.deletePermission(name);
+        authorizationPort.refreshAcl();
         return ApiResponse.ok(Map.of("message", "Permission deleted"));
     }
 }

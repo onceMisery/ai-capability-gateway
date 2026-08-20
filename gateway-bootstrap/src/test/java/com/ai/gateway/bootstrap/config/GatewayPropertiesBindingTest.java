@@ -38,7 +38,23 @@ class GatewayPropertiesBindingTest {
                 Map.entry("gateway.llm.endpoint", "http://llm"),
                 Map.entry("gateway.llm.api-key", "llm-key"),
                 Map.entry("gateway.llm.model", "model"),
-                Map.entry("gateway.operation.confirmation-secret", "confirmation-secret")
+                Map.entry("gateway.operation.confirmation-secret", "confirmation-secret"),
+                Map.entry("gateway.agent.tool-ref-current-key-id", "key-7"),
+                 Map.entry("gateway.agent.tool-ref-secret", "agent-secret"),
+                 Map.entry("gateway.agent.tool-ref-ttl-seconds", "90"),
+                 Map.entry("gateway.agent.resolve-timeout-ms", "75"),
+                 Map.entry("gateway.agent.pending-confirmation-max-entries", "2000"),
+                Map.entry("gateway.agent.resolve-max-concurrent", "24"),
+                Map.entry("gateway.agent.catalog-max-capabilities", "5000"),
+                Map.entry("gateway.agent.catalog-max-index-bytes", "33554432"),
+                Map.entry("gateway.agent.catalog-max-process-memory-bytes", "268435456"),
+                Map.entry("gateway.agent.catalog-build-timeout-ms", "2500"),
+                Map.entry("gateway.agent.catalog-lease-hold-timeout-ms", "800"),
+                Map.entry("gateway.agent.catalog-io-max-rows", "7500"),
+                Map.entry("gateway.agent.catalog-io-query-timeout-ms", "2200"),
+                Map.entry("gateway.agent.catalog-io-max-payload-bytes", "67108864"),
+                Map.entry("gateway.agent.mcp-max-sessions", "128"),
+                Map.entry("gateway.agent.mcp-session-idle-seconds", "600")
         ));
 
         GatewayProperties properties = new Binder(source)
@@ -65,5 +81,21 @@ class GatewayPropertiesBindingTest {
         assertThat(properties.getSentinel().getGlobalQps()).isEqualTo(2500d);
         assertThat(properties.getLlm().getEndpoint()).isEqualTo("http://llm");
         assertThat(properties.getOperation().getConfirmationSecret()).isEqualTo("confirmation-secret");
+        assertThat(properties.getAgent().getToolRefCurrentKeyId()).isEqualTo("key-7");
+        assertThat(properties.getAgent().getToolRefSecret()).isEqualTo("agent-secret");
+        assertThat(properties.getAgent().getToolRefTtlSeconds()).isEqualTo(90L);
+        assertThat(properties.getAgent().getResolveTimeoutMs()).isEqualTo(75L);
+        assertThat(properties.getAgent().getPendingConfirmationMaxEntries()).isEqualTo(2000);
+        assertThat(properties.getAgent().getResolveMaxConcurrent()).isEqualTo(24);
+        assertThat(properties.getAgent().getCatalogMaxCapabilities()).isEqualTo(5000);
+        assertThat(properties.getAgent().getCatalogMaxIndexBytes()).isEqualTo(33_554_432L);
+        assertThat(properties.getAgent().getCatalogMaxProcessMemoryBytes()).isEqualTo(268_435_456L);
+        assertThat(properties.getAgent().getCatalogBuildTimeoutMs()).isEqualTo(2500L);
+        assertThat(properties.getAgent().getCatalogLeaseHoldTimeoutMs()).isEqualTo(800L);
+        assertThat(properties.getAgent().getCatalogIoMaxRows()).isEqualTo(7500);
+        assertThat(properties.getAgent().getCatalogIoQueryTimeoutMs()).isEqualTo(2200L);
+        assertThat(properties.getAgent().getCatalogIoMaxPayloadBytes()).isEqualTo(67_108_864L);
+        assertThat(properties.getAgent().getMcpMaxSessions()).isEqualTo(128);
+        assertThat(properties.getAgent().getMcpSessionIdleSeconds()).isEqualTo(600L);
     }
 }

@@ -20,17 +20,15 @@ import java.util.Optional;
 import java.util.Map;
 
 /**
- * JDBC implementation of {@link ManifestRepository} backed by PostgreSQL.
+ * {@link ManifestRepository} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Persists Capability Manifests in the {@code capability_manifest} table.
- * The full manifest content is stored as JSONB in the {@code raw_content}
- * column; the SHA-256 content digest is stored separately for snapshot
- * integrity verification.</p>
+ * <p>将能力清单（Capability Manifest）持久化到 {@code capability_manifest} 表。完整清单内容以
+ * JSONB 形式存储在 {@code raw_content} 列；SHA-256 内容摘要单独存储，用于快照完整性校验。</p>
  *
- * <p>The lifecycle state machine is persisted in the
- * {@code lifecycle} column. The same {@code id + version} content cannot
- * be overwritten; modifications must produce a new version.</p>
+ * <p>生命周期状态机持久化在 {@code lifecycle} 列。相同的 {@code id + version} 内容不可被覆盖；
+ * 修改必须产生一个新版本。</p>
  *
+ * @author cmiracle@163.com
  * @see ManifestRepository
  * @since 0.1.0
  */
@@ -56,9 +54,9 @@ public class JdbcManifestRepository implements ManifestRepository {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * Constructs a new JdbcManifestRepository.
+     * 构造一个新的 JdbcManifestRepository。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcManifestRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");

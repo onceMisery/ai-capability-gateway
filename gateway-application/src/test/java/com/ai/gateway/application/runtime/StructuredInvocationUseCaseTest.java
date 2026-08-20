@@ -21,6 +21,7 @@ import com.ai.gateway.domain.port.SchemaValidator;
 import com.ai.gateway.domain.port.TypeConverterRegistry;
 import com.ai.gateway.domain.service.DeadlineBudgetManager;
 import com.ai.gateway.domain.service.RedactionService;
+import com.ai.gateway.domain.service.Sha256Digest;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -32,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class StructuredInvocationUseCaseTest {
@@ -64,7 +66,7 @@ class StructuredInvocationUseCaseTest {
                 schemaValidator, authorization, audit, new DeadlineBudgetManager());
         StructuredInvocationUseCase useCase = new StructuredInvocationUseCase(
                 authentication, authorization, catalog, schemaValidator,
-                mock(TypeConverterRegistry.class), deterministic, "production");
+                mock(TypeConverterRegistry.class), audit, deterministic, "production");
 
         StructuredInvocationUseCase.Result result = useCase.invoke(
                 RequestContext.empty(), "req-structured", "orders.query", "1.0.0",
@@ -73,6 +75,9 @@ class StructuredInvocationUseCaseTest {
         assertThat(result.status()).isEqualTo(StructuredInvocationUseCase.Status.COMPLETED);
         assertThat(result.data()).containsEntry("data", Map.of("status", "ok"));
         assertThat(result.snapshotVersion()).isEqualTo(8L);
+        verify(catalog).loadCurrentSnapshot("production");
+        verify(audit).recordAccepted(
+                "req-structured", Sha256Digest.sha256Hex(principal.subject()), principal.orgId());
     }
 
     @Test
@@ -93,8 +98,8 @@ class StructuredInvocationUseCaseTest {
 
         StructuredInvocationUseCase useCase = new StructuredInvocationUseCase(
                 authentication, authorization, catalog, mock(SchemaValidator.class),
-                mock(TypeConverterRegistry.class), mock(DeterministicExecutionUseCase.class),
-                "production");
+                mock(TypeConverterRegistry.class), mock(com.ai.gateway.domain.port.AuditPort.class),
+                mock(DeterministicExecutionUseCase.class), "production");
 
         StructuredInvocationUseCase.Result result = useCase.invoke(
                 RequestContext.empty(), "req-write", "orders.query", "1.0.0",

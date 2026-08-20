@@ -2,6 +2,7 @@ package com.ai.gateway.bootstrap.telemetry;
 
 import com.ai.gateway.domain.port.TelemetryPort;
 import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import io.micrometer.core.instrument.Tag;
@@ -10,6 +11,9 @@ import io.micrometer.observation.ObservationRegistry;
 
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /** Micrometer-backed adapter for the framework-neutral telemetry port. */
@@ -17,6 +21,7 @@ public final class MicrometerTelemetryAdapter implements TelemetryPort {
 
     private final ObservationRegistry observationRegistry;
     private final MeterRegistry meterRegistry;
+    private final ConcurrentMap<GaugeKey, AtomicLong> gaugeValues = new ConcurrentHashMap<>();
 
     public MicrometerTelemetryAdapter(ObservationRegistry observationRegistry,
                                       MeterRegistry meterRegistry) {
@@ -54,6 +59,20 @@ public final class MicrometerTelemetryAdapter implements TelemetryPort {
                 .record(Math.max(0L, durationNanos), java.util.concurrent.TimeUnit.NANOSECONDS);
     }
 
+    @Override
+    public void recordValue(String metric, long value, Map<String, String> tags) {
+        Map<String, String> boundedTags = safeTags(tags);
+        GaugeKey key = new GaugeKey(metric, boundedTags);
+        AtomicLong holder = gaugeValues.computeIfAbsent(key, ignored -> {
+            AtomicLong created = new AtomicLong();
+            Gauge.builder(metric, created, AtomicLong::doubleValue)
+                    .tags(toTags(boundedTags))
+                    .register(meterRegistry);
+            return created;
+        });
+        holder.set(value);
+    }
+
     /** Keep only bounded, low-cardinality dimensions from application callers. */
     private Map<String, String> safeTags(Map<String, String> tags) {
         if (tags == null || tags.isEmpty()) return Map.of();
@@ -71,5 +90,12 @@ public final class MicrometerTelemetryAdapter implements TelemetryPort {
         return safeTags(tags).entrySet().stream()
                 .map(e -> Tag.of(e.getKey(), e.getValue()))
                 .toList();
+    }
+
+    private record GaugeKey(String metric, Map<String, String> tags) {
+        private GaugeKey {
+            Objects.requireNonNull(metric, "metric must not be null");
+            tags = Map.copyOf(tags);
+        }
     }
 }

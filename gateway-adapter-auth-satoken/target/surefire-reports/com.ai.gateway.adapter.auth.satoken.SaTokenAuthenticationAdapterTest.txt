@@ -1,4 +1,4 @@
 -------------------------------------------------------------------------------
 Test set: com.ai.gateway.adapter.auth.satoken.SaTokenAuthenticationAdapterTest
 -------------------------------------------------------------------------------
-Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.985 s -- in com.ai.gateway.adapter.auth.satoken.SaTokenAuthenticationAdapterTest
+Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.853 s -- in com.ai.gateway.adapter.auth.satoken.SaTokenAuthenticationAdapterTest

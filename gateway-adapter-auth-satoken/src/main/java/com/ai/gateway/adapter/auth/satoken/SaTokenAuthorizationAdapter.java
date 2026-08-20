@@ -14,6 +14,7 @@ import com.ai.gateway.domain.port.TelemetryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -48,21 +49,24 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
      */
     public static final String PERMISSION_WILDCARD = "*";
     private static final int DEFAULT_MAX_VISIBILITY_CACHE_ENTRIES = 10_000;
+    private static final long DEFAULT_MAX_VISIBILITY_CACHE_BYTES = 64L * 1024L * 1024L;
 
     private final boolean allowAllIfAclEmpty;
     private final AclRepository aclRepository;
     private final int maxVisibilityCacheEntries;
+    private final long maxVisibilityCacheBytes;
     private final TelemetryPort telemetry;
 
     /**
      * 能力 ACL：capabilityId → 允许执行该能力的角色集合。
      */
     private volatile PolicyState policyState = new PolicyState(Map.of(), true, 1L);
-    private final ConcurrentMap<VisibilityCacheKey, CapabilityVisibility> visibilityCache =
+    private final ConcurrentMap<VisibilityCacheKey, CachedVisibility> visibilityCache =
             new ConcurrentHashMap<>();
     private final Queue<VisibilityCacheKey> visibilityInsertionOrder =
             new ConcurrentLinkedQueue<>();
     private final AtomicLong visibilityCacheEvictions = new AtomicLong();
+    private final AtomicLong visibilityCacheBytes = new AtomicLong();
 
     /**
      * 以安全的默认策略构造适配器（ACL 为空时拒绝）。
@@ -97,15 +101,31 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
             AclRepository aclRepository,
             int maxVisibilityCacheEntries,
             TelemetryPort telemetry) {
+        this(allowAllIfAclEmpty, aclRepository, maxVisibilityCacheEntries,
+                DEFAULT_MAX_VISIBILITY_CACHE_BYTES, telemetry);
+    }
+
+    public SaTokenAuthorizationAdapter(
+            boolean allowAllIfAclEmpty,
+            AclRepository aclRepository,
+            int maxVisibilityCacheEntries,
+            long maxVisibilityCacheBytes,
+            TelemetryPort telemetry) {
         if (maxVisibilityCacheEntries <= 0) {
             throw new IllegalArgumentException("maxVisibilityCacheEntries must be positive");
+        }
+        if (maxVisibilityCacheBytes <= 0) {
+            throw new IllegalArgumentException("maxVisibilityCacheBytes must be positive");
         }
         this.allowAllIfAclEmpty = allowAllIfAclEmpty;
         this.aclRepository = aclRepository;
         this.maxVisibilityCacheEntries = maxVisibilityCacheEntries;
+        this.maxVisibilityCacheBytes = maxVisibilityCacheBytes;
         this.telemetry = telemetry;
         recordValue("gateway.authorization.visibility_cache.capacity",
                 maxVisibilityCacheEntries);
+        recordValue("gateway.authorization.visibility_cache.bytes.capacity",
+                maxVisibilityCacheBytes);
         recordCacheSize();
         loadAcl();
     }
@@ -150,10 +170,10 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         }
 
         VisibilityCacheKey cacheKey = VisibilityCacheKey.from(principal, state.epoch());
-        CapabilityVisibility cached = visibilityCache.get(cacheKey);
+        CachedVisibility cached = visibilityCache.get(cacheKey);
         if (cached != null) {
             incrementCache("hit");
-            return cached;
+            return cached.visibility();
         }
         incrementCache("miss");
 
@@ -164,10 +184,13 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
             }
         });
         CapabilityVisibility resolved = CapabilityVisibility.restricted(state.epoch(), visible);
-        CapabilityVisibility existing = visibilityCache.putIfAbsent(cacheKey, resolved);
+        CachedVisibility candidate = new CachedVisibility(
+                resolved, estimatedWeight(cacheKey, resolved));
+        CachedVisibility existing = visibilityCache.putIfAbsent(cacheKey, candidate);
         if (existing != null) {
-            return existing;
+            return existing.visibility();
         }
+        visibilityCacheBytes.addAndGet(candidate.weightBytes());
         visibilityInsertionOrder.add(cacheKey);
         evictOverflow();
         recordCacheSize();
@@ -303,13 +326,20 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         return visibilityCacheEvictions.get();
     }
 
+    long visibilityCacheBytes() {
+        return visibilityCacheBytes.get();
+    }
+
     private void evictOverflow() {
-        while (visibilityCache.size() > maxVisibilityCacheEntries) {
+        while (visibilityCache.size() > maxVisibilityCacheEntries
+                || visibilityCacheBytes.get() > maxVisibilityCacheBytes) {
             VisibilityCacheKey oldest = visibilityInsertionOrder.poll();
             if (oldest == null) {
                 return;
             }
-            if (visibilityCache.remove(oldest) != null) {
+            CachedVisibility removed = visibilityCache.remove(oldest);
+            if (removed != null) {
+                visibilityCacheBytes.addAndGet(-removed.weightBytes());
                 visibilityCacheEvictions.incrementAndGet();
                 incrementCache("evicted");
             }
@@ -319,6 +349,7 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     private void clearVisibilityCache() {
         visibilityCache.clear();
         visibilityInsertionOrder.clear();
+        visibilityCacheBytes.set(0L);
         recordCacheSize();
     }
 
@@ -332,6 +363,8 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     private void recordCacheSize() {
         recordValue("gateway.authorization.visibility_cache.entries",
                 visibilityCache.size());
+        recordValue("gateway.authorization.visibility_cache.bytes",
+                visibilityCacheBytes.get());
     }
 
     private void recordValue(String metric, long value) {
@@ -349,10 +382,34 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         return roleAllowed && permissionsAllowed;
     }
 
+    private static long estimatedWeight(
+            VisibilityCacheKey key, CapabilityVisibility visibility) {
+        long bytes = 96L + utf8Length(key.subject());
+        for (String role : key.roles()) {
+            bytes += 24L + utf8Length(role);
+        }
+        for (String permission : key.permissions()) {
+            bytes += 24L + utf8Length(permission);
+        }
+        for (CapabilityReference reference : visibility.visibleCapabilities()) {
+            bytes += 48L + utf8Length(reference.capabilityId())
+                    + utf8Length(reference.version());
+        }
+        return Math.max(1L, bytes);
+    }
+
+    private static int utf8Length(String value) {
+        return value == null ? 0 : value.getBytes(StandardCharsets.UTF_8).length;
+    }
+
     private record CapabilityKey(String capabilityId, String version) {
     }
 
     private record AclPolicy(Set<String> allowedRoles, Set<String> requiredPermissions) {
+    }
+
+    private record CachedVisibility(
+            CapabilityVisibility visibility, long weightBytes) {
     }
 
     private record PolicyState(

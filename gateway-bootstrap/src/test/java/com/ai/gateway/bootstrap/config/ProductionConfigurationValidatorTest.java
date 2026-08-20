@@ -72,6 +72,8 @@ class ProductionConfigurationValidatorTest {
                 .withProperty("gateway.llm.model", "gateway-model")
                 .withProperty("dubbo.registry.address", "nacos://nacos:8848")
                 .withProperty("gateway.operation.confirmation-secret",
-                        "a-production-confirm-secret-at-least-32-bytes");
+                        "a-production-confirm-secret-at-least-32-bytes")
+                .withProperty("gateway.agent.tool-ref-secret",
+                        "a-production-agent-tool-ref-secret-at-least-32-bytes");
     }
 }

@@ -12,17 +12,15 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * JDBC implementation of {@link OutboxPort} backed by PostgreSQL.
+ * {@link OutboxPort} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Implements the Transactional Outbox pattern: events are
- * written in the same local transaction as state changes, ensuring
- * at-least-once delivery to the downstream message system or SIEM.</p>
+ * <p>实现事务性 Outbox（Transactional Outbox）模式：事件与状态变更写入同一个本地事务，
+ * 确保对下游消息系统或 SIEM 的至少一次（at-least-once）投递。</p>
  *
- * <p>(Dependency Failure Strategy): if the audit export is
- * unavailable, the local Outbox accumulates and alerts; events must not be
- * dropped. The terminal state write must not be downgraded to a lossy
- * async operation for performance.</p>
+ * <p>（依赖失败策略）：若审计导出不可用，本地 Outbox 应积累并告警；事件绝不能被丢弃。终端状态
+ * 的写入不能为了性能而被降级为可能丢失的异步操作。</p>
  *
+ * @author cmiracle@163.com
  * @see OutboxPort
  * @since 0.1.0
  */
@@ -42,9 +40,9 @@ public class JdbcOutboxPort implements OutboxPort {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * Constructs a new JdbcOutboxPort.
+     * 构造一个新的 JdbcOutboxPort。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcOutboxPort(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");

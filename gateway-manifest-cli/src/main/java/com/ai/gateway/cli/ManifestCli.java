@@ -27,10 +27,10 @@ public final class ManifestCli {
     }
 
     /**
-     * Executes the CLI and returns a process exit code (0 = success).
+     * 执行 CLI 命令并返回进程退出码。
      *
-     * @param args command line arguments
-     * @return exit code
+     * @param args 命令行参数
+     * @return 0 表示成功，非 0 表示失败
      */
     static int run(String[] args) {
         if (args.length == 0) {

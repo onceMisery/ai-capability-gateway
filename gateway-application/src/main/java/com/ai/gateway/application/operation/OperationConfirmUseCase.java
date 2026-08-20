@@ -3,6 +3,7 @@ package com.ai.gateway.application.operation;
 import com.ai.gateway.domain.model.ConfirmationToken;
 import com.ai.gateway.domain.model.DeadlineBudget;
 import com.ai.gateway.domain.model.ErrorCode;
+import com.ai.gateway.domain.model.ExecutionAuditContext;
 import com.ai.gateway.domain.model.InvocationRequest;
 import com.ai.gateway.domain.model.InvocationResult;
 import com.ai.gateway.domain.model.OperationRecord;
@@ -259,11 +260,11 @@ public final class OperationConfirmUseCase {
                     "Operation is being processed by another request: " + current.state());
         }
 
+        ExecutionAuditContext auditContext = ExecutionAuditContext.forOperation(record);
+
         // Record STARTED audit event
         try {
-            auditPort.recordStarted(operationId,
-                    record.capabilityId(), record.capabilityVersion(),
-                    record.manifestDigest());
+            auditPort.recordStarted(auditContext);
         } catch (RuntimeException e) {
             OperationState persisted = persistExecutionFailure(record);
             return new ConfirmResult(false, persisted.name(),
@@ -281,8 +282,7 @@ public final class OperationConfirmUseCase {
             boundArguments = argumentPayloadCodec.decode(decryptedArgs);
         } catch (RuntimeException e) {
             OperationState persisted = persistExecutionFailure(record);
-            auditPort.recordTerminal(operationId,
-                    record.capabilityId(), record.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     persisted == OperationState.UNKNOWN
                             ? ErrorCode.EXECUTION_UNKNOWN.name()
                             : ErrorCode.ARGUMENT_VALIDATION_FAILED.name(), 0L,
@@ -318,8 +318,7 @@ public final class OperationConfirmUseCase {
             log.error("Invocation failed for operation {}: {}", operationId, e.getMessage());
             // Transition to FAILED
             OperationState persisted = persistExecutionFailure(record);
-            auditPort.recordTerminal(operationId,
-                    record.capabilityId(), record.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     persisted == OperationState.UNKNOWN
                             ? ErrorCode.EXECUTION_UNKNOWN.name()
                             : ErrorCode.PROTOCOL_ERROR.name(), 0,
@@ -341,8 +340,7 @@ public final class OperationConfirmUseCase {
             casTransition(operationId,
                     OperationState.EXECUTING, OperationState.UNKNOWN,
                     record.version() + 1);
-            auditPort.recordTerminal(operationId,
-                    record.capabilityId(), record.capabilityVersion(),
+            auditPort.recordTerminal(auditContext,
                     ErrorCode.EXECUTION_UNKNOWN.name(), 0L,
                     "{\"operationId\":\"" + operationId + "\"}");
             return new ConfirmResult(false, OperationState.UNKNOWN.name(),
@@ -350,8 +348,7 @@ public final class OperationConfirmUseCase {
         }
 
         // Record terminal audit event
-        auditPort.recordTerminal(operationId,
-                record.capabilityId(), record.capabilityVersion(),
+        auditPort.recordTerminal(auditContext,
                 finalState.name(), 0,
                 "{\"operationId\":\"" + operationId + "\"}");
 

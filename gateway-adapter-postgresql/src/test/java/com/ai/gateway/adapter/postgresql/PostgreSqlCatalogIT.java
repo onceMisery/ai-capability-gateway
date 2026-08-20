@@ -34,6 +34,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * 基于 Testcontainers 的目录与审计集成测试，使用单一数据库基线（Flyway V1）验证快照发布、
+ * 回滚、并发发布以及 Outbox 导出等行为。
+ *
+ * @author cmiracle@163.com
+ */
 @Testcontainers(disabledWithoutDocker = true)
 class PostgreSqlCatalogIT {
 

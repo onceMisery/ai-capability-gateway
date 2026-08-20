@@ -1,10 +1,10 @@
 package com.ai.gateway.adapter.postgresql.audit;
 
 import com.ai.gateway.domain.model.AuditEvent;
+import com.ai.gateway.domain.model.ExecutionAuditContext;
 import com.ai.gateway.domain.port.AuditPort;
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
@@ -19,30 +19,26 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * JDBC implementation of {@link AuditPort} with micro-batching support
+ * {@link AuditPort} 的 JDBC 实现，支持微批处理。
  *
- * <p>All terminal states must be audited with Fail Closed semantics: if audit
- * persistence fails, the gateway refuses to continue processing. Before
- * calling the Provider, a STARTED event must be persisted; after the call,
- * the terminal state must be persisted before returning data to the client.</p>
+ * <p>所有终态都必须以 Fail Closed 语义进行审计：若审计持久化失败，网关拒绝继续处理。
+ * 在调用 Provider 之前必须持久化一个 STARTED 事件；调用返回数据给客户端之前，必须持久化
+ * 终态。</p>
  *
- * <p>This implementation delegates to {@link AuditBatchWriter} for
- * micro-batching: multiple concurrent requests share the same database
- * transaction and network round-trip, reducing the per-call IO cost while
- * maintaining the "calling thread blocks until persisted" semantic.</p>
+ * <p>本实现将写入委托给 {@link AuditBatchWriter} 进行微批处理：多个并发请求共享同一次
+ * 数据库事务与网络往返，在降低单次调用 IO 成本的同时保持“调用线程阻塞直到持久化完成”的语义。</p>
  *
- * <p>The blocking timeout is configurable (default 10 seconds). If the audit
- * event is not persisted within the timeout, a {@link RuntimeException} is
- * thrown to enforce Fail Closed behavior.</p>
+ * <p>阻塞超时时间可配置（默认 10 秒）。若审计事件未能在超时时间内持久化，则抛出
+ * {@link RuntimeException} 以强制执行 Fail Closed 行为。</p>
  *
+ * @author cmiracle@163.com
  * @see AuditPort
  * @see AuditBatchWriter
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class JdbcAuditPort implements AuditPort {
-
-    private static final Logger log = LoggerFactory.getLogger(JdbcAuditPort.class);
 
     private static final long DEFAULT_AUDIT_TIMEOUT_MILLIS = 10_000L;
 
@@ -50,9 +46,9 @@ public class JdbcAuditPort implements AuditPort {
     private final long auditTimeoutMillis;
 
     /**
-     * Constructs a new JdbcAuditPort with default configuration.
+     * 使用默认配置构造一个新的 JdbcAuditPort。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     @Autowired
     public JdbcAuditPort(JdbcTemplate jdbcTemplate,
@@ -61,10 +57,10 @@ public class JdbcAuditPort implements AuditPort {
     }
 
     /**
-     * Constructs a new JdbcAuditPort with a custom audit timeout.
+     * 使用自定义审计超时构造一个新的 JdbcAuditPort。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
-     * @param auditTimeoutMillis the maximum time to wait for audit persistence
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
+     * @param auditTimeoutMillis 等待审计持久化的最长时间
      */
     public JdbcAuditPort(JdbcTemplate jdbcTemplate,
                          PlatformTransactionManager transactionManager,
@@ -93,42 +89,41 @@ public class JdbcAuditPort implements AuditPort {
     }
 
     @Override
-    public void recordStarted(String requestId, String capabilityId, String capabilityVersion,
-                              String manifestDigest) {
-        Objects.requireNonNull(requestId, "requestId must not be null");
+    public void recordStarted(ExecutionAuditContext context) {
+        Objects.requireNonNull(context, "context must not be null");
 
         AuditEvent event = new AuditEvent(
                 UUID.randomUUID().toString(),
                 "STARTED",
                 Instant.now(),
-                null,
-                0L,
-                requestId,
-                null,
-                capabilityId,
-                capabilityVersion,
-                manifestDigest,
-                0L, null, null, null, 0L, null);
+                context.subjectDigest(),
+                context.orgId(),
+                context.requestId(),
+                context.operationId(),
+                context.capabilityId(),
+                context.capabilityVersion(),
+                context.manifestDigest(),
+                context.snapshotVersion(), null, null, null, 0L, null);
         blockUntilPersisted(batchWriter.submit(event));
     }
 
     @Override
-    public void recordTerminal(String requestId, String capabilityId, String capabilityVersion,
-                               String resultCode, long durationMs, String detailsJson) {
-        Objects.requireNonNull(requestId, "requestId must not be null");
+    public void recordTerminal(ExecutionAuditContext context, String resultCode,
+                               long durationMs, String detailsJson) {
+        Objects.requireNonNull(context, "context must not be null");
 
         AuditEvent event = new AuditEvent(
                 UUID.randomUUID().toString(),
                 "TERMINAL",
                 Instant.now(),
-                null,
-                0L,
-                requestId,
-                null,
-                capabilityId,
-                capabilityVersion,
-                null,
-                0L, null, null, resultCode, durationMs, detailsJson);
+                context.subjectDigest(),
+                context.orgId(),
+                context.requestId(),
+                context.operationId(),
+                context.capabilityId(),
+                context.capabilityVersion(),
+                context.manifestDigest(),
+                context.snapshotVersion(), null, null, resultCode, durationMs, detailsJson);
         blockUntilPersisted(batchWriter.submit(event));
     }
 
@@ -139,13 +134,12 @@ public class JdbcAuditPort implements AuditPort {
     }
 
     /**
-     * Blocks the calling thread until the audit event is persisted or fails.
+     * 阻塞调用线程，直到审计事件被持久化或失败。
      *
-     * <p>Fail Closed: if persistence fails or times out, a
-     * {@link RuntimeException} is thrown so the caller cannot continue
-     * processing without the audit record.</p>
+     * <p>Fail Closed：若持久化失败或超时，则抛出 {@link RuntimeException}，使调用方无法在没有
+     * 审计记录的情况下继续处理。</p>
      *
-     * @param future the future representing the persistence operation
+     * @param future 表示持久化操作的 future
      */
     private void blockUntilPersisted(CompletableFuture<Void> future) {
         try {
@@ -164,7 +158,7 @@ public class JdbcAuditPort implements AuditPort {
     }
 
     /**
-     * Gracefully shuts down the batch writer, draining remaining events.
+     * 优雅关闭批量写入器，排空剩余事件。
      */
     @PreDestroy
     public void shutdown() {

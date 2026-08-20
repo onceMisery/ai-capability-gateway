@@ -72,7 +72,7 @@ public class DubboAttachmentManager {
     /**
      * 追踪用户标识的附件键（仅用于日志记录）。
      */
-    private static final String ATTACHMENT_USERID = "userId";
+    private static final String ATTACHMENT_RTID = "rtid";
 
     /**
      * 构造一个新的 DubboAttachmentManager。
@@ -138,8 +138,8 @@ public class DubboAttachmentManager {
         }
 
         // rtid（仅用于日志记录的追踪用户标识——绝不参与授权决策）
-        if (allowedKeys.contains(ATTACHMENT_USERID)) {
-            attachments.put(ATTACHMENT_USERID, systemContext.traceId());
+        if (allowedKeys.contains(ATTACHMENT_RTID)) {
+            attachments.put(ATTACHMENT_RTID, systemContext.traceId());
         }
 
         // delegatedToken —— 无法从 SystemContext 获取；需要认证上下文。

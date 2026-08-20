@@ -11,22 +11,18 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * In-memory implementation of {@link EnvelopeProfileRegistry}.
+ * {@link EnvelopeProfileRegistry} 的内存实现。
  *
- * <p>(Response Contract) specifies that the gateway cannot
- * depend on business unified-response Java JARs. Each unified-response
- * structure type must be registered as a standard envelope profile and
- * validated against the real Provider during compatibility testing.</p>
+ * <p>（响应契约）规定网关不能依赖业务统一的响应 Java JAR 包。每种统一响应结构类型都必须注册为
+ * 标准信封配置（envelope profile），并在兼容性测试中针对真实的 Provider 进行校验。</p>
  *
- * <p>This implementation is initialized with the platform standard profile
- * ({@code code="200"}, {@code dataPath=/value}, {@code messagePath=/message}).
- * Additional profiles can be registered at runtime via {@link #register}.</p>
+ * <p>该实现以平台标准配置（{@code code="200"}、{@code dataPath=/value}、{@code messagePath=/message}）
+ * 初始化。额外的配置可通过 {@link #register} 在运行时注册。</p>
  *
- * <p>Uses a {@link ConcurrentHashMap} for thread-safe access. This
- * implementation is suitable for single-instance deployments and testing.
- * For multi-instance consistency, a database-backed implementation would
- * be required.</p>
+ * <p>使用 {@link ConcurrentHashMap} 以保证线程安全访问。该实现适用于单实例部署与测试。若需要
+ * 多实例一致性，则需使用基于数据库的实现。</p>
  *
+ * @author cmiracle@163.com
  * @see EnvelopeProfileRegistry
  * @since 0.1.0
  */
@@ -38,8 +34,7 @@ public class JdbcEnvelopeProfileRegistry implements EnvelopeProfileRegistry {
     private final ConcurrentHashMap<String, EnvelopeProfile> profiles = new ConcurrentHashMap<>();
 
     /**
-     * Constructs a new JdbcEnvelopeProfileRegistry pre-loaded with the
-     * platform standard envelope profile.
+     * 构造一个新的 JdbcEnvelopeProfileRegistry，预加载平台标准信封配置。
      */
     public JdbcEnvelopeProfileRegistry() {
         EnvelopeConfig standardConfig = new EnvelopeConfig(

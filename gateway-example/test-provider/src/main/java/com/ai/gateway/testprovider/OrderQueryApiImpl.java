@@ -21,7 +21,7 @@ import java.util.Map;
  * <li>{@code LARGE} &rarr; returns a large payload to exercise response size limits</li>
  * </ul>
  */
-@DubboService
+@DubboService(version = "1.0.0")
 public class OrderQueryApiImpl implements OrderQueryApi {
 
     /** Sleep duration used to simulate a timeout scenario. */

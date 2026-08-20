@@ -17,6 +17,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@link JdbcOperationRepository} 的幂等性测试，验证当幂等键已存在时返回既有操作记录。
+ *
+ * @author cmiracle@163.com
+ */
 class JdbcOperationRepositoryIdempotencyTest {
 
     @Test

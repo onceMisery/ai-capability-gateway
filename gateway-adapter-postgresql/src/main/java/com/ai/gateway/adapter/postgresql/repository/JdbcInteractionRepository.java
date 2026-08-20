@@ -16,16 +16,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * JDBC implementation of {@link InteractionRepository} backed by PostgreSQL.
+ * {@link InteractionRepository} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Persists clarification interaction sessions in the {@code nl_interaction}
- * table. Each interaction has a short TTL and is invalidated
- * when an intent jump is detected, the Principal changes, the session expires,
- * the capability is suspended, or the policy changes.</p>
+ * <p>将澄清交互会话持久化到 {@code nl_interaction} 表。每个交互具有较短 TTL，并在检测到意图跳转、
+ * 主体（Principal）变更、会话过期、能力被暂停或策略变更时失效。</p>
  *
- * <p>The candidate capability IDs, confirmed parameters, and pending fields
- * are stored as JSONB columns for flexible schema evolution.</p>
+ * <p>候选项能力 ID、已确认参数与待填充字段以 JSONB 列存储，以支持灵活的模式演进。</p>
  *
+ * @author cmiracle@163.com
  * @see InteractionRepository
  * @since 0.1.0
  */
@@ -60,9 +58,9 @@ public class JdbcInteractionRepository implements InteractionRepository {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * Constructs a new JdbcInteractionRepository.
+     * 构造一个新的 JdbcInteractionRepository。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcInteractionRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");

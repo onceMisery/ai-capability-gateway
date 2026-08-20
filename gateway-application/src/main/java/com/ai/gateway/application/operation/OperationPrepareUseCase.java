@@ -1,6 +1,7 @@
 package com.ai.gateway.application.operation;
 
 import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ConfirmationSummary;
 import com.ai.gateway.domain.model.ConfirmationToken;
 import com.ai.gateway.domain.model.OperationRecord;
@@ -8,6 +9,7 @@ import com.ai.gateway.domain.model.OperationState;
 import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
+import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.ArgumentPayloadCodec;
 import com.ai.gateway.domain.port.AuthenticationPort;
@@ -25,6 +27,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -77,6 +80,7 @@ public final class OperationPrepareUseCase {
     private final ConfirmationTokenCodec confirmationTokenCodec;
     private final ArgumentPayloadCodec argumentPayloadCodec;
     private final PayloadLimits payloadLimits;
+    private final String environment;
 
     /**
      * Constructs a new OperationPrepareUseCase with the required dependencies.
@@ -107,7 +111,8 @@ public final class OperationPrepareUseCase {
                                     ArgumentPayloadCodec argumentPayloadCodec) {
         this(nlQueryUseCase, typeConverterRegistry, schemaValidator, authorizationPort,
                 encryptionPort, operationRepository, catalogPort, authenticationPort,
-                confirmationTokenCodec, argumentPayloadCodec, PayloadLimits.defaults());
+                confirmationTokenCodec, argumentPayloadCodec, PayloadLimits.defaults(),
+                "production");
     }
 
     /**
@@ -136,6 +141,23 @@ public final class OperationPrepareUseCase {
                                     ConfirmationTokenCodec confirmationTokenCodec,
                                     ArgumentPayloadCodec argumentPayloadCodec,
                                     PayloadLimits payloadLimits) {
+        this(nlQueryUseCase, typeConverterRegistry, schemaValidator, authorizationPort,
+                encryptionPort, operationRepository, catalogPort, authenticationPort,
+                confirmationTokenCodec, argumentPayloadCodec, payloadLimits, "production");
+    }
+
+    public OperationPrepareUseCase(NaturalLanguageQueryUseCase nlQueryUseCase,
+                                    TypeConverterRegistry typeConverterRegistry,
+                                    SchemaValidator schemaValidator,
+                                    AuthorizationPort authorizationPort,
+                                    EncryptionPort encryptionPort,
+                                    OperationRepository operationRepository,
+                                    CatalogPort catalogPort,
+                                    AuthenticationPort authenticationPort,
+                                    ConfirmationTokenCodec confirmationTokenCodec,
+                                    ArgumentPayloadCodec argumentPayloadCodec,
+                                    PayloadLimits payloadLimits,
+                                    String environment) {
         this.nlQueryUseCase = Objects.requireNonNull(nlQueryUseCase,
                 "nlQueryUseCase must not be null");
         this.typeConverterRegistry = Objects.requireNonNull(typeConverterRegistry,
@@ -158,6 +180,7 @@ public final class OperationPrepareUseCase {
                 "argumentPayloadCodec must not be null");
         this.payloadLimits = Objects.requireNonNull(payloadLimits,
                 "payloadLimits must not be null");
+        this.environment = requireText(environment, "environment");
     }
 
     /**
@@ -245,6 +268,122 @@ public final class OperationPrepareUseCase {
                     "Authorization denied");
         }
 
+        return persistPreparedOperation(manifest, modelArguments, boundArguments, principal,
+                snapshotVersion, clientIdempotencyKey);
+    }
+
+    /**
+     * Prepares a selected low-risk write capability without natural-language
+     * routing. The expected snapshot binds the Agent Host's private alias to
+     * the exact catalog version that produced it.
+     */
+    public PrepareResult prepareStructured(RequestContext requestContext,
+                                           String requestId,
+                                           String capabilityId,
+                                           String capabilityVersion,
+                                           Map<String, Object> modelArguments,
+                                           String locale,
+                                           long expectedSnapshotVersion,
+                                           String clientIdempotencyKey) {
+        Objects.requireNonNull(requestContext, "requestContext must not be null");
+        requireText(requestId, "requestId");
+        requireText(capabilityId, "capabilityId");
+        requireText(capabilityVersion, "capabilityVersion");
+        Objects.requireNonNull(modelArguments, "modelArguments must not be null");
+        requireText(locale, "locale");
+        validateClientIdempotencyKey(clientIdempotencyKey);
+        if (expectedSnapshotVersion <= 0) {
+            return failure("Expected snapshot version must be positive");
+        }
+
+        Principal principal = authenticationPort.authenticate(requestContext);
+        CatalogSnapshot snapshot = catalogPort.loadCurrentSnapshot(environment);
+        if (snapshot == null || snapshot.snapshotVersion() <= 0) {
+            return failure("Capability catalog unavailable");
+        }
+        if (snapshot.snapshotVersion() != expectedSnapshotVersion) {
+            return failure("Agent tool snapshot is stale");
+        }
+
+        CapabilityManifest manifest = snapshot.capabilities().stream()
+                .filter(candidate -> capabilityId.equals(candidate.metadata().id())
+                        && capabilityVersion.equals(candidate.metadata().version()))
+                .findFirst()
+                .orElse(null);
+        if (manifest == null) {
+            return failure("Capability is not available");
+        }
+        List<CapabilityManifest> visible = authorizationPort.filterVisibleCapabilities(
+                principal, List.of(manifest));
+        if (visible == null || visible.isEmpty()) {
+            return failure("Capability is not available");
+        }
+        if (manifest.spec().risk() != RiskLevel.WRITE_LOW) {
+            return failure("Capability is not an eligible low-risk write");
+        }
+
+        return prepareResolved(requestId, principal, snapshot, manifest,
+                modelArguments, locale, clientIdempotencyKey);
+    }
+
+    /**
+     * Prepares a low-risk write already pinned by a trusted in-memory catalog view.
+     * Full binding and execution authorization are still repeated here.
+     */
+    public PrepareResult prepareResolved(String requestId,
+                                         Principal principal,
+                                         CatalogSnapshot snapshot,
+                                         CapabilityManifest manifest,
+                                         Map<String, Object> modelArguments,
+                                         String locale,
+                                         String clientIdempotencyKey) {
+        requireText(requestId, "requestId");
+        Objects.requireNonNull(principal, "principal must not be null");
+        Objects.requireNonNull(snapshot, "snapshot must not be null");
+        Objects.requireNonNull(manifest, "manifest must not be null");
+        Objects.requireNonNull(modelArguments, "modelArguments must not be null");
+        requireText(locale, "locale");
+        validateClientIdempotencyKey(clientIdempotencyKey);
+        if (manifest.spec().risk() != RiskLevel.WRITE_LOW) {
+            return failure("Capability is not an eligible low-risk write");
+        }
+        String capabilityId = manifest.metadata().id();
+        String capabilityVersion = manifest.metadata().version();
+
+        List<Object> boundArguments;
+        try {
+            var systemContext = new com.ai.gateway.domain.model.SystemContext(
+                    requestId, Instant.now().plusSeconds(30).toEpochMilli(), null, locale);
+            boundArguments = new ArgumentBinder(typeConverterRegistry, schemaValidator,
+                    principal, systemContext, manifest, payloadLimits).bind(modelArguments);
+        } catch (RuntimeException e) {
+            log.warn("Structured parameter binding failed: {}", e.getMessage());
+            return failure("Parameter binding failed");
+        }
+
+        boolean authorized;
+        try {
+            authorized = authorizationPort.authorizeExecution(
+                    principal, capabilityId, capabilityVersion);
+        } catch (RuntimeException e) {
+            return failure("Authorization unavailable");
+        }
+        if (!authorized) {
+            return failure("Authorization denied");
+        }
+        return persistPreparedOperation(manifest, modelArguments, boundArguments, principal,
+                snapshot.snapshotVersion(), clientIdempotencyKey);
+    }
+
+    private PrepareResult persistPreparedOperation(CapabilityManifest manifest,
+                                                   Map<String, Object> modelArguments,
+                                                   List<Object> boundArguments,
+                                                   Principal principal,
+                                                   long snapshotVersion,
+                                                   String clientIdempotencyKey) {
+        String capabilityId = manifest.metadata().id();
+        String capabilityVersion = manifest.metadata().version();
+
         // Step 4: Generate user-understandable redacted summary
         String redactedSummary = generateRedactedSummary(manifest, modelArguments);
 
@@ -313,6 +452,10 @@ public final class OperationPrepareUseCase {
                 persisted.expiresAt(), null);
     }
 
+    private static PrepareResult failure(String error) {
+        return new PrepareResult(false, null, null, null, null, error);
+    }
+
     /**
      * Generates a user-understandable redacted summary of the operation.
      *
@@ -361,6 +504,13 @@ public final class OperationPrepareUseCase {
             throw new IllegalArgumentException(
                     "Idempotency-Key is required, must be <= 128 characters, and contain no control characters");
         }
+    }
+
+    private static String requireText(String value, String name) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value;
     }
 
     /**

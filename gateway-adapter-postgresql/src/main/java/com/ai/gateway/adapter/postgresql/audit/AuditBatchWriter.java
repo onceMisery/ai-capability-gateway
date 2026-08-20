@@ -2,8 +2,7 @@ package com.ai.gateway.adapter.postgresql.audit;
 
 import com.ai.gateway.adapter.postgresql.JsonbSupport;
 import com.ai.gateway.domain.model.AuditEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.BatchPreparedStatementSetter;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -23,42 +22,35 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Micro-batching audit writer implementing the application-level group-commit
- * pattern.
+ * 微批处理审计写入器，实现应用层的组提交（group-commit）模式。
  *
- * <p>Does not change the "calling thread must wait until its audit event is
- * persisted" synchronous semantic. Instead, multiple concurrent requests
- * share the same database transaction and network round-trip by batching
- * their audit inserts together.</p>
+ * <p>不改变“调用线程必须等待其审计事件被持久化”的同步语义，而是通过把多个并发
+ * 请求的审计插入批量合并，共享同一次数据库事务与网络往返，从而降低单次调用的 IO 成本。</p>
  *
- * <p>Key design decisions:</p>
+ * <p>关键设计决策：</p>
  * <ul>
- * <li><b>Event queue:</b> {@link ArrayBlockingQueue} with bounded capacity.
- * When full, new events are rejected to prevent unbounded growth.</li>
- * <li><b>Commit threads:</b> One dedicated thread per event type
- * (REQUEST_ACCEPTED, STARTED, TERMINAL), preventing cross-phase
- * blocking.</li>
- * <li><b>Batch trigger:</b> {@code maxBatchSize} (default 50) or
- * {@code maxWaitMillis} (default 5ms), whichever comes first.</li>
- * <li><b>Batch write:</b> {@code PreparedStatement.addBatch()} +
- * {@code executeBatch()} in a single transaction.</li>
- * <li><b>Caller release:</b> Each event carries a {@link CompletableFuture}
- * that completes when the batch is committed. The calling thread
- * blocks until completion.</li>
- * <li><b>Durability:</b> {@code synchronous_commit = on} (PostgreSQL
- * default) — no durability degradation.</li>
+ * <li><b>事件队列：</b> 使用有界容量的 {@link ArrayBlockingQueue}。队列满时新事件被拒绝，
+ * 以防止无界增长。</li>
+ * <li><b>提交线程：</b> 每种事件类型（REQUEST_ACCEPTED、STARTED、TERMINAL）各有一个
+ * 专属线程，避免跨阶段相互阻塞。</li>
+ * <li><b>批量触发：</b> 达到 {@code maxBatchSize}（默认 50）或 {@code maxWaitMillis}
+ * （默认 5ms）二者之一即触发刷新。</li>
+ * <li><b>批量写入：</b> 在单个事务中执行 {@code PreparedStatement.addBatch()} +
+ * {@code executeBatch()}。</li>
+ * <li><b>调用方释放：</b> 每个事件携带一个 {@link CompletableFuture}，在批次提交后完成；
+ * 调用线程会阻塞直到该 future 完成。</li>
+ * <li><b>持久性：</b> {@code synchronous_commit = on}（PostgreSQL 默认值），不降级持久性。</li>
  * </ul>
  *
- * <p>Crash safety: if the commit thread is mid-batch when the process
- * crashes, the uncommitted events are lost, but the corresponding caller
- * threads also terminate (no response is sent to clients), so there is no
- * silent inconsistency — identical to single-row synchronous writes.</p>
+ * <p>崩溃安全性：如果进程崩溃时提交线程正处于某个批次中间，未提交的事件会丢失，但对应的
+ * 调用线程也会随之终止（不会向客户端返回响应），因此不会出现静默不一致——与单行同步写入
+ * 行为一致。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public class AuditBatchWriter implements AutoCloseable {
-
-    private static final Logger log = LoggerFactory.getLogger(AuditBatchWriter.class);
 
     private static final String SQL_INSERT_AUDIT_AND_OUTBOX =
             "WITH inserted_audit AS (" +
@@ -85,9 +77,9 @@ public class AuditBatchWriter implements AutoCloseable {
     private final PhaseWriter terminalWriter;
 
     /**
-     * Constructs a new AuditBatchWriter with default configuration.
+     * 使用默认配置构造一个新的 AuditBatchWriter。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public AuditBatchWriter(JdbcTemplate jdbcTemplate) {
         this(jdbcTemplate, TransactionOperations.withoutTransaction(),
@@ -101,14 +93,14 @@ public class AuditBatchWriter implements AutoCloseable {
     }
 
     /**
-     * Constructs a new AuditBatchWriter with custom configuration.
+     * 使用自定义配置构造一个新的 AuditBatchWriter。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
-     * @param queueCapacity the bounded queue capacity per phase
-     * @param maxBatchSize the maximum number of events per batch
-     * @param maxWaitMillis the maximum wait time before flushing a partial batch
-     * @param enqueueTimeoutMillis the timeout for enqueueing when the queue is full
-     * @param shutdownDrainTimeoutMillis the timeout for draining on shutdown
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
+     * @param queueCapacity 每个阶段的队列容量上限
+     * @param maxBatchSize 每个批次的最大事件数
+     * @param maxWaitMillis 刷新部分批次前的最长等待时间
+     * @param enqueueTimeoutMillis 队列满时入队的超时时间
+     * @param shutdownDrainTimeoutMillis 关闭时排空队列的超时时间
      */
     public AuditBatchWriter(JdbcTemplate jdbcTemplate, int queueCapacity, int maxBatchSize,
                             long maxWaitMillis, long enqueueTimeoutMillis,
@@ -132,14 +124,13 @@ public class AuditBatchWriter implements AutoCloseable {
     }
 
     /**
-     * Submits an audit event for asynchronous batch persistence.
+     * 提交一个审计事件以进行异步批量持久化。
      *
-     * <p>The returned future completes when the event has been persisted to
-     * the database (or has definitively failed). The calling thread should
-     * block on this future to enforce Fail Closed semantics.</p>
+     * <p>返回的 future 在事件已持久化到数据库（或已明确失败）时完成。调用线程应阻塞
+     * 该 future 以强制执行 Fail Closed 语义。</p>
      *
-     * @param event the audit event to persist
-     * @return a future that completes when the event is persisted
+     * @param event 待持久化的审计事件
+     * @return 事件被持久化后完成的 future
      */
     public CompletableFuture<Void> submit(AuditEvent event) {
         return writerFor(event).submit(event);
@@ -166,7 +157,7 @@ public class AuditBatchWriter implements AutoCloseable {
     }
 
     /**
-     * A single-phase writer with its own queue and commit thread.
+     * 单阶段写入器，拥有独立的队列与提交线程。
      */
     private static final class PhaseWriter {
 

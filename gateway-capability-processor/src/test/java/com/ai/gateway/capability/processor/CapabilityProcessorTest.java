@@ -51,7 +51,7 @@ class CapabilityProcessorTest {
                     /**
                      * 查询订单。不会把后续说明写入摘要。
                      *
-                     * @param orderNo 订单编号
+                     * @param orderNo 订单编号（{@code orderNo}）
                      */
                     @Capability(
                             id = "order.query",
@@ -80,7 +80,7 @@ class CapabilityProcessorTest {
         assertThat(capability.path("arguments").path(0).path("sourcePath").asText())
                 .isEqualTo("/orderNo");
         assertThat(capability.path("arguments").path(0).path("description").asText())
-                .isEqualTo("订单编号");
+                .isEqualTo("订单编号（orderNo）");
     }
 
     @Test

@@ -11,6 +11,12 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@link JdbcManifestRepository} 的单元测试，验证校验与审批记录的持久化暴露，以及清单不存在时
+ * 生命周期更新失败。
+ *
+ * @author cmiracle@163.com
+ */
 class JdbcManifestRepositoryTest {
 
     @Test

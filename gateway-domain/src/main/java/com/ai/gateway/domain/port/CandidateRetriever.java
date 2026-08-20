@@ -46,6 +46,11 @@ import java.util.List;
  */
 public interface CandidateRetriever {
 
+    /** Returns the catalog version backing the current index, or -1 when unknown. */
+    default long indexedCatalogVersion() {
+        return -1L;
+    }
+
     /**
      * Retrieves the Top-K scored capabilities matching the normalized
      * user text from the authorized capability set.

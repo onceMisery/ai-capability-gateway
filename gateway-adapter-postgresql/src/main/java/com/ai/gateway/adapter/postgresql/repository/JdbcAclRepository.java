@@ -8,6 +8,7 @@ import com.ai.gateway.domain.port.AclRepository;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -17,12 +18,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * JDBC implementation of {@link AclRepository} backed by PostgreSQL.
+ * {@link AclRepository} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Persists capability ACL entries, roles, and permissions in the
- * {@code capability_acl}, {@code gateway_role}, and {@code gateway_permission}
- * tables respectively.</p>
+ * <p>将能力 ACL 条目、角色与权限分别持久化到 {@code capability_acl}、{@code gateway_role}
+ * 与 {@code gateway_permission} 表中。</p>
  *
+ * @author cmiracle@163.com
  * @see AclRepository
  * @since 0.1.0
  */
@@ -32,16 +33,34 @@ public class JdbcAclRepository implements AclRepository {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * Constructs a new JdbcAclRepository.
+     * 构造一个新的 JdbcAclRepository。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcAclRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
     }
 
+    @Override
+    public long currentPolicyEpoch() {
+        Long epoch = jdbcTemplate.queryForObject(
+                "SELECT policy_epoch FROM acl_policy_epoch WHERE singleton_id = 1",
+                Long.class);
+        return epoch == null ? 0L : epoch;
+    }
+
+    @Override
+    public long incrementPolicyEpoch() {
+        Long epoch = jdbcTemplate.queryForObject(
+                "UPDATE acl_policy_epoch SET policy_epoch = policy_epoch + 1, "
+                        + "updated_at = CURRENT_TIMESTAMP WHERE singleton_id = 1 "
+                        + "RETURNING policy_epoch",
+                Long.class);
+        return Objects.requireNonNull(epoch, "policy epoch update returned no row");
+    }
+
     // ================================================================
-    // ACL Entry operations
+    // ACL 条目操作
     // ================================================================
 
     @Override
@@ -62,6 +81,7 @@ public class JdbcAclRepository implements AclRepository {
     }
 
     @Override
+    @Transactional
     public void saveAclEntry(CapabilityAclEntry entry) {
         String allowedRolesJson = JsonbSupport.toJson(entry.allowedRoles());
         String requiredPermissionsJson = JsonbSupport.toJson(entry.requiredPermissions());
@@ -81,17 +101,20 @@ public class JdbcAclRepository implements AclRepository {
                     allowedRolesJson, requiredPermissionsJson,
                     Timestamp.from(entry.updatedAt()), entry.updatedBy());
         }
+        incrementPolicyEpoch();
     }
 
     @Override
+    @Transactional
     public void deleteAclEntry(String capabilityId, String capabilityVersion) {
         jdbcTemplate.update(
                 "DELETE FROM capability_acl WHERE capability_id = ? AND capability_version = ?",
                 capabilityId, capabilityVersion);
+        incrementPolicyEpoch();
     }
 
     // ================================================================
-    // Role operations
+    // 角色操作
     // ================================================================
 
     @Override
@@ -110,6 +133,7 @@ public class JdbcAclRepository implements AclRepository {
     }
 
     @Override
+    @Transactional
     public void saveRole(Role role) {
         String permissionsJson = JsonbSupport.toJson(role.permissions());
 
@@ -124,15 +148,18 @@ public class JdbcAclRepository implements AclRepository {
                     role.name(), role.description(), permissionsJson,
                     Timestamp.from(role.createdAt()), Timestamp.from(role.updatedAt()));
         }
+        incrementPolicyEpoch();
     }
 
     @Override
+    @Transactional
     public void deleteRole(String name) {
         jdbcTemplate.update("DELETE FROM gateway_role WHERE name = ?", name);
+        incrementPolicyEpoch();
     }
 
     // ================================================================
-    // Permission operations
+    // 权限操作
     // ================================================================
 
     @Override
@@ -143,6 +170,7 @@ public class JdbcAclRepository implements AclRepository {
     }
 
     @Override
+    @Transactional
     public void savePermission(Permission permission) {
         int updated = jdbcTemplate.update(
                 "UPDATE gateway_permission SET description = ? WHERE name = ?",
@@ -153,15 +181,18 @@ public class JdbcAclRepository implements AclRepository {
                     "INSERT INTO gateway_permission (name, description, created_at) VALUES (?, ?, ?)",
                     permission.name(), permission.description(), Timestamp.from(permission.createdAt()));
         }
+        incrementPolicyEpoch();
     }
 
     @Override
+    @Transactional
     public void deletePermission(String name) {
         jdbcTemplate.update("DELETE FROM gateway_permission WHERE name = ?", name);
+        incrementPolicyEpoch();
     }
 
     // ================================================================
-    // Row mappers
+    // 行映射器
     // ================================================================
 
     private static RowMapper<CapabilityAclEntry> aclEntryRowMapper() {

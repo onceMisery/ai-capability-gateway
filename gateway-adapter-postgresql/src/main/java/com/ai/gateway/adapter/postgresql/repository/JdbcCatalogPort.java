@@ -8,7 +8,9 @@ import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import com.ai.gateway.domain.service.ManifestDigest;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Primary;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
@@ -22,18 +24,15 @@ import java.util.Optional;
 import java.util.Map;
 
 /**
- * JDBC implementation of {@link CatalogPort} backed by PostgreSQL.
+ * {@link CatalogPort} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Loads catalog snapshots from the {@code catalog_snapshot} and
- * {@code catalog_snapshot_item} tables. Each snapshot is
- * immutable once published; rollback copies a historical snapshot's content
- * into a new snapshot version.</p>
+ * <p>从 {@code catalog_snapshot} 与 {@code catalog_snapshot_item} 表加载目录快照。每个快照一旦
+ * 发布即不可变；回滚会将历史快照的内容复制到一个新的快照版本。</p>
  *
- * <p>The current active snapshot is identified by {@code status = 'ACTIVE'}.
- * Snapshot items reference capability manifests by ID and version; the full
- * manifest content is loaded from {@code capability_manifest} to reconstruct
- * the {@link CatalogSnapshot}.</p>
+ * <p>当前活跃快照由 {@code status = 'ACTIVE'} 标识。快照项通过 ID 与版本引用能力清单；完整清单
+ * 内容从 {@code capability_manifest} 加载以重建 {@link CatalogSnapshot}。</p>
  *
+ * @author cmiracle@163.com
  * @see CatalogPort
  * @since 0.1.0
  */
@@ -60,25 +59,37 @@ public class JdbcCatalogPort implements CatalogPort {
             "SELECT raw_content FROM capability_manifest WHERE id = ? AND version = ?";
 
     private final JdbcTemplate jdbcTemplate;
+    private final CatalogReadBudget readBudget;
 
     /**
-     * Constructs a new JdbcCatalogPort.
+     * 构造一个新的 JdbcCatalogPort。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcCatalogPort(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
+        this.readBudget = new CatalogReadBudget(10_000, 30, 128L * 1024L * 1024L);
+    }
+
+    public JdbcCatalogPort(JdbcTemplate jdbcTemplate, CatalogReadBudget readBudget) {
+        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
+        this.readBudget = Objects.requireNonNull(readBudget, "readBudget must not be null");
+    }
+
+    @Autowired
+    public JdbcCatalogPort(JdbcTemplate jdbcTemplate,
+                           ObjectProvider<CatalogReadBudget> readBudgetProvider) {
+        this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");
+        this.readBudget = readBudgetProvider.getIfAvailable(
+                () -> new CatalogReadBudget(10_000, 30, 128L * 1024L * 1024L));
     }
 
     @Override
     public long reserveSnapshotVersion() {
-        // Allocate the next version as the greater of the sequence's next value
-        // and (max existing version + 1). Relying solely on the sequence can
-        // collide when the catalog_snapshot table already holds rows whose
-        // snapshot_version was not produced by the sequence (e.g. a reseeded or
-        // reset sequence, a manually inserted row, or a partially applied
-        // migration). Taking max(version)+1 keeps the allocation monotonic and
-        // collision-free regardless of the sequence's current position.
+        // 将下一版本号分配为序列的下一个值与（最大现有版本 + 1）中的较大者。仅依赖序列可能
+        // 在 catalog_snapshot 表中已存在由非序列产生的快照版本行时发生冲突（例如重新播种或重置的
+        // 序列、手动插入的行，或应用了一半的迁移）。取 max(version)+1 可使分配保持单调且
+        // 不冲突，而与序列的当前位置无关。
         Long version = jdbcTemplate.queryForObject(
                 "SELECT GREATEST(" +
                 "nextval('catalog_snapshot_snapshot_version_seq'), " +
@@ -94,10 +105,11 @@ public class JdbcCatalogPort implements CatalogPort {
     public CatalogSnapshot loadCurrentSnapshot(String environment) {
         Objects.requireNonNull(environment, "environment must not be null");
 
-        List<SnapshotRow> snapshots = jdbcTemplate.query(
-                SQL_FIND_ACTIVE_SNAPSHOT,
-                snapshotRowMapper(),
-                environment);
+        List<SnapshotRow> snapshots = jdbcTemplate.query(SQL_FIND_ACTIVE_SNAPSHOT,
+                statement -> {
+                    configureRead(statement);
+                    statement.setString(1, environment);
+                }, snapshotRowMapper());
         if (snapshots.isEmpty()) {
             return new CatalogSnapshot(0L, environment, List.of(), null, "");
         }
@@ -106,10 +118,11 @@ public class JdbcCatalogPort implements CatalogPort {
 
     @Override
     public CatalogSnapshot loadSnapshot(long snapshotVersion) {
-        List<SnapshotRow> snapshots = jdbcTemplate.query(
-                SQL_FIND_SNAPSHOT_BY_VERSION,
-                snapshotRowMapper(),
-                snapshotVersion);
+        List<SnapshotRow> snapshots = jdbcTemplate.query(SQL_FIND_SNAPSHOT_BY_VERSION,
+                statement -> {
+                    configureRead(statement);
+                    statement.setLong(1, snapshotVersion);
+                }, snapshotRowMapper());
         if (snapshots.isEmpty()) {
             throw new IllegalStateException("Snapshot not found: " + snapshotVersion);
         }
@@ -129,15 +142,16 @@ public class JdbcCatalogPort implements CatalogPort {
     }
 
     private CatalogSnapshot loadSnapshotInternal(SnapshotRow snapshot) {
-        // Single JOIN query fetches items and their manifest content together,
-        // avoiding the previous N+1 per-item manifest lookups.
-        List<ContentRow> rows = jdbcTemplate.query(
-                SQL_FIND_SNAPSHOT_CONTENT,
-                contentRowMapper(),
-                snapshot.snapshotVersion());
+        // 使用单条 JOIN 查询一次性取回条目及其清单内容，避免此前逐个条目清单查找的 N+1 问题。
+        List<ContentRow> rows = jdbcTemplate.query(SQL_FIND_SNAPSHOT_CONTENT,
+                statement -> {
+                    configureRead(statement);
+                    statement.setLong(1, snapshot.snapshotVersion());
+                }, contentRowMapper());
 
         List<CapabilityManifest> capabilities = new ArrayList<>(rows.size());
         String policyRef = null;
+        long payloadBytes = 0L;
 
         for (ContentRow row : rows) {
             if (row.policyRef() != null) {
@@ -150,6 +164,10 @@ public class JdbcCatalogPort implements CatalogPort {
             if (row.rawContent() == null) {
                 throw new IllegalStateException("Snapshot Manifest content is missing: "
                         + row.capabilityId() + ":" + row.capabilityVersion());
+            }
+            payloadBytes += row.rawContent().getBytes(java.nio.charset.StandardCharsets.UTF_8).length;
+            if (payloadBytes > readBudget.maxPayloadBytes()) {
+                throw new IllegalStateException("Catalog snapshot payload exceeds read budget");
             }
             CapabilityManifest manifest = JsonbSupport.fromJson(row.rawContent(), CapabilityManifest.class);
             if (!Objects.equals(row.manifestDigest(), ManifestDigest.sha256(manifest))) {
@@ -170,6 +188,11 @@ public class JdbcCatalogPort implements CatalogPort {
                     + snapshot.snapshotVersion());
         }
         return loaded;
+    }
+
+    private void configureRead(java.sql.PreparedStatement statement) throws java.sql.SQLException {
+        statement.setMaxRows(readBudget.maxRows());
+        statement.setQueryTimeout(readBudget.queryTimeoutSeconds());
     }
 
     private static RowMapper<SnapshotRow> snapshotRowMapper() {
@@ -216,23 +239,22 @@ public class JdbcCatalogPort implements CatalogPort {
     public void saveSnapshot(CatalogSnapshot snapshot) {
         Objects.requireNonNull(snapshot, "snapshot must not be null");
 
-        // Keep a defensive lock here for direct adapter callers. Application
-        // use cases acquire the same transaction-scoped lock before reading
-        // manifests or allocating a snapshot version.
+        // 这里保留一个防御性锁，用于直接调用适配器的调用方。应用用例会在读取清单或分配快照
+        // 版本之前获取同一个事务作用域内的锁。
         lockEnvironmentForPublication(snapshot.environment());
 
-        // Mark previous ACTIVE snapshots as SUPERSEDED
+        // 将之前的 ACTIVE 快照标记为 SUPERSEDED
         jdbcTemplate.update(
                 "UPDATE catalog_snapshot SET status = 'SUPERSEDED' WHERE environment = ? AND status = 'ACTIVE'",
                 snapshot.environment());
 
-        // Insert the new snapshot
+        // 插入新快照
         jdbcTemplate.update(
                 "INSERT INTO catalog_snapshot (snapshot_version, environment, status, digest) VALUES (?, ?, 'ACTIVE', ?)",
                 snapshot.snapshotVersion(), snapshot.environment(),
                 snapshot.digest() != null ? snapshot.digest() : "");
 
-        // Insert snapshot items
+        // 插入快照条目
         for (CapabilityManifest manifest : snapshot.capabilities()) {
             String manifestDigest = jdbcTemplate.queryForObject(
                     "SELECT sha256_digest FROM capability_manifest WHERE id = ? AND version = ?",

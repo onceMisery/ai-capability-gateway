@@ -17,19 +17,15 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * JDBC implementation of {@link OperationRepository} backed by PostgreSQL.
+ * {@link OperationRepository} 基于 PostgreSQL 的 JDBC 实现。
  *
- * <p>Persists write-operation records in the {@code operation_record} table
- * with version-based optimistic concurrency control. The
- * Confirm phase uses a conditional database update on version to atomically
- * claim execution, preventing duplicate execution when multiple confirm
- * attempts race.</p>
+ * <p>将写操作记录持久化到 {@code operation_record} 表，并采用基于版本的乐观并发控制。Confirm 阶段
+ * 使用基于版本的条件数据库更新来原子性地抢占执行，从而防止在多个 Confirm 尝试竞争时发生重复执行。</p>
  *
- * <p>The CAS (Compare-And-Swap) state transition
- * updates the row only if the current state and version match the expected
- * values, atomically incrementing the version. This prevents lost updates
- * and duplicate execution.</p>
+ * <p>CAS（Compare-And-Swap）状态转移仅当当前状态与版本均与期望值匹配时才更新该行，并原子性地递增
+ * 版本号。这避免了丢失更新与重复执行。</p>
  *
+ * @author cmiracle@163.com
  * @see OperationRepository
  * @since 0.1.0
  */
@@ -65,9 +61,9 @@ public class JdbcOperationRepository implements OperationRepository {
     private final JdbcTemplate jdbcTemplate;
 
     /**
-     * Constructs a new JdbcOperationRepository.
+     * 构造一个新的 JdbcOperationRepository。
      *
-     * @param jdbcTemplate the Spring JDBC template for database access
+     * @param jdbcTemplate 用于数据库访问的 Spring JDBC 模板
      */
     public JdbcOperationRepository(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = Objects.requireNonNull(jdbcTemplate, "jdbcTemplate must not be null");

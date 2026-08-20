@@ -1,8 +1,6 @@
 package com.ai.gateway.adapter.redis;
 
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
-import com.ai.gateway.application.catalog.LuceneCandidateRetriever;
-import com.ai.gateway.domain.model.CatalogSnapshot;
 import org.redisson.api.RTopic;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.listener.MessageListener;
@@ -35,7 +33,6 @@ public class SnapshotCacheListener implements InitializingBean, DisposableBean {
 
     private final RedissonClient redissonClient;
     private final InMemoryCatalogManager catalogManager;
-    private final LuceneCandidateRetriever candidateRetriever;
     private final String environment;
 
     private volatile int publishedListenerId;
@@ -46,20 +43,16 @@ public class SnapshotCacheListener implements InitializingBean, DisposableBean {
      *
      * @param redissonClient the Redisson client providing the topics
      * @param catalogManager the in-memory catalog manager (L1) to refresh
-     * @param candidateRetriever the retrieval index rebuilder
      * @param environment the environment this instance serves
      * @throws NullPointerException if any argument is null
      */
     public SnapshotCacheListener(RedissonClient redissonClient,
                                  InMemoryCatalogManager catalogManager,
-                                 LuceneCandidateRetriever candidateRetriever,
                                  String environment) {
         this.redissonClient = Objects.requireNonNull(redissonClient,
                 "redissonClient must not be null");
         this.catalogManager = Objects.requireNonNull(catalogManager,
                 "catalogManager must not be null");
-        this.candidateRetriever = Objects.requireNonNull(candidateRetriever,
-                "candidateRetriever must not be null");
         this.environment = Objects.requireNonNull(environment, "environment must not be null");
     }
 
@@ -99,19 +92,12 @@ public class SnapshotCacheListener implements InitializingBean, DisposableBean {
         log.info("Snapshot published notification received: version={}, environment={}",
                 version, environment);
         try {
-            boolean loaded = catalogManager.loadAndActivate(environment);
-            if (loaded) {
-                CatalogSnapshot snapshot = catalogManager.getCurrentSnapshot();
-                if (snapshot != null) {
-                    candidateRetriever.rebuildIndex(snapshot);
-                }
-                log.info("Snapshot hot-reloaded: version={}",
-                        catalogManager.getCurrentSnapshotVersion());
-            } else {
-                log.warn("Snapshot hot-reload did not activate a new snapshot (retaining old)");
-            }
+            boolean scheduled = catalogManager.requestRefresh(environment);
+            log.info("Snapshot hot-reload notification handled: scheduled={}, activeVersion={}",
+                    scheduled, catalogManager.getCurrentSnapshotVersion());
         } catch (Exception e) {
-            log.error("Snapshot hot-reload failed, retaining old snapshot: {}", e.getMessage());
+            log.error("Snapshot hot-reload notification failed, retaining old snapshot: {}",
+                    e.getMessage());
         }
     }
 }

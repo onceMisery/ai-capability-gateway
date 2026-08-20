@@ -200,4 +200,19 @@ class SaTokenAuthorizationAdapterTest {
         assertThat(adapter.visibilityCacheSize()).isEqualTo(2);
         assertThat(adapter.visibilityCacheEvictionCount()).isEqualTo(1L);
     }
+
+    @Test
+    void visibilityCacheEvictsWhenLogicalRetainedBytesExceedBudget() {
+        SaTokenAuthorizationAdapter adapter = new SaTokenAuthorizationAdapter(
+                false, null, 100, 100L, mock(TelemetryPort.class));
+        adapter.grant("order.detail.query", "1.0.0",
+                Set.of("analyst"), Set.of("order:detail:read"));
+
+        adapter.resolvePolicySnapshot(principal(
+                "analyst-1", List.of("analyst"), List.of("order:detail:read")));
+
+        assertThat(adapter.visibilityCacheSize()).isZero();
+        assertThat(adapter.visibilityCacheBytes()).isZero();
+        assertThat(adapter.visibilityCacheEvictionCount()).isEqualTo(1L);
+    }
 }

@@ -26,6 +26,16 @@ import java.util.Optional;
  */
 public interface AclRepository {
 
+    /** Returns the durable monotonic epoch of ACL, role, and permission state. */
+    default long currentPolicyEpoch() {
+        return 0L;
+    }
+
+    /** Atomically increments and returns the durable policy epoch. */
+    default long incrementPolicyEpoch() {
+        throw new UnsupportedOperationException("policy epoch is not supported");
+    }
+
     // ================================================================
     // ACL Entry operations
     // ================================================================

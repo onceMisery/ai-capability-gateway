@@ -1,5 +1,7 @@
 package com.ai.gateway.bootstrap.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -19,6 +21,7 @@ public class GatewayProperties {
     private Provider ratelimit = new Provider();
     private Llm llm = new Llm();
     private Operation operation = new Operation();
+    private Agent agent = new Agent();
     private Redis redis = new Redis();
     private Audit audit = new Audit();
     private Snapshot snapshot = new Snapshot();
@@ -97,6 +100,14 @@ public class GatewayProperties {
 
     public void setOperation(Operation operation) {
         this.operation = operation;
+    }
+
+    public Agent getAgent() {
+        return agent;
+    }
+
+    public void setAgent(Agent agent) {
+        this.agent = agent;
     }
 
     public Redis getRedis() {
@@ -215,6 +226,30 @@ public class GatewayProperties {
         public void setConfirmationSecret(String confirmationSecret) {
             this.confirmationSecret = confirmationSecret;
         }
+    }
+
+    @Getter
+    @Setter
+    public static class Agent {
+        private String toolRefCurrentKeyId = "k1";
+        private String toolRefSecret = "";
+        private String toolRefPreviousKeyId = "";
+        private String toolRefPreviousSecret = "";
+        private long toolRefTtlSeconds = 120L;
+        private long resolveTimeoutMs = 100L;
+        private int pendingConfirmationMaxEntries = 10_000;
+        private int turnMaxEntries = 10_000;
+        private int resolveMaxConcurrent = 64;
+        private int catalogMaxCapabilities = 10_000;
+        private long catalogMaxIndexBytes = 67_108_864L;
+        private long catalogMaxProcessMemoryBytes = 536_870_912L;
+        private long catalogBuildTimeoutMs = 5_000L;
+        private long catalogLeaseHoldTimeoutMs = 1_000L;
+        private int catalogIoMaxRows = 10_000;
+        private long catalogIoQueryTimeoutMs = 3_000L;
+        private long catalogIoMaxPayloadBytes = 134_217_728L;
+        private int mcpMaxSessions = 1_000;
+        private long mcpSessionIdleSeconds = 1_800L;
     }
 
     public static class Redis {
