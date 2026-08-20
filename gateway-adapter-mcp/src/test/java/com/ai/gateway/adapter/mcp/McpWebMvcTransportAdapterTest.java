@@ -14,6 +14,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@link McpWebMvcTransportAdapter} 的单元测试，验证仅以固定 Meta-Tool 与 WebMVC 路由构建
+ * MCP 服务，且工具列表变更通知被禁用。
+ *
+ * @author cmiracle@163.com
+ */
 class McpWebMvcTransportAdapterTest {
 
     @Test

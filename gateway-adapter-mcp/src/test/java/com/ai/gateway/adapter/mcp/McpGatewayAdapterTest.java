@@ -15,6 +15,12 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@link McpGatewayAdapter} 的单元测试，验证固定 Meta-Tool 列表、调用结果不泄露确认令牌，
+ * 以及会话 ID 参与连接器轮次键拼接。
+ *
+ * @author cmiracle@163.com
+ */
 class McpGatewayAdapterTest {
 
     @Test

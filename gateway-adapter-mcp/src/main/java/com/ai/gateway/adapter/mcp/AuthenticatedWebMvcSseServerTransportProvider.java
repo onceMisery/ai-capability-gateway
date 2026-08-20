@@ -32,7 +32,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicLong;
 
-/** MCP 0.10 WebMVC SSE transport with authenticated, principal-bound sessions. */
+/**
+ * 基于 MCP 0.10 WebMVC SSE 的传输提供者，提供经过认证、与主体绑定的会话。
+ *
+ * <p>每个 SSE 连接都需通过认证，且会话与认证主体的指纹绑定：后续消息若由不同主体携带，将被拒绝，
+ * 以防止会话劫持。会话受最大并发数与空闲超时约束，并通过 Semaphore 进行容量控制。</p>
+ *
+ * @author cmiracle@163.com
+ * @since 0.1.0
+ */
 public final class AuthenticatedWebMvcSseServerTransportProvider
         implements McpServerTransportProvider {
 
@@ -52,6 +60,19 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
     private volatile McpServerSession.Factory sessionFactory;
     private volatile boolean closing;
 
+    /**
+     * 构造传输提供者并注册 SSE 与消息路由。
+     *
+     * <p>消息端点与 SSE 端点必须为绝对路径，且最大会话数与空闲超时必须为正。</p>
+     *
+     * @param objectMapper       JSON 序列化器
+     * @param authenticationPort 认证端口
+     * @param telemetry         遥测端口
+     * @param messageEndpoint   消息接收端点（绝对路径）
+     * @param sseEndpoint       SSE 连接端点（绝对路径）
+     * @param maxSessions       最大并发会话数（必须为正）
+     * @param idleTimeout       会话空闲超时（必须为正）
+     */
     public AuthenticatedWebMvcSseServerTransportProvider(
             ObjectMapper objectMapper,
             AuthenticationPort authenticationPort,
@@ -87,10 +108,16 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         this.sessionFactory = Objects.requireNonNull(sessionFactory);
     }
 
+    /**
+     * 返回用于挂载到 Spring WebMVC 的路由函数（SSE 与消息端点）。
+     */
     public RouterFunction<ServerResponse> getRouterFunction() {
         return routerFunction;
     }
 
+    /**
+     * 返回当前活跃会话数。
+     */
     public int activeSessionCount() {
         return sessions.size();
     }
@@ -118,7 +145,11 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
                 .then();
     }
 
+    /**
+     * 处理 SSE 连接：认证、容量控制后建立并绑定会话。
+     */
     private ServerResponse handleSseConnection(ServerRequest request) {
+        // 关闭中直接拒绝新连接
         if (closing) {
             return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
@@ -126,6 +157,7 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         if (principal == null) {
             return unauthorized();
         }
+        // 接纳新连接前先回收过期会话，释放容量
         evictExpiredSessions();
         if (!sessionSlots.tryAcquire()) {
             telemetry.increment("gateway.mcp.sessions",
@@ -161,10 +193,14 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 处理客户端消息：定位会话、校验主体一致性后委派给 MCP 会话处理。
+     */
     private ServerResponse handleMessage(ServerRequest request) {
         if (closing) {
             return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
+        // 优先取查询参数 sessionId，缺失时回退到 Mcp-Session-Id 请求头
         String sessionId = request.param("sessionId").orElse(null);
         if (sessionId == null || sessionId.isBlank()) {
             sessionId = request.headers().firstHeader("Mcp-Session-Id");
@@ -188,6 +224,7 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         if (principal == null) {
             return unauthorized();
         }
+        // 主体指纹不匹配则拒绝，防止会话被其他主体劫持
         if (!PrincipalFingerprint.matches(binding.principalFingerprint(),
                 PrincipalFingerprint.digest(principal))) {
             telemetry.increment("gateway.mcp.sessions",
@@ -213,6 +250,9 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 执行认证；认证失败或异常时返回 {@code null}。
+     */
     private Principal authenticate(RequestContext requestContext) {
         try {
             return authenticationPort.authenticate(requestContext);
@@ -221,12 +261,18 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 返回未认证（401）响应，并携带 Bearer 质询头。
+     */
     private ServerResponse unauthorized() {
         return ServerResponse.status(HttpStatus.UNAUTHORIZED)
                 .header("WWW-Authenticate", "Bearer")
                 .build();
     }
 
+    /**
+     * 扫描并移除所有已过期会话。
+     */
     private void evictExpiredSessions() {
         for (Map.Entry<String, SessionBinding> entry : sessions.entrySet()) {
             if (entry.getValue().isExpired(idleTimeout)) {
@@ -236,6 +282,9 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 移除会话并尝试优雅关闭其底层 MCP 会话。
+     */
     private void removeAndClose(String sessionId) {
         SessionBinding binding = removeSession(sessionId);
         if (binding != null) {
@@ -243,6 +292,9 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 从会话表移除会话并释放一个容量槽位。
+     */
     private SessionBinding removeSession(String sessionId) {
         SessionBinding removed = sessions.remove(sessionId);
         if (removed != null) {
@@ -253,6 +305,9 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         return removed;
     }
 
+    /**
+     * 若会话尚未发布到会话表，则仅释放容量槽位（避免重复释放）。
+     */
     private void removeOrReleaseUnpublished(String sessionId) {
         if (removeSession(sessionId) == null) {
             sessionSlots.release();
@@ -260,11 +315,17 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 记录当前活跃会话数到遥测。
+     */
     private void recordSessionCount() {
         telemetry.recordValue("gateway.mcp.sessions.active", sessions.size(),
                 Map.of("resource", "sse"));
     }
 
+    /**
+     * 校验端点必须为以 {@code /} 开头的绝对路径。
+     */
     private static String requirePath(String value, String name) {
         if (value == null || value.isBlank() || value.charAt(0) != '/') {
             throw new IllegalArgumentException(name + " must be an absolute path");
@@ -272,6 +333,9 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         return value;
     }
 
+    /**
+     * 会话绑定：关联 MCP 会话、主体指纹与最近访问时间，用于过期与主体一致性校验。
+     */
     private static final class SessionBinding {
         private final McpServerSession session;
         private final String principalFingerprint;
@@ -301,6 +365,9 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    /**
+     * 基于 SSE 构建器的 MCP 传输实现，负责消息发送与连接关闭。
+     */
     private final class SessionTransport implements McpServerTransport {
         private final String sessionId;
         private final ServerResponse.SseBuilder sse;

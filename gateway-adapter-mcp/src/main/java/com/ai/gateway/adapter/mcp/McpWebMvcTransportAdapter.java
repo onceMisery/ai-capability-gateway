@@ -19,13 +19,34 @@ import java.util.UUID;
 import java.time.Duration;
 import reactor.core.publisher.Mono;
 
-/** Real WebMVC MCP transport with a fixed, model-safe tool surface. */
+/**
+ * 真实的 WebMVC MCP 传输适配器，提供固定且对模型安全的工具面。
+ *
+ * <p>基于 Spring WebMVC 的 SSE 传输实现，将固定的 Meta-Tool 注册到 MCP 服务，并在每次工具调用时
+ * 从 Reactor 上下文中取回请求上下文后委派给 {@link McpGatewayAdapter}。</p>
+ *
+ * @author cmiracle@163.com
+ * @since 0.1.0
+ */
 public final class McpWebMvcTransportAdapter {
 
     private final ObjectMapper objectMapper;
     private final AuthenticatedWebMvcSseServerTransportProvider transportProvider;
     private final McpAsyncServer server;
 
+    /**
+     * 构造传输适配器并构建 MCP 服务。
+     *
+     * <p>内部创建带认证的 SSE 传输提供者（消息端点 {@code /mcp/message}、SSE 端点
+     * {@code /mcp/sse}），并为每个固定 Meta-Tool 注册调用处理。</p>
+     *
+     * @param objectMapper         JSON 序列化器
+     * @param gatewayAdapter       网关桥接器
+     * @param authenticationPort   认证端口
+     * @param telemetry           遥测端口
+     * @param maxSessions         最大并发会话数
+     * @param idleTimeout         会话空闲超时
+     */
     public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
                                      McpGatewayAdapter gatewayAdapter,
                                      AuthenticationPort authenticationPort,
@@ -49,18 +70,33 @@ public final class McpWebMvcTransportAdapter {
         this.server = specification.build();
     }
 
+    /**
+     * 返回用于挂载到 Spring WebMVC 的路由函数。
+     */
     public RouterFunction<ServerResponse> routerFunction() {
         return transportProvider.getRouterFunction();
     }
 
+    /**
+     * 返回已构建的异步 MCP 服务实例。
+     */
     public McpAsyncServer server() {
         return server;
     }
 
+    /**
+     * 返回底层带认证的 SSE 传输提供者。
+     */
     public AuthenticatedWebMvcSseServerTransportProvider transportProvider() {
         return transportProvider;
     }
 
+    /**
+     * 调用网关桥接器并将结果封装为 MCP 的 CallToolResult。
+     *
+     * <p>若结果状态为 {@code ERROR} 则标记 {@code isError}；序列化失败时返回
+     * {@code SERIALIZATION_FAILED} 错误结果。</p>
+     */
     private McpSchema.CallToolResult invoke(McpGatewayAdapter gatewayAdapter,
                                             String toolName,
                                             RequestContext context,
@@ -84,6 +120,9 @@ public final class McpWebMvcTransportAdapter {
         }
     }
 
+    /**
+     * 将固定 Meta-Tool 转换为 MCP SDK 的 Tool 定义（含 JSON schema）。
+     */
     private McpSchema.Tool sdkTool(McpMetaToolCatalog.McpTool tool) {
         try {
             return new McpSchema.Tool(tool.name(), tool.description(),

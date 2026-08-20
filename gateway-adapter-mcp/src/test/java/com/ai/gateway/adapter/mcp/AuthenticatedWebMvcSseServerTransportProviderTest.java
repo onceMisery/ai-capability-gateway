@@ -30,6 +30,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+/**
+ * {@link AuthenticatedWebMvcSseServerTransportProvider} 的单元测试，覆盖会话容量拒绝、主体一致性
+ * 校验、过期回收、Mcp-Session-Id 兼容回退以及优雅关闭等场景。
+ *
+ * @author cmiracle@163.com
+ */
 class AuthenticatedWebMvcSseServerTransportProviderTest {
 
     private static final Principal PRINCIPAL_A = principal("user-a", 1L);
