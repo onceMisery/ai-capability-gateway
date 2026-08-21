@@ -2,6 +2,7 @@ package com.ai.gateway.adapter.redis;
 
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -79,7 +80,9 @@ class RedisSnapshotIT {
     @Test
     void secondInstanceReadsWriteThroughSnapshotWithoutPostgresql() {
         CatalogPort postgres = mock(CatalogPort.class);
-        CatalogSnapshot snapshot = new CatalogSnapshot(7, ENV, List.of(), "policy-v7", "digest");
+        CatalogSnapshot snapshot = new CatalogSnapshot(7, ENV, List.of(), "policy-v7", "pending");
+        snapshot = new CatalogSnapshot(
+                7, ENV, List.of(), "policy-v7", CatalogSnapshotDigest.sha256(snapshot));
         when(postgres.loadCurrentSnapshot(ENV)).thenReturn(snapshot);
         RedisCatalogPortDecorator first = new RedisCatalogPortDecorator(postgres, redisson,
                 new com.fasterxml.jackson.databind.ObjectMapper(), 30);

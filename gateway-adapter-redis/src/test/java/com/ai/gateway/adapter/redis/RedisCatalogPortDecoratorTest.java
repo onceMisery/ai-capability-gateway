@@ -2,6 +2,7 @@ package com.ai.gateway.adapter.redis;
 
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -54,7 +55,11 @@ class RedisCatalogPortDecoratorTest {
     }
 
     private CatalogSnapshot snapshot(long version) {
-        return new CatalogSnapshot(version, ENV, List.of(), "policy-v" + version, "");
+        CatalogSnapshot snapshot = new CatalogSnapshot(
+                version, ENV, List.of(), "policy-v" + version, "pending");
+        return new CatalogSnapshot(
+                version, ENV, List.of(), "policy-v" + version,
+                CatalogSnapshotDigest.sha256(snapshot));
     }
 
     @Test
@@ -153,6 +158,25 @@ class RedisCatalogPortDecoratorTest {
 
         assertThat(result.snapshotVersion()).isEqualTo(5);
         verify(delegate, times(1)).loadCurrentSnapshot(ENV);
+    }
+
+    @Test
+    @DisplayName("invalid Redis snapshot falls back to PostgreSQL")
+    void invalidRedisSnapshotFallsBackToPostgres() throws Exception {
+        CatalogSnapshot cached = snapshot(9);
+        String invalidJson = objectMapper.writeValueAsString(new CatalogSnapshot(
+                cached.snapshotVersion(),
+                cached.environment(),
+                cached.capabilities(),
+                cached.policyRef(),
+                "invalid-digest"));
+        when(bucket.get()).thenReturn(invalidJson);
+        when(delegate.loadCurrentSnapshot(ENV)).thenReturn(snapshot(10));
+
+        CatalogSnapshot result = decorator.loadCurrentSnapshot(ENV);
+
+        assertThat(result.snapshotVersion()).isEqualTo(10);
+        verify(delegate).loadCurrentSnapshot(ENV);
     }
 
     @Test

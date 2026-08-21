@@ -4,47 +4,27 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.AuditEvent;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ErrorCode;
-import com.ai.gateway.domain.model.ExecutionPlan;
-import com.ai.gateway.domain.model.ModelDecision;
 import com.ai.gateway.domain.model.NlInteraction;
-import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
-import com.ai.gateway.domain.model.ResiliencePolicy;
-import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.model.RoutingThresholds;
-import com.ai.gateway.domain.model.SystemContext;
 import com.ai.gateway.domain.port.AuditPort;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.CandidateRetriever;
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.InteractionRepository;
-import com.ai.gateway.domain.port.LlmRouterPort;
-import com.ai.gateway.domain.port.SchemaValidator;
-import com.ai.gateway.domain.port.TypeConverterRegistry;
-import com.ai.gateway.domain.service.AliasGenerator;
-import com.ai.gateway.domain.service.ArgumentBinder;
-import com.ai.gateway.domain.service.DeadlineBudgetManager;
-import com.ai.gateway.domain.service.RedactionService;
-import com.ai.gateway.domain.service.ResultNormalizer;
-import com.ai.gateway.domain.service.Sha256Digest;
 import com.ai.gateway.domain.service.ManifestDigest;
-import com.ai.gateway.domain.service.PayloadTreeGuard;
-import com.ai.gateway.domain.service.PayloadLimitExceededException;
+import com.ai.gateway.domain.service.Sha256Digest;
 import com.ai.gateway.domain.service.TextNormalizer;
 import com.ai.gateway.domain.service.ThresholdEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
-import java.util.StringJoiner;
 
 /**
  * Use case implementing the complete natural-language routing pipeline
@@ -79,12 +59,8 @@ import java.util.StringJoiner;
  * <li>{@code ERROR} — an error occurred during routing.</li>
  * </ul>
  *
- * <p>Note: {@link ArgumentBinder} and {@link ResultNormalizer} are per-request
- * domain services that require request-scoped context (Principal,
- * SystemContext, CapabilityManifest, OutputContract). This use case receives
- * the shared dependencies ({@link TypeConverterRegistry} and
- * {@link RedactionService}) via constructor injection and constructs
- * per-request instances as needed.</p>
+ * <p>SELECT 后处理由 {@link SelectDecisionProcessor} 负责，本类只保留认证、
+ * 快照、检索、阈值和澄清流程编排。</p>
  *
  * <p>This class uses constructor injection and contains no Spring annotations.
  * It is thread-safe: it holds no mutable per-request state.</p>
@@ -92,9 +68,7 @@ import java.util.StringJoiner;
  * @see AuthenticationPort
  * @see AuthorizationPort
  * @see CandidateRetriever
- * @see LlmRouterPort
  * @see ThresholdEvaluator
- * @see AliasGenerator
  * @since 0.1.0
  */
 public final class NaturalLanguageQueryUseCase {
@@ -120,109 +94,23 @@ public final class NaturalLanguageQueryUseCase {
     private final AuthorizationPort authorizationPort;
     private final CatalogPort catalogPort;
     private final CandidateRetriever candidateRetriever;
-    private final LlmRouterPort llmRouterPort;
-    private final SchemaValidator schemaValidator;
-    private final AliasGenerator aliasGenerator;
-    private final TypeConverterRegistry typeConverterRegistry;
-    private final RedactionService redactionService;
     private final AuditPort auditPort;
     private final ThresholdEvaluator thresholdEvaluator;
-    private final DeadlineBudgetManager deadlineBudgetManager;
     private final TextNormalizer textNormalizer;
     private final InteractionRepository interactionRepository;
-    private final DeterministicExecutionUseCase deterministicExecutionUseCase;
     private final String environment;
-    private final PayloadLimits payloadLimits;
-    private final PayloadTreeGuard payloadTreeGuard;
+    private final SelectDecisionProcessor selectDecisionProcessor;
 
-    /**
-     * Constructs a new NaturalLanguageQueryUseCase with the required
-     * dependencies.
-     *
-     * <p>Note: {@code typeConverterRegistry} is the shared dependency for
-     * constructing per-request {@link ArgumentBinder} instances, and
-     * {@code redactionService} is the shared dependency for constructing
-     * per-request {@link ResultNormalizer} instances.</p>
-     *
-     * @param authenticationPort the authentication port
-     * @param authorizationPort the authorization port
-     * @param catalogPort the catalog port for snapshot loading
-     * @param candidateRetriever the BM25 candidate retriever
-     * @param llmRouterPort the LLM routing port
-     * @param schemaValidator the JSON Schema validator
-     * @param aliasGenerator the short alias generator
-     * @param typeConverterRegistry the type converter registry for ArgumentBinder
-     * @param redactionService the redaction service for ResultNormalizer
-     * @param auditPort the audit port
-     * @param thresholdEvaluator the threshold evaluator
-     * @param deadlineBudgetManager the deadline budget manager
-     * @param textNormalizer the text normalizer for query preprocessing
-     * @param interactionRepository the interaction repository for clarification sessions
-     * @param deterministicExecutionUseCase the deterministic execution use case for Provider invocation
-     * @param environment the target environment name (e.g., "production")
-     * @throws NullPointerException if any argument is null
-     */
     public NaturalLanguageQueryUseCase(AuthenticationPort authenticationPort,
                                         AuthorizationPort authorizationPort,
                                         CatalogPort catalogPort,
                                         CandidateRetriever candidateRetriever,
-                                        LlmRouterPort llmRouterPort,
-                                        SchemaValidator schemaValidator,
-                                        AliasGenerator aliasGenerator,
-                                        TypeConverterRegistry typeConverterRegistry,
-                                        RedactionService redactionService,
                                         AuditPort auditPort,
                                         ThresholdEvaluator thresholdEvaluator,
-                                        DeadlineBudgetManager deadlineBudgetManager,
                                         TextNormalizer textNormalizer,
                                         InteractionRepository interactionRepository,
-                                        DeterministicExecutionUseCase deterministicExecutionUseCase,
-                                        String environment) {
-        this(authenticationPort, authorizationPort, catalogPort, candidateRetriever,
-                llmRouterPort, schemaValidator, aliasGenerator, typeConverterRegistry,
-                redactionService, auditPort, thresholdEvaluator, deadlineBudgetManager,
-                textNormalizer, interactionRepository, deterministicExecutionUseCase,
-                environment, PayloadLimits.defaults());
-    }
-
-    /**
-     * 使用统一 Payload 预算创建自然语言路由用例。
-     *
-     * @param authenticationPort 认证端口
-     * @param authorizationPort 授权端口
-     * @param catalogPort 能力目录端口
-     * @param candidateRetriever 候选检索器
-     * @param llmRouterPort LLM 路由端口
-     * @param schemaValidator Schema 校验器
-     * @param aliasGenerator 别名生成器
-     * @param typeConverterRegistry 类型转换器注册表
-     * @param redactionService 脱敏服务
-     * @param auditPort 审计端口
-     * @param thresholdEvaluator 阈值评估器
-     * @param deadlineBudgetManager 截止时间预算管理器
-     * @param textNormalizer 文本标准化器
-     * @param interactionRepository 澄清交互存储
-     * @param deterministicExecutionUseCase 确定性执行用例
-     * @param environment 运行环境
-     * @param payloadLimits 统一 Payload 预算
-     */
-    public NaturalLanguageQueryUseCase(AuthenticationPort authenticationPort,
-                                        AuthorizationPort authorizationPort,
-                                        CatalogPort catalogPort,
-                                        CandidateRetriever candidateRetriever,
-                                        LlmRouterPort llmRouterPort,
-                                        SchemaValidator schemaValidator,
-                                        AliasGenerator aliasGenerator,
-                                        TypeConverterRegistry typeConverterRegistry,
-                                        RedactionService redactionService,
-                                        AuditPort auditPort,
-                                        ThresholdEvaluator thresholdEvaluator,
-                                        DeadlineBudgetManager deadlineBudgetManager,
-                                        TextNormalizer textNormalizer,
-                                        InteractionRepository interactionRepository,
-                                        DeterministicExecutionUseCase deterministicExecutionUseCase,
                                         String environment,
-                                        PayloadLimits payloadLimits) {
+                                        SelectDecisionProcessor selectDecisionProcessor) {
         this.authenticationPort = java.util.Objects.requireNonNull(authenticationPort,
                 "authenticationPort must not be null");
         this.authorizationPort = java.util.Objects.requireNonNull(authorizationPort,
@@ -231,33 +119,18 @@ public final class NaturalLanguageQueryUseCase {
                 "catalogPort must not be null");
         this.candidateRetriever = java.util.Objects.requireNonNull(candidateRetriever,
                 "candidateRetriever must not be null");
-        this.llmRouterPort = java.util.Objects.requireNonNull(llmRouterPort,
-                "llmRouterPort must not be null");
-        this.schemaValidator = java.util.Objects.requireNonNull(schemaValidator,
-                "schemaValidator must not be null");
-        this.aliasGenerator = java.util.Objects.requireNonNull(aliasGenerator,
-                "aliasGenerator must not be null");
-        this.typeConverterRegistry = java.util.Objects.requireNonNull(typeConverterRegistry,
-                "typeConverterRegistry must not be null");
-        this.redactionService = java.util.Objects.requireNonNull(redactionService,
-                "redactionService must not be null");
         this.auditPort = java.util.Objects.requireNonNull(auditPort,
                 "auditPort must not be null");
         this.thresholdEvaluator = java.util.Objects.requireNonNull(thresholdEvaluator,
                 "thresholdEvaluator must not be null");
-        this.deadlineBudgetManager = java.util.Objects.requireNonNull(deadlineBudgetManager,
-                "deadlineBudgetManager must not be null");
         this.interactionRepository = java.util.Objects.requireNonNull(interactionRepository,
                 "interactionRepository must not be null");
         this.textNormalizer = java.util.Objects.requireNonNull(textNormalizer,
                 "textNormalizer must not be null");
-        this.deterministicExecutionUseCase = java.util.Objects.requireNonNull(deterministicExecutionUseCase,
-                "deterministicExecutionUseCase must not be null");
         this.environment = java.util.Objects.requireNonNull(environment,
                 "environment must not be null");
-        this.payloadLimits = java.util.Objects.requireNonNull(payloadLimits,
-                "payloadLimits must not be null");
-        this.payloadTreeGuard = new PayloadTreeGuard(this.payloadLimits);
+        this.selectDecisionProcessor = java.util.Objects.requireNonNull(
+                selectDecisionProcessor, "selectDecisionProcessor must not be null");
     }
 
     /**
@@ -278,11 +151,7 @@ public final class NaturalLanguageQueryUseCase {
     /** Executes the routing pipeline using the caller-provided correlation ID. */
     public QueryResult execute(RequestContext requestContext, String requestId,
                                String text, String locale, String timezone) {
-        java.util.Objects.requireNonNull(requestContext, "requestContext must not be null");
-        java.util.Objects.requireNonNull(requestId, "requestId must not be null");
-        java.util.Objects.requireNonNull(text, "text must not be null");
-        java.util.Objects.requireNonNull(locale, "locale must not be null");
-        java.util.Objects.requireNonNull(timezone, "timezone must not be null");
+
         long startTime = System.currentTimeMillis();
         log.info("NL routing started: requestId={}, locale={}", requestId, locale);
 
@@ -420,246 +289,32 @@ public final class NaturalLanguageQueryUseCase {
                                                String originalText,
                                                String locale,
                                                long startTime) {
-        CapabilityManifest manifest = selected.capability();
+        return selectDecisionProcessor.process(
+                selected, principal, snapshotVersion, requestId, originalText, locale, startTime,
+                new SelectDecisionProcessor.TerminalRecorder() {
+                    @Override
+                    public QueryResult record(QueryResult result,
+                                              Principal terminalPrincipal,
+                                              String terminalRequestId,
+                                              long terminalSnapshotVersion,
+                                              CapabilityManifest manifest,
+                                              long terminalStartTime) {
+                        return auditRoutingTerminal(result, terminalPrincipal, terminalRequestId,
+                                terminalSnapshotVersion, manifest, terminalStartTime);
+                    }
 
-        // Step 7: Construct request-scoped short aliases
-        String alias = aliasGenerator.generate(
-                snapshotVersion, manifest.metadata().id(), manifest.metadata().version());
-
-        // Build the LLM candidate
-        LlmRouterPort.LlmCandidate llmCandidate = new LlmRouterPort.LlmCandidate(
-                alias,
-                manifest.spec().displayName(),
-                manifest.spec().description(),
-                manifest.spec().examples().positive(),
-                manifest.spec().examples().negative(),
-                manifest.spec().examples().synonyms(),
-                manifest.spec().inputSchema()
-        );
-
-        // Step 8: LLM selects capability and extracts MODEL parameters
-        ModelDecision decision;
-        try {
-            decision = llmRouterPort.route(originalText, List.of(llmCandidate));
-        } catch (LlmRouterPort.LlmRoutingException e) {
-            log.warn("LLM routing unavailable: code={}", e.errorCode());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, e.errorCode().name(), safeLlmErrorMessage(e.errorCode())),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        } catch (Exception e) {
-            log.error("LLM routing failed");
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.PROTOCOL_ERROR.name(),
-                    "LLM routing failed"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // Step 9: Selection legality and Schema validation
-        if (decision instanceof ModelDecision.NoMatchDecision noMatch) {
-            return auditRoutingTerminal(new QueryResult(QueryStatus.NO_MATCH, null, null, null,
-                    snapshotVersion, ErrorCode.NO_CAPABILITY_MATCH.name(),
-                    "LLM returned NO_MATCH: " + noMatch.reasonCode()),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        if (decision instanceof ModelDecision.ClarifyDecision clarify) {
-            // Initiate clarification session with the single candidate
-            return initiateClarification(
-                    List.of(selected), clarify.question(),
-                    principal, snapshotVersion, requestId, startTime);
-        }
-
-        if (!(decision instanceof ModelDecision.SelectDecision select)) {
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.INVALID_MODEL_OUTPUT.name(),
-                    "Unknown model decision type"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // Verify the selected alias belongs to this request's candidate set
-        if (!select.alias().equals(alias)) {
-            log.warn("LLM selected alias {} not in candidate set (expected {})",
-                    select.alias(), alias);
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.INVALID_MODEL_OUTPUT.name(),
-                    "Selected alias not in candidate set"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // Validate model arguments against the input Schema
-        com.ai.gateway.domain.model.ValidationReport schemaReport;
-        try {
-            payloadTreeGuard.validateInput(select.arguments());
-            schemaReport = schemaValidator.validate(
-                    select.arguments(), manifest.spec().inputSchema());
-        } catch (PayloadLimitExceededException e) {
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
-                    "Model arguments exceed the configured payload budget"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        } catch (Exception e) {
-            log.error("Model output schema validation failed: capability={}",
-                    manifest.metadata().id());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.INVALID_MODEL_OUTPUT.name(),
-                    "Model output validation unavailable"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-        if (!schemaReport.valid()) {
-            log.warn("Model output failed schema validation: {}", schemaReport.errors());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.INVALID_MODEL_OUTPUT.name(),
-                    "Model output failed schema validation"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // Step 10: Re-authorize before execution
-        boolean authorized;
-        try {
-            authorized = authorizationPort.authorizeExecution(
-                    principal, manifest.metadata().id(), manifest.metadata().version());
-        } catch (Exception e) {
-            log.error("Execution authorization data source failed: capability={}",
-                    manifest.metadata().id());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.PERMISSION_DENIED.name(),
-                    "Authorization data source unavailable"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-        if (!authorized) {
-            log.warn("Execution authorization denied for capability {}",
-                    manifest.metadata().id());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.PERMISSION_DENIED.name(),
-                    "Execution authorization denied"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // Step 11: Invoke or initiate clarification
-        // For read-only operations, execute immediately via DeterministicExecutionUseCase.
-        // For write operations, return the execution plan for the two-phase
-        // Prepare/Confirm protocol.
-        long durationMs = System.currentTimeMillis() - startTime;
-
-        // Construct the execution plan
-        String executionId = UUID.randomUUID().toString();
-        String principalDigest = computePrincipalDigest(principal);
-        // Compute manifest digest from id + version (content digest not stored in Metadata)
-        String manifestDigest = ManifestDigest.sha256(manifest);
-
-        // Build resolved protocol arguments using ArgumentBinder (resolves PRINCIPAL, MODEL, CONSTANT)
-        SystemContext bindContext = new SystemContext(
-                requestId, System.currentTimeMillis() + 15000, null, "zh-CN");
-        List<Object> resolvedArgs;
-        try {
-            ArgumentBinder argumentBinder = new ArgumentBinder(
-                    typeConverterRegistry, schemaValidator, principal, bindContext, manifest,
-                    payloadLimits);
-            resolvedArgs = argumentBinder.bind(select.arguments());
-        } catch (Exception e) {
-            log.warn("Resolved argument validation failed: capability={}",
-                    manifest.metadata().id());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
-                    "Resolved arguments failed validation"),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // Construct resilience policy from manifest spec
-        ResiliencePolicy resiliencePolicy = manifest.spec().resilience() != null
-                ? manifest.spec().resilience()
-                : new ResiliencePolicy(15000, 0, 10, true);
-
-        ExecutionPlan plan = new ExecutionPlan(
-                executionId,
-                principalDigest,
-                snapshotVersion,
-                manifest.metadata().id(),
-                manifest.metadata().version(),
-                manifestDigest,
-                select.arguments(),
-                resolvedArgs,
-                "policy-" + executionId,
-                manifest.spec().risk(),
-                resiliencePolicy
-        );
-
-        // For WRITE operations, return the plan for two-phase protocol
-        if (manifest.spec().risk() == RiskLevel.WRITE_LOW
-                || manifest.spec().risk() == RiskLevel.WRITE_HIGH) {
-            Map<String, Object> planData = new HashMap<>();
-            planData.put("executionId", executionId);
-            planData.put("capabilityId", manifest.metadata().id());
-            planData.put("capabilityVersion", manifest.metadata().version());
-            planData.put("risk", manifest.spec().risk().name());
-            planData.put("requiresConfirmation", true);
-            planData.put("modelArguments", Map.copyOf(select.arguments()));
-
-            log.info("NL routing completed (write): requestId={}, capability={}, durationMs={}",
-                    requestId, manifest.metadata().id(), durationMs);
-
-            return auditRoutingTerminal(new QueryResult(QueryStatus.COMPLETED, planData,
-                    "Write operation requires confirmation: " + manifest.spec().displayName(),
-                    null, snapshotVersion, null, null,
-                    capabilityMetadata(manifest),
-                    Map.of("id", executionId, "status", "PLAN_READY",
-                            "requiresConfirmation", true), null),
-                    principal, requestId, snapshotVersion, manifest, startTime);
-        }
-
-        // For READ_ONLY operations, execute immediately
-        DeterministicExecutionUseCase.ExecutionResult execResult =
-                deterministicExecutionUseCase.execute(requestId, plan, principal, manifest);
-
-        long totalDurationMs = System.currentTimeMillis() - startTime;
-
-        if (execResult.errorCode() != null) {
-            log.warn("NL execution failed: requestId={}, capability={}, error={}",
-                    requestId, manifest.metadata().id(), execResult.errorCode());
-            return new QueryResult(QueryStatus.ERROR, null, null, null,
-                    snapshotVersion, execResult.errorCode(), execResult.summary());
-        }
-
-        log.info("NL routing+execution completed: requestId={}, capability={}, durationMs={}",
-                requestId, manifest.metadata().id(), totalDurationMs);
-
-        return new QueryResult(QueryStatus.COMPLETED, execResult.data(),
-                execResult.summary(), null, snapshotVersion, null, null,
-                capabilityMetadata(manifest),
-                Map.of("id", executionId, "status", "COMPLETED"), null);
-    }
-
-    /**
-     * Builds a safe audit detail JSON string.
-     *
-     * @param alias the selected alias
-     * @param errorCode the error code, or null on success
-     * @return the JSON detail string
-     */
-    private String buildAuditDetail(String alias, String errorCode) {
-        StringJoiner joiner = new StringJoiner(",", "{", "}");
-        joiner.add("\"alias\":\"" + escapeJson(alias) + "\"");
-        if (errorCode != null) {
-            joiner.add("\"errorCode\":\"" + escapeJson(errorCode) + "\"");
-        }
-        return joiner.toString();
-    }
-
-    /**
-     * Escapes special characters for safe JSON string embedding.
-     *
-     * @param value the raw value
-     * @return the escaped value
-     */
-    private String escapeJson(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.replace("\\", "\\\\")
-                .replace("\"", "\\\"")
-                .replace("\n", "\\n")
-                .replace("\r", "\\r")
-                .replace("\t", "\\t");
+                    @Override
+                    public QueryResult clarification(
+                            List<CandidateRetriever.ScoredCapability> candidates,
+                            String question,
+                            Principal terminalPrincipal,
+                            long terminalSnapshotVersion,
+                            String terminalRequestId,
+                            long terminalStartTime) {
+                        return initiateClarification(candidates, question, terminalPrincipal,
+                                terminalSnapshotVersion, terminalRequestId, terminalStartTime);
+                    }
+                });
     }
 
     /**
@@ -737,17 +392,7 @@ public final class NaturalLanguageQueryUseCase {
         return result;
     }
 
-    private String safeLlmErrorMessage(ErrorCode errorCode) {
-        return errorCode == ErrorCode.RATE_LIMITED
-                ? "LLM provider rate limit reached"
-                : "LLM routing unavailable";
-    }
 
-    private Map<String, Object> capabilityMetadata(CapabilityManifest manifest) {
-        return Map.of(
-                "id", manifest.metadata().id(),
-                "version", manifest.metadata().version());
-    }
 
     /**
      * Computes a SHA-256 digest of the Principal's subject identifier.

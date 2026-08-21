@@ -4,6 +4,7 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.SnapshotSummary;
 import com.ai.gateway.domain.port.CatalogPort;
+import com.ai.gateway.domain.service.CatalogSnapshotDigest;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.benmanes.caffeine.cache.Cache;
@@ -76,7 +77,12 @@ public class RedisCatalogPortDecorator implements CatalogPort {
         // L1：本地 Caffeine
         CatalogSnapshot cached = localCache.getIfPresent(environment);
         if (cached != null) {
-            return cached;
+            if (isValidCachedSnapshot(cached, environment)) {
+                return cached;
+            }
+            localCache.invalidate(environment);
+            log.warn("Invalid catalog snapshot found in local cache, loading from Redis/PostgreSQL: {}",
+                    environment);
         }
 
         // L2：Redis
@@ -85,8 +91,13 @@ public class RedisCatalogPortDecorator implements CatalogPort {
             String json = bucket.get();
             if (json != null) {
                 CatalogSnapshot snapshot = deserialize(json);
-                localCache.put(environment, snapshot);
-                return snapshot;
+                if (isValidCachedSnapshot(snapshot, environment)) {
+                    localCache.put(environment, snapshot);
+                    return snapshot;
+                }
+                bucket.delete();
+                log.warn("Invalid catalog snapshot found in Redis, loading from PostgreSQL: {}",
+                        environment);
             }
         } catch (Exception e) {
             log.warn("Redis snapshot cache read failed, falling back to PostgreSQL: {}",
@@ -106,6 +117,15 @@ public class RedisCatalogPortDecorator implements CatalogPort {
             }
         }
         return snapshot;
+    }
+
+    private boolean isValidCachedSnapshot(CatalogSnapshot snapshot, String environment) {
+        return snapshot != null
+                && snapshot.snapshotVersion() > 0
+                && environment.equals(snapshot.environment())
+                && snapshot.digest() != null
+                && !snapshot.digest().isBlank()
+                && snapshot.digest().equals(CatalogSnapshotDigest.sha256(snapshot));
     }
 
     @Override

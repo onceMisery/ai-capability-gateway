@@ -7,6 +7,7 @@ import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ModelDecision;
 import com.ai.gateway.domain.model.OutputContract;
 import com.ai.gateway.domain.model.OutputMode;
+import com.ai.gateway.domain.model.PayloadLimits;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.Protocol;
 import com.ai.gateway.domain.model.ProtocolBinding;
@@ -40,12 +41,14 @@ class NaturalLanguageAuditTest {
 
         NaturalLanguageQueryUseCase useCase = new NaturalLanguageQueryUseCase(
                 authentication, mock(AuthorizationPort.class), catalog,
-                mock(CandidateRetriever.class), mock(LlmRouterPort.class),
-                mock(SchemaValidator.class), new AliasGenerator(), mock(TypeConverterRegistry.class),
-                new RedactionService(), audit, new ThresholdEvaluator(),
-                new DeadlineBudgetManager(), new TextNormalizer(),
-                mock(InteractionRepository.class), mock(DeterministicExecutionUseCase.class),
-                "production");
+                mock(CandidateRetriever.class), audit, new ThresholdEvaluator(),
+                new TextNormalizer(), mock(InteractionRepository.class), "production",
+                new DefaultSelectDecisionProcessor(
+                        mock(AuthorizationPort.class), mock(LlmRouterPort.class),
+                        mock(SchemaValidator.class), new AliasGenerator(),
+                        mock(TypeConverterRegistry.class),
+                        mock(DeterministicExecutionUseCase.class),
+                        PayloadLimits.defaults()));
 
         useCase.execute(RequestContext.empty(), "req-1", "query", "zh-CN", "UTC");
 
@@ -176,11 +179,14 @@ class NaturalLanguageAuditTest {
                     .thenReturn(ValidationReport.success());
 
             return new NaturalLanguageQueryUseCase(
-                    authentication, authorization, catalog, retriever, llm,
-                    schemaValidator, aliases, mock(TypeConverterRegistry.class),
-                    new RedactionService(), audit, new ThresholdEvaluator(),
-                    new DeadlineBudgetManager(), new TextNormalizer(), interactions,
-                    mock(DeterministicExecutionUseCase.class), "production");
+                    authentication, authorization, catalog, retriever, audit,
+                    new ThresholdEvaluator(), new TextNormalizer(), interactions,
+                    "production",
+                    new DefaultSelectDecisionProcessor(
+                            authorization, llm, schemaValidator, aliases,
+                            mock(TypeConverterRegistry.class),
+                            mock(DeterministicExecutionUseCase.class),
+                            PayloadLimits.defaults()));
         }
 
         private static CapabilityManifest manifest() {

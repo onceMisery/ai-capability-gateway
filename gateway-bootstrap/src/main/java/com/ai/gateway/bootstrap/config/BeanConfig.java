@@ -53,7 +53,9 @@ import com.ai.gateway.application.runtime.ClarificationUseCase;
 import com.ai.gateway.application.runtime.AgentToolCallUseCase;
 import com.ai.gateway.application.runtime.AgentToolCatalogUseCase;
 import com.ai.gateway.application.runtime.DeterministicExecutionUseCase;
+import com.ai.gateway.application.runtime.DefaultSelectDecisionProcessor;
 import com.ai.gateway.application.runtime.NaturalLanguageQueryUseCase;
+import com.ai.gateway.application.runtime.SelectDecisionProcessor;
 import com.ai.gateway.application.runtime.StructuredInvocationUseCase;
 import com.ai.gateway.application.runtime.HealthReadinessUseCase;
 import com.ai.gateway.domain.model.CacheStatus;
@@ -575,41 +577,42 @@ public class BeanConfig {
      * 自然语言查询用例 — 11 步路由流水线。
      */
     @Bean
+    public SelectDecisionProcessor selectDecisionProcessor(
+            AuthorizationPort authorizationPort,
+            LlmRouterPort llmRouterPort,
+            SchemaValidator schemaValidator,
+            AliasGenerator aliasGenerator,
+            TypeConverterRegistry typeConverterRegistry,
+            DeterministicExecutionUseCase deterministicExecutionUseCase,
+            PayloadLimits payloadLimits) {
+        return new DefaultSelectDecisionProcessor(
+                authorizationPort, llmRouterPort, schemaValidator, aliasGenerator,
+                typeConverterRegistry, deterministicExecutionUseCase, payloadLimits);
+    }
+
+    @Bean
     public NaturalLanguageQueryUseCase naturalLanguageQueryUseCase(
             AuthenticationPort authenticationPort,
             AuthorizationPort authorizationPort,
             CatalogPort catalogPort,
             CandidateRetriever candidateRetriever,
-            LlmRouterPort llmRouterPort,
-            SchemaValidator schemaValidator,
-            AliasGenerator aliasGenerator,
-            TypeConverterRegistry typeConverterRegistry,
-            RedactionService redactionService,
             com.ai.gateway.domain.port.AuditPort auditPort,
             ThresholdEvaluator thresholdEvaluator,
-            DeadlineBudgetManager deadlineBudgetManager,
             InteractionRepository interactionRepository,
-            DeterministicExecutionUseCase deterministicExecutionUseCase,
+            TextNormalizer textNormalizer,
             GatewayProperties gatewayProperties,
-            PayloadLimits payloadLimits) {
+            SelectDecisionProcessor selectDecisionProcessor) {
         return new NaturalLanguageQueryUseCase(
                 authenticationPort,
                 authorizationPort,
                 catalogPort,
                 candidateRetriever,
-                llmRouterPort,
-                schemaValidator,
-                aliasGenerator,
-                typeConverterRegistry,
-                redactionService,
                 auditPort,
                 thresholdEvaluator,
-                deadlineBudgetManager,
-                new TextNormalizer(),
+                textNormalizer,
                 interactionRepository,
-                deterministicExecutionUseCase,
                 gatewayProperties.getEnvironment(),
-                payloadLimits);
+                selectDecisionProcessor);
     }
 
     /**
