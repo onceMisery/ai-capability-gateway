@@ -8,26 +8,22 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Mints Sa-Token-compatible JWTs that the gateway's
- * {@code SaTokenAuthenticationAdapter} will accept.
+ * 签发网关的 {@code SaTokenAuthenticationAdapter} 可接受的 Sa-Token 兼容 JWT。
  *
- * <p>The produced token follows the Sa-Token JWT layout:</p>
+ * <p>生成的 Token 遵循 Sa-Token 的 JWT 布局：</p>
  * <ul>
- * <li>{@code loginType} — the value configured in
- * {@code gateway.auth.sa-token.login-type} (default {@code login}).</li>
- * <li>{@code loginId} — the caller's subject identifier.</li>
- * <li>{@code eff} — absolute expiration epoch millis
- * ({@code -1} = never expire).</li>
- * <li>Custom claims (e.g., {@code orgId}, {@code roles}, {@code permissions})
- * are added via {@code extraData} and flow through to the gateway's
- * {@code Principal}.</li>
+ * <li>{@code loginType} — 网关 {@code gateway.auth.sa-token.login-type} 中配置的值
+ * （默认 {@code login}）。</li>
+ * <li>{@code loginId} — 调用方的主体标识。</li>
+ * <li>{@code eff} — 绝对过期时间（epoch 毫秒，{@code -1} 表示永不过期）。</li>
+ * <li>自定义声明（如 {@code orgId}、{@code roles}、{@code permissions}）通过
+ * {@code extraData} 附加，并流入网关的 {@code Principal}。</li>
  * </ul>
  *
- * <p>The token is signed with HS256 using the same secret configured in the
- * gateway as {@code gateway.auth.sa-token.jwt-secret-key}. Mismatched secrets
- * produce {@code AUTHENTICATION_FAILED} responses.</p>
+ * <p>Token 使用与网关 {@code gateway.auth.sa-token.jwt-secret-key} 相同的密钥以 HS256
+ * 签名。密钥不匹配会返回 {@code AUTHENTICATION_FAILED}。</p>
  *
- * <p>Usage:
+ * <p>使用示例：
  * <pre>{@code
  * SaTokenIssuer issuer = new SaTokenIssuer("shared-secret");
  * String jwt = issuer.issue("user-123", Map.of(
@@ -35,17 +31,18 @@ import java.util.Objects;
  *     "roles", List.of("user", "analyst")));
  * }</pre>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 public final class SaTokenIssuer {
 
     /**
-     * Default Sa-Token login type (matches gateway default).
+     * 默认 Sa-Token 登录类型（与网关默认值一致）。
      */
     public static final String DEFAULT_LOGIN_TYPE = "login";
 
     /**
-     * Default access token timeout in seconds (2 hours).
+     * 默认访问 Token 有效期（秒，即 2 小时）。
      */
     public static final long DEFAULT_ACCESS_TOKEN_TIMEOUT_SECONDS = 7200L;
 
@@ -53,21 +50,20 @@ public final class SaTokenIssuer {
     private final String loginType;
 
     /**
-     * Constructs an issuer with the default login type ({@code login}).
+     * 以默认登录类型（{@code login}）构造签发器。
      *
-     * @param secretKey the HMAC-SHA256 signing secret; must match the
-     * gateway's {@code gateway.auth.sa-token.jwt-secret-key}
+     * @param secretKey HMAC-SHA256 签名密钥，必须与网关的
+     * {@code gateway.auth.sa-token.jwt-secret-key} 一致
      */
     public SaTokenIssuer(String secretKey) {
         this(secretKey, DEFAULT_LOGIN_TYPE);
     }
 
     /**
-     * Constructs an issuer with an explicit login type.
+     * 以显式登录类型构造签发器。
      *
-     * @param secretKey the HMAC-SHA256 signing secret
-     * @param loginType the Sa-Token login type (e.g., {@code login},
-     * {@code user}, {@code admin})
+     * @param secretKey HMAC-SHA256 签名密钥
+     * @param loginType Sa-Token 登录类型（如 {@code login}、{@code user}、{@code admin}）
      */
     public SaTokenIssuer(String secretKey, String loginType) {
         if (secretKey == null || secretKey.isBlank()) {
@@ -83,23 +79,22 @@ public final class SaTokenIssuer {
     }
 
     /**
-     * Issues an access token for the given subject with no extra claims and
-     * the default 2-hour timeout.
+     * 为给定主体签发访问 Token，无附加声明，使用默认 2 小时有效期。
      *
-     * @param subject the caller subject (mapped to Sa-Token's {@code loginId})
-     * @return the signed JWT
+     * @param subject 调用方主体（映射为 Sa-Token 的 {@code loginId}）
+     * @return 已签名的 JWT
      */
     public String issue(String subject) {
         return issue(subject, Map.of(), DEFAULT_ACCESS_TOKEN_TIMEOUT_SECONDS);
     }
 
     /**
-     * Issues an access token for the given subject with extra claims.
+     * 为给定主体签发带附加声明的访问 Token。
      *
-     * @param subject the caller subject
-     * @param extraData additional claims (e.g., orgId, roles, permissions)
-     * @param timeoutSeconds token lifetime in seconds
-     * @return the signed JWT
+     * @param subject 调用方主体
+     * @param extraData 附加声明（如 orgId、roles、permissions）
+     * @param timeoutSeconds Token 有效期（秒）
+     * @return 已签名的 JWT
      */
     public String issue(String subject, Map<String, Object> extraData, long timeoutSeconds) {
         Objects.requireNonNull(subject, "subject must not be null");
@@ -115,15 +110,14 @@ public final class SaTokenIssuer {
     }
 
     /**
-     * Issues an access token for the given subject with role/permission
-     * claims.
+     * 为给定主体签发带角色/权限声明的访问 Token。
      *
-     * @param subject the caller subject
-     * @param orgId the organization context
-     * @param roles the roles granted to the caller
-     * @param permissions the permissions granted to the caller
-     * @param timeoutSeconds token lifetime in seconds
-     * @return the signed JWT
+     * @param subject 调用方主体
+     * @param orgId 组织上下文
+     * @param roles 授予调用方的角色
+     * @param permissions 授予调用方的权限
+     * @param timeoutSeconds Token 有效期（秒）
+     * @return 已签名的 JWT
      */
     public String issue(String subject, long orgId, List<String> roles,
                         List<String> permissions, long timeoutSeconds) {

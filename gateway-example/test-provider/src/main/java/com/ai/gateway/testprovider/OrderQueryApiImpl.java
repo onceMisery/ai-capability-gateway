@@ -9,25 +9,27 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Dubbo implementation of {@link OrderQueryApi} (design document ).
+ * {@link OrderQueryApi} 的 Dubbo 实现（设计文档 §21.2）。
  *
- * <p>Returns the platform standard Envelope {@code {code, value, message}} and supports
- * a set of deterministic test scenarios driven by the {@code orderNo} request field:</p>
+ * <p>返回平台标准 Envelope {@code {code, value, message}}，并支持一组由请求字段
+ * {@code orderNo} 驱动的确定性测试场景：</p>
  * <ul>
- * <li>normal orderNo &rarr; returns order data with {@code code=200}</li>
- * <li>missing/blank orderNo &rarr; business error {@code code=400}</li>
- * <li>{@code TIMEOUT} &rarr; sleeps to simulate a provider timeout</li>
- * <li>{@code ERROR} &rarr; throws a {@link RuntimeException}</li>
- * <li>{@code LARGE} &rarr; returns a large payload to exercise response size limits</li>
+ * <li>普通 orderNo &rarr; 返回 {@code code=200} 的订单数据</li>
+ * <li>缺失/空白 orderNo &rarr; 业务错误 {@code code=400}</li>
+ * <li>{@code TIMEOUT} &rarr; 休眠以模拟 Provider 超时</li>
+ * <li>{@code ERROR} &rarr; 抛出 {@link RuntimeException}</li>
+ * <li>{@code LARGE} &rarr; 返回大体积响应以验证响应体大小限制</li>
  * </ul>
+ *
+ * @author cmiracle@163.com
  */
 @DubboService(version = "1.0.0")
 public class OrderQueryApiImpl implements OrderQueryApi {
 
-    /** Sleep duration used to simulate a timeout scenario. */
+    /** 模拟超时场景时使用的休眠时长。 */
     private static final long TIMEOUT_SLEEP_MILLIS = 10_000L;
 
-    /** Number of rows emitted for the LARGE response scenario. */
+    /** LARGE 响应场景下返回的行数。 */
     private static final int LARGE_RESPONSE_ROWS = 5_000;
 
     @Override
@@ -36,28 +38,28 @@ public class OrderQueryApiImpl implements OrderQueryApi {
         Object orderNoValue = safeRequest.get("orderNo");
         String orderNo = orderNoValue == null ? null : orderNoValue.toString().trim();
 
-        // Scenario: empty request -> business validation error.
+        // 场景：请求为空 -> 业务校验错误。
         if (orderNo == null || orderNo.isEmpty()) {
             return envelope("400", null, "orderNo is required");
         }
 
-        // Scenario: simulated provider timeout.
+        // 场景：模拟 Provider 超时。
         if ("TIMEOUT".equals(orderNo)) {
             sleepQuietly(TIMEOUT_SLEEP_MILLIS);
             return envelope("200", orderData(orgId, orderNo), "success");
         }
 
-        // Scenario: simulated unexpected provider failure.
+        // 场景：模拟 Provider 意外失败。
         if ("ERROR".equals(orderNo)) {
             throw new RuntimeException("Simulated provider error for orderNo=ERROR");
         }
 
-        // Scenario: large response to test size limits.
+        // 场景：大体积响应，用于验证大小限制。
         if ("LARGE".equals(orderNo)) {
             return envelope("200", largeData(orgId), "success");
         }
 
-        // Scenario: normal query.
+        // 场景：普通查询。
         return envelope("200", orderData(orgId, orderNo), "success");
     }
 

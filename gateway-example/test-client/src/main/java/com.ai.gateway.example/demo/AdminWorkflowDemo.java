@@ -1,8 +1,7 @@
 package com.ai.gateway.example.demo;
 
 import com.ai.gateway.example.client.GatewayApiClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,73 +9,69 @@ import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
- * Demonstrates the control plane admin workflow (the design document, 15.3).
+ * 演示控制面（control plane）管理流程（设计文档 §15.3）。
  *
- * <p>This example shows the complete capability lifecycle:
+ * <p>本示例展示完整的能力生命周期：
  * <ol>
- * <li>Import a Capability Manifest</li>
- * <li>Trigger validation (10-step pipeline)</li>
- * <li>Approve the validated capability</li>
- * <li>Publish to an environment (generates immutable snapshot)</li>
- * <li>Suspend a capability (emergency)</li>
- * <li>Rollback to a previous snapshot</li>
+ * <li>导入能力清单（Capability Manifest）</li>
+ * <li>触发校验（10 步流水线）</li>
+ * <li>审批已校验的能力</li>
+ * <li>发布到某环境（生成不可变快照）</li>
+ * <li>下线某个能力（应急）</li>
+ * <li>回滚到历史快照</li>
  * </ol>
  *
- * <p>The control plane lifecycle  ensures that no capability
- * reaches production without passing through the full governance pipeline:</p>
+ * <p>控制面生命周期确保任何能力在上生产前都必须经过完整的治理流水线：</p>
  * <pre>
  * DRAFT -> IMPORTED -> VALIDATED -> APPROVED -> PUBLISHED
  * |
  * SUSPENDED
  * </pre>
  *
- * <p>Key design constraints:</p>
+ * <p>关键设计约束：</p>
  * <ul>
- * <li>: The 10-step validation pipeline runs at import time
- * and can be re-triggered via the validate endpoint.</li>
- * <li>: Approval requires an authorized approver identity.</li>
- * <li>: Publication generates an immutable, versioned snapshot.
- * The snapshot content cannot be modified after creation.</li>
- * <li>: Suspension is an emergency operation that immediately
- * removes the capability from the active snapshot.</li>
+ * <li>10 步校验流水线在导入时执行，也可经由 validate 接口重新触发。</li>
+ * <li>审批要求具备授权的审批者身份。</li>
+ * <li>发布会生成不可变、带版本的快照，其内容在创建后不可修改。</li>
+ * <li>下线是一项应急操作，会立即从活动快照中移除该能力。</li>
  * </ul>
  *
- * <p>Prerequisites:
+ * <p>前置条件：
  * <ul>
- * <li>Gateway running at http://localhost:8080</li>
- * <li>Admin JWT token with control-plane permissions</li>
+ * <li>网关运行于 http://localhost:8080</li>
+ * <li>具备控制面权限的管理面 JWT Token</li>
  * </ul>
  *
- * <p>Run with:
+ * <p>运行方式：
  * <pre>{@code
  * java -cp gateway-example.jar com.ai.gateway.example.demo.AdminWorkflowDemo
  * }</pre>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public class AdminWorkflowDemo {
-
-    private static final Logger log = LoggerFactory.getLogger(AdminWorkflowDemo.class);
 
     private static final String DEFAULT_BASE_URL = "http://localhost:8080";
     private static final String DEFAULT_TOKEN = "admin-jwt-token";
 
-    /** The capability ID used in this demo. */
+    /** 本示例使用的 capability ID。 */
     private static final String DEMO_CAPABILITY_ID = "order.detail.query";
 
-    /** The capability version used in this demo. */
+    /** 本示例使用的 capability 版本。 */
     private static final String DEMO_CAPABILITY_VERSION = "1.0.0";
 
     /**
-     * Main entry point for the admin workflow demo.
+     * 管理流程示例的入口方法。
      *
-     * <p>Accepts optional command-line arguments:</p>
+     * <p>接受可选的命令行参数：</p>
      * <ul>
-     * <li>args[0] — gateway base URL (default: http://localhost:8080)</li>
-     * <li>args[1] — admin JWT bearer token (default: admin-jwt-token)</li>
+     * <li>args[0] — 网关基础 URL（默认：http://localhost:8080）</li>
+     * <li>args[1] — 管理面 JWT Bearer Token（默认：admin-jwt-token）</li>
      * </ul>
      *
-     * @param args command-line arguments
+     * @param args 命令行参数
      */
     public static void main(String[] args) {
         String baseUrl = args.length > 0 ? args[0] : DEFAULT_BASE_URL;
@@ -84,29 +79,29 @@ public class AdminWorkflowDemo {
 
         System.out.println("=".repeat(70));
         System.out.println("AI Capability Gateway — Admin Workflow Demo");
-        System.out.println("the design document / ");
+        System.out.println("设计文档 / ");
         System.out.println("=".repeat(70));
         System.out.println("Gateway URL: " + baseUrl);
         System.out.println();
 
         GatewayApiClient client = new GatewayApiClient(baseUrl, token);
 
-        // Step 1: Import a Capability Manifest
+        // 步骤 1：导入能力清单
         stepImportManifest(client);
 
-        // Step 2: Trigger validation (10-step pipeline)
+        // 步骤 2：触发校验（10 步流水线）
         stepValidateCapability(client);
 
-        // Step 3: Approve the validated capability
+        // 步骤 3：审批已校验的能力
         stepApproveCapability(client);
 
-        // Step 4: Publish to an environment
+        // 步骤 4：发布到某环境
         stepPublishRelease(client);
 
-        // Step 5: Suspend a capability (emergency)
+        // 步骤 5：下线某个能力（应急）
         stepSuspendCapability(client);
 
-        // Step 6: Rollback to a previous snapshot
+        // 步骤 6：回滚到历史快照
         stepRollback(client);
 
         System.out.println();
@@ -116,26 +111,25 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Step 1: Import a Capability Manifest.
+     * 步骤 1：导入能力清单。
      *
-     * <p>Loads the sample {@code order-detail-query.yaml} from the classpath
-     * and submits it to the gateway's import endpoint.</p>
+     * <p>从 classpath 加载示例 {@code order-detail-query.yaml} 并提交到网关的导入接口。</p>
      *
-     * <p>The import triggers the 10-step validation pipeline:</p>
+     * <p>导入会触发 10 步校验流水线：</p>
      * <ol>
-     * <li>JSON Schema validation against the versioned Manifest Schema</li>
-     * <li>Capability ID format check (domain.resource.action)</li>
-     * <li>Semantic version format check</li>
-     * <li>Input Schema security constraints (additionalProperties: false)</li>
-     * <li>Parameter binding consistency check</li>
-     * <li>Serialization whitelist check</li>
-     * <li>Output contract validation (envelope, projection, redaction)</li>
-     * <li>Resilience policy bounds check</li>
-     * <li>Semantic description completeness (positive/negative/synonyms)</li>
-     * <li>Content digest computation (SHA-256)</li>
+     * <li>针对带版本的 Manifest Schema 进行 JSON Schema 校验</li>
+     * <li>能力 ID 格式检查（domain.resource.action）</li>
+     * <li>语义化版本格式检查</li>
+     * <li>入参 Schema 安全约束（additionalProperties: false）</li>
+     * <li>参数绑定一致性检查</li>
+     * <li>序列化白名单检查</li>
+     * <li>出参契约校验（envelope、projection、redaction）</li>
+     * <li>韧性策略边界检查</li>
+     * <li>语义描述完整性（正向/负向/同义词）</li>
+     * <li>内容摘要计算（SHA-256）</li>
      * </ol>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void stepImportManifest(GatewayApiClient client) {
         printStep(1, "Import Capability Manifest");
@@ -174,13 +168,11 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Step 2: Trigger validation.
+     * 步骤 2：触发校验。
      *
-     * <p>Re-validates an existing manifest version. This is useful when
-     * the validation rules have been updated and existing manifests need
-     * to be re-checked.</p>
+     * <p>重新校验一个已存在的清单版本。当校验规则更新、需要对存量清单重新检查时很有用。</p>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void stepValidateCapability(GatewayApiClient client) {
         printStep(2, "Validate Capability (10-step pipeline)");
@@ -201,15 +193,13 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Step 3: Approve the validated capability.
+     * 步骤 3：审批已校验的能力。
      *
-     * <p>Approval transitions the manifest from VALIDATED to APPROVED state.
-     * Only APPROVED capabilities are eligible for publication.</p>
+     * <p>审批将清单从 VALIDATED 状态迁移至 APPROVED。仅 APPROVED 的能力具备发布资格。</p>
      *
-     * <p>The approval record includes the approver identity and is stored
-     * in the audit trail .</p>
+     * <p>审批记录包含审批者身份，并存入审计日志。</p>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void stepApproveCapability(GatewayApiClient client) {
         printStep(3, "Approve Capability");
@@ -237,18 +227,17 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Step 4: Publish to an environment.
+     * 步骤 4：发布到某环境。
      *
-     * <p>Publication generates an immutable catalog snapshot containing all
-     * APPROVED capabilities. Key properties:</p>
+     * <p>发布会生成一个包含全部 APPROVED 能力的不可变目录快照。关键特性：</p>
      * <ul>
-     * <li>The snapshot version is monotonically increasing.</li>
-     * <li>The snapshot content cannot be modified after creation.</li>
-     * <li>The snapshot includes a content digest for integrity verification.</li>
-     * <li>The runtime data plane atomically switches to the new snapshot.</li>
+     * <li>快照版本单调递增。</li>
+     * <li>快照内容在创建后不可修改。</li>
+     * <li>快照包含内容摘要，用于完整性校验。</li>
+     * <li>运行时数据面原子切换到新快照。</li>
      * </ul>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void stepPublishRelease(GatewayApiClient client) {
         printStep(4, "Publish Release (immutable snapshot)");
@@ -261,7 +250,7 @@ public class AdminWorkflowDemo {
 
             if ("PUBLISHED".equals(status)) {
                 System.out.println(" Snapshot Version: " + result.get("snapshotVersion"));
-                System.out.println(" (Snapshot is immutable and versioned)");
+                System.out.println(" (快照不可变且带版本)");
             } else {
                 System.out.println(" Message: " + result.get("message"));
             }
@@ -274,20 +263,19 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Step 5: Suspend a capability.
+     * 步骤 5：下线某个能力。
      *
-     * <p>Suspension is an emergency operation that immediately removes
-     * the capability from the active catalog snapshot. A new snapshot
-     * version is generated without the suspended capability.</p>
+     * <p>下线是一项应急操作，会立即从活动目录快照中移除该能力，并生成一份不包含
+     * 该能力的新快照版本。</p>
      *
-     * <p>Use cases:</p>
+     * <p>适用场景：</p>
      * <ul>
-     * <li>Security vulnerability discovered in the downstream API</li>
-     * <li>Provider is returning incorrect data</li>
-     * <li>Compliance requirement to disable access immediately</li>
+     * <li>下游 API 暴露出安全漏洞</li>
+     * <li>Provider 返回错误数据</li>
+     * <li>合规要求立即禁用访问</li>
      * </ul>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void stepSuspendCapability(GatewayApiClient client) {
         printStep(5, "Suspend Capability (emergency)");
@@ -303,7 +291,7 @@ public class AdminWorkflowDemo {
             if ("SUSPENDED".equals(status)) {
                 System.out.println(" Capability ID: " + result.get("capabilityId"));
                 System.out.println(" New Snapshot Version: " + result.get("newSnapshotVersion"));
-                System.out.println(" (Capability removed from active catalog)");
+                System.out.println(" (能力已从活动目录移除)");
             } else {
                 System.out.println(" Message: " + result.get("message"));
             }
@@ -316,32 +304,26 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Step 6: Rollback to a previous snapshot.
+     * 步骤 6：回滚到历史快照。
      *
-     * <p>Rollback creates a new snapshot version that restores the catalog
-     * state to a historical snapshot. This is useful when a recent
-     * publication introduced issues and needs to be reverted.</p>
+     * <p>回滚会创建一个新的快照版本，将目录状态恢复至某个历史快照。当最近的发布引入
+     * 问题、需要撤销时很有用。</p>
      *
-     * <p>Note: Rollback does not delete the problematic snapshot; it
-     * creates a new snapshot with the historical content. The full
-     * history is preserved for audit purposes .</p>
+     * <p>注意：回滚不会删除问题快照，而是以历史内容创建新快照。完整历史会保留用于审计。</p>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void stepRollback(GatewayApiClient client) {
         printStep(6, "Rollback to Previous Snapshot");
 
-        // In a real scenario, you would query the snapshot history first
-        // to determine which version to roll back to. Here we use a
-        // placeholder version.
+        // 真实场景下应先查询快照历史，再决定回滚到哪个版本。此处使用占位版本。
         long targetVersion = 1L;
 
         System.out.println(" Target Snapshot Version: " + targetVersion);
-        System.out.println(" (In production, query snapshot history first)");
+        System.out.println(" (生产环境应先查询快照历史)");
 
-        // Note: The GatewayApiClient does not have a rollback method
-        // in the current implementation. This step demonstrates the
-        // concept. In a real implementation, you would call:
+        // 注意：当前实现的 GatewayApiClient 尚未提供 rollback 方法。
+        // 该步骤仅演示概念。真实实现中应调用：
         // POST /admin/v1/releases:rollback
         // { "targetSnapshotVersion": 1, "environment": "production" }
         System.out.println(" [INFO] Rollback endpoint: POST /admin/v1/releases:rollback");
@@ -352,10 +334,10 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Loads a classpath resource as a UTF-8 string.
+     * 以 UTF-8 字符串形式加载 classpath 资源。
      *
-     * @param resourcePath the classpath resource path (e.g., "/manifests/order-detail-query.yaml")
-     * @return the resource content, or null if not found
+     * @param resourcePath classpath 资源路径（如 "/manifests/order-detail-query.yaml"）
+     * @return 资源内容；未找到时返回 null
      */
     private static String loadClasspathResource(String resourcePath) {
         try (InputStream is = AdminWorkflowDemo.class.getResourceAsStream(resourcePath)) {
@@ -371,10 +353,10 @@ public class AdminWorkflowDemo {
     }
 
     /**
-     * Prints a numbered step header for the demo output.
+     * 打印示例输出的带编号步骤头。
      *
-     * @param stepNumber the step number
-     * @param title the step title
+     * @param stepNumber 步骤编号
+     * @param title 步骤标题
      */
     private static void printStep(int stepNumber, String title) {
         System.out.println("-".repeat(70));

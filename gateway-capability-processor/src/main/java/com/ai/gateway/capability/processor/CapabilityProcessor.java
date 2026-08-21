@@ -30,6 +30,7 @@ import javax.annotation.processing.ProcessingEnvironment;
 import javax.annotation.processing.RoundEnvironment;
 import javax.annotation.processing.SupportedAnnotationTypes;
 import javax.annotation.processing.SupportedSourceVersion;
+import java.lang.reflect.Method;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.Element;
 import javax.lang.model.element.ElementKind;
@@ -105,11 +106,32 @@ public final class CapabilityProcessor extends AbstractProcessor {
     @Override
     public synchronized void init(ProcessingEnvironment processingEnv) {
         super.init(processingEnv);
-        this.elements = processingEnv.getElementUtils();
-        this.types = processingEnv.getTypeUtils();
-        this.docTrees = DocTrees.instance(processingEnv);
-        this.filer = processingEnv.getFiler();
-        this.messager = processingEnv.getMessager();
+        ProcessingEnvironment unwrapped = jbUnwrap(ProcessingEnvironment.class, processingEnv);
+        this.elements = unwrapped.getElementUtils();
+        this.types = unwrapped.getTypeUtils();
+        this.docTrees = DocTrees.instance(unwrapped);
+        this.filer = unwrapped.getFiler();
+        this.messager = unwrapped.getMessager();
+    }
+
+    /**
+     * IntelliJ IDEA 在增量编译时会包装 ProcessingEnvironment，
+     * 导致 DocTrees.instance(processingEnv) 抛出 IllegalArgumentException。
+     * 此方法尝试解包以获取原始的 ProcessingEnvironment 对象。
+     */
+    @SuppressWarnings("unchecked")
+    private static <T> T jbUnwrap(Class<? extends T> iface, T wrapper) {
+        T unwrapped = null;
+        try {
+            final Class<?> apiWrappers = wrapper.getClass().getClassLoader()
+                    .loadClass("org.jetbrains.jps.javac.APIWrappers");
+            final Method unwrapMethod = apiWrappers.getDeclaredMethod(
+                    "unwrap", Class.class, Object.class);
+            unwrapped = iface.cast(unwrapMethod.invoke(null, iface, wrapper));
+        } catch (Throwable ignored) {
+            // 不在 IntelliJ 环境下运行时忽略，直接使用原对象
+        }
+        return unwrapped != null ? unwrapped : wrapper;
     }
 
     @Override

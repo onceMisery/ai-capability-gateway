@@ -9,22 +9,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Dubbo implementation of {@link PurchaseListApi} (design document ).
+ * {@link PurchaseListApi} 的 Dubbo 实现（设计文档 §21.2）。
  *
- * <p>Returns paginated purchase list data wrapped in the platform standard Envelope
- * {@code {code, value, message}}. Pagination is controlled by the {@code pageNo} and
- * {@code pageSize} request fields (defaulting to page 1 / size 10).</p>
+ * <p>返回包裹在平台标准 Envelope {@code {code, value, message}} 中的分页采购单数据。
+ * 分页由请求字段 {@code pageNo} 与 {@code pageSize} 控制（默认第 1 页 / 每页 10 条）。</p>
+ *
+ * @author cmiracle@163.com
  */
 @DubboService
 public class PurchaseListApiImpl implements PurchaseListApi {
 
-    /** Default page number when not supplied by the request. */
+    /** 请求未提供时的默认页码。 */
     private static final int DEFAULT_PAGE_NO = 1;
 
-    /** Default page size when not supplied by the request. */
+    /** 请求未提供时的默认每页大小。 */
     private static final int DEFAULT_PAGE_SIZE = 10;
 
-    /** Total number of synthetic purchase records available. */
+    /** 可用的合成采购记录总数。 */
     private static final int TOTAL_RECORDS = 35;
 
     @Override

@@ -16,29 +16,28 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Tests for the gateway example module.
- * Validates sample manifests and demonstrates testing patterns.
+ * 网关示例模块的测试。校验随附的示例清单并演示测试模式。
  *
- * <p>These tests verify that the sample Capability Manifests bundled
- * with the gateway-example module conform to the structural and
- * security requirements defined in the design document of the design document.</p>
+ * <p>这些测试验证 gateway-example 模块随附的示例能力清单是否符合设计文档中定义的
+ * 结构与安全要求。</p>
  *
- * <p>Testing patterns demonstrated:</p>
+ * <p>演示的测试模式：</p>
  * <ul>
- * <li>YAML parsing and structural validation</li>
- * <li>Required field presence checks</li>
- * <li>Security constraint verification (additionalProperties, PRINCIPAL isolation)</li>
- * <li>Serialization whitelist enforcement</li>
- * <li>Semantic description completeness</li>
+ * <li>YAML 解析与结构校验</li>
+ * <li>必填字段存在性检查</li>
+ * <li>安全约束校验（additionalProperties、PRINCIPAL 隔离）</li>
+ * <li>序列化白名单强制</li>
+ * <li>语义描述完整性</li>
  * </ul>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 class GatewayExampleTest {
 
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
-    /** Platform serialization whitelist. */
+    /** 平台序列化白名单。 */
     private static final Set<String> SERIALIZATION_WHITELIST =
             Set.of("fastjson2", "hessian2");
 
@@ -46,9 +45,9 @@ class GatewayExampleTest {
     private static JsonNode purchaseListManifest;
 
     /**
-     * Loads both sample manifests from the classpath before all tests.
+     * 在所有测试执行前从 classpath 加载两份示例清单。
      *
-     * @throws IOException if a manifest cannot be read
+     * @throws IOException 当清单无法读取时
      */
     @BeforeAll
     static void loadManifests() throws IOException {
@@ -98,7 +97,7 @@ class GatewayExampleTest {
         @Test
         @DisplayName("Manifest should have all required top-level fields")
         void manifestShouldHaveRequiredFields() {
-            // apiVersion, kind, metadata, spec are required
+            // apiVersion、kind、metadata、spec 为必填项
             assertThat(orderDetailManifest.has("apiVersion"))
                     .as("apiVersion is required")
                     .isTrue();
@@ -193,7 +192,7 @@ class GatewayExampleTest {
         @Test
         @DisplayName("inputSchema should have additionalProperties: false")
         void inputSchemaShouldHaveAdditionalPropertiesFalse() {
-            // additionalProperties: false is mandatory
+            // additionalProperties: false 为强制要求
             JsonNode inputSchema = orderDetailManifest.get("spec").get("inputSchema");
 
             assertThat(inputSchema.has("additionalProperties"))
@@ -213,13 +212,12 @@ class GatewayExampleTest {
         @Test
         @DisplayName("PRINCIPAL-sourced fields should not be in inputSchema")
         void principalFieldsShouldNotBeInInputSchema() {
-            // / 6.5: PRINCIPAL-sourced fields (e.g., orgId)
-            // must NOT appear in the model-visible inputSchema
+            // 6.5：PRINCIPAL 来源字段（如 orgId）不得出现在模型可见的 inputSchema 中
             JsonNode spec = orderDetailManifest.get("spec");
             JsonNode inputSchema = spec.get("inputSchema");
             JsonNode properties = inputSchema.get("properties");
 
-            // Collect all PRINCIPAL-sourced field names from arguments
+            // 从 arguments 中收集所有 PRINCIPAL 来源字段名
             JsonNode arguments = spec.get("invocation").get("arguments");
             for (JsonNode arg : arguments) {
                 if (arg.has("source")
@@ -231,7 +229,7 @@ class GatewayExampleTest {
                             .isFalse();
                 }
 
-                // Also check composite bindings for PRINCIPAL fields
+                // 同时检查复合绑定中的 PRINCIPAL 字段
                 if (arg.has("object")) {
                     JsonNode objectBindings = arg.get("object");
                     objectBindings.fields().forEachRemaining(entry -> {
@@ -264,7 +262,7 @@ class GatewayExampleTest {
         @Test
         @DisplayName("Serialization should be in the platform whitelist")
         void serializationShouldBeInWhitelist() {
-            // serialization must belong to the platform whitelist
+            // 序列化方式必须属于平台白名单
             JsonNode invocation = orderDetailManifest.get("spec").get("invocation");
 
             assertThat(invocation.has("serialization"))
@@ -299,7 +297,7 @@ class GatewayExampleTest {
         @Test
         @DisplayName("Examples should have at least 3 positive and 2 negative")
         void examplesShouldMeetMinimumCounts() {
-            // at least 3 positive, 2 negative, and synonyms
+            // 至少 3 条正向、2 条负向，以及同义词
             JsonNode examples = orderDetailManifest.get("spec").get("examples");
 
             assertThat(examples.has("positive"))
@@ -434,11 +432,11 @@ class GatewayExampleTest {
     // ========================================================================
 
     /**
-     * Loads a YAML resource from the classpath and parses it into a JsonNode.
+     * 从 classpath 加载 YAML 资源并解析为 JsonNode。
      *
-     * @param resourcePath the classpath resource path
-     * @return the parsed YAML as a JsonNode
-     * @throws IOException if the resource cannot be read or parsed
+     * @param resourcePath classpath 资源路径
+     * @return 解析后的 YAML（JsonNode 形式）
+     * @throws IOException 当资源无法读取或解析时
      */
     private static JsonNode loadYaml(String resourcePath) throws IOException {
         try (InputStream is = GatewayExampleTest.class

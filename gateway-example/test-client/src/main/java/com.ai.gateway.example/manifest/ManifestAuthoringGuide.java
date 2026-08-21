@@ -3,52 +3,49 @@ package com.ai.gateway.example.manifest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
 
 /**
- * Guide for authoring Capability Manifests .
+ * 能力清单（Capability Manifest）编写指南。
  *
- * <p>This class serves as executable documentation showing:
+ * <p>本类作为可执行的文档，展示：</p>
  * <ul>
- * <li>Manifest structure and required fields</li>
- * <li>Capability ID and versioning rules</li>
- * <li>Input Schema authoring with security constraints</li>
- * <li>Parameter binding: simple and composite</li>
- * <li>Controlled type converters</li>
- * <li>Protocol Binding for Dubbo</li>
- * <li>Output contract: Envelope, projection, redaction</li>
- * <li>Semantic description requirements</li>
+ * <li>清单结构与必填字段</li>
+ * <li>能力 ID 与版本化规则</li>
+ * <li>带安全约束的入参 Schema 编写</li>
+ * <li>参数绑定：简单与复合</li>
+ * <li>受控类型转换器</li>
+ * <li>Dubbo 协议绑定</li>
+ * <li>出参契约：Envelope、投影、脱敏</li>
+ * <li>语义描述要求</li>
  * </ul>
  *
- * <p>Run this class to print the authoring guide and validate the sample
- * manifests bundled with this module:</p>
+ * <p>运行本类可打印编写指南，并校验本模块随附的示例清单：</p>
  * <pre>{@code
  * java -cp gateway-example.jar com.ai.gateway.example.manifest.ManifestAuthoringGuide
  * }</pre>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public class ManifestAuthoringGuide {
-
-    private static final Logger log = LoggerFactory.getLogger(ManifestAuthoringGuide.class);
 
     private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
 
     /**
-     * Main entry point. Prints the manifest authoring guide and validates
-     * the sample manifests.
+     * 入口方法。打印清单编写指南并校验示例清单。
      *
-     * @param args command-line arguments (unused)
+     * @param args 命令行参数（未使用）
      */
     public static void main(String[] args) {
         System.out.println("=".repeat(70));
         System.out.println("AI Capability Gateway — Manifest Authoring Guide");
-        System.out.println("the design document");
+        System.out.println("设计文档 / ");
         System.out.println("=".repeat(70));
         System.out.println();
 
@@ -64,33 +61,31 @@ public class ManifestAuthoringGuide {
     }
 
     /**
-     * Prints the Manifest structure and required fields.
+     * 打印清单结构与必填字段。
      *
-     * <p>The Capability Manifest is the single, machine-verifiable contract
-     * that transforms a governed microservice API into a natural-language-
-     * discoverable capability. It uses YAML or JSON format
-     * and is validated by a versioned JSON Schema.</p>
+     * <p>能力清单是唯一的、机器可校验的契约，它将受治理的微服务 API 转化为
+     * 可经自然语言发现的能力。其采用 YAML 或 JSON 格式，并由带版本的 JSON Schema 校验。</p>
      *
-     * <p>Top-level structure:</p>
+     * <p>顶层结构：</p>
      * <pre>
-     * apiVersion: gateway.ai/v1 # Manifest specification version
-     * kind: Capability # Always "Capability"
-     * metadata: # Identity and ownership
-     * id: domain.resource.action # Stable capability identifier
-     * version: 1.0.0 # Semantic version (SemVer)
-     * owner: # Responsible team
+     * apiVersion: gateway.ai/v1 # 清单规范版本
+     * kind: Capability # 固定为 "Capability"
+     * metadata: # 身份与归属
+     * id: domain.resource.action # 稳定能力标识
+     * version: 1.0.0 # 语义化版本（SemVer）
+     * owner: # 责任团队
      * team: team-name
      * contact: team@example.com
-     * tags: [tag1, tag2] # Optional controlled tags
-     * spec: # Execution configuration
-     * displayName: ... # User-facing name
-     * description: ... # Single business-action description
-     * examples: ... # Positive, negative, synonyms
-     * risk: READ_ONLY # Risk level
-     * inputSchema: ... # Model-visible JSON Schema
-     * invocation: ... # Protocol binding
-     * output: ... # Output contract
-     * resilience: ... # Timeout, retry, concurrency
+     * tags: [tag1, tag2] # 可选受控标签
+     * spec: # 执行配置
+     * displayName: ... # 面向用户的名称
+     * description: ... # 单一业务动作描述
+     * examples: ... # 正向、负向、同义词
+     * risk: READ_ONLY # 风险等级
+     * inputSchema: ... # 模型可见的 JSON Schema
+     * invocation: ... # 协议绑定
+     * output: ... # 出参契约
+     * resilience: ... # 超时、重试、并发
      * </pre>
      */
     public static void printManifestStructure() {
@@ -98,14 +93,14 @@ public class ManifestAuthoringGuide {
 
         System.out.println("""
           The Capability Manifest has four top-level fields:
-          
+
             apiVersion - Manifest specification version (e.g., "gateway.ai/v1")
             kind - Always "Capability"
             metadata - Identity: id, version, owner, tags
             spec - Execution configuration (see below)
-          
+
           The spec block contains:
-          
+
             displayName - User-understandable capability name
             description - Single business-action description
             examples - positive (>=3), negative (>=2), synonyms
@@ -115,7 +110,7 @@ public class ManifestAuthoringGuide {
             invocation - Protocol binding
             output - Response contract
             resilience - Timeout, retry, concurrency
-          
+
           Important: Lifecycle state, confirmation records, publication
           environment, and snapshot version are control-plane records
           and are NOT self-declared in the Manifest.
@@ -123,32 +118,31 @@ public class ManifestAuthoringGuide {
     }
 
     /**
-     * Prints the parameter binding rules.
+     * 打印参数绑定规则。
      *
-     * <p>The gateway enforces a strict separation between model-visible
-     * and model-invisible parameters. Only MODEL-sourced parameters
-     * appear in the public input Schema.</p>
+     * <p>网关强制区分模型可见与模型不可见参数。只有 MODEL 来源的参才出现在公开
+     * 入参 Schema 中。</p>
      *
-     * <h3>Argument Sources</h3>
+     * <h3>参数来源</h3>
      * <table border="1">
-     * <tr><th>Source</th><th>Meaning</th><th>Model-visible</th></tr>
-     * <tr><td>MODEL</td><td>From LLM structured output</td><td>Yes</td></tr>
-     * <tr><td>PRINCIPAL</td><td>From authenticated Principal</td><td>No</td></tr>
-     * <tr><td>CONSTANT</td><td>From confirmed Manifest</td><td>No</td></tr>
-     * <tr><td>SYSTEM</td><td>Platform context (traceId, etc.)</td><td>No</td></tr>
+     * <tr><th>Source</th><th>含义</th><th>模型可见</th></tr>
+     * <tr><td>MODEL</td><td>来自 LLM 结构化输出</td><td>是</td></tr>
+     * <tr><td>PRINCIPAL</td><td>来自已鉴权的 Principal</td><td>否</td></tr>
+     * <tr><td>CONSTANT</td><td>来自已确认的清单常量</td><td>否</td></tr>
+     * <tr><td>SYSTEM</td><td>平台上下文（traceId 等）</td><td>否</td></tr>
      * </table>
      *
-     * <h3>Binding Modes</h3>
+     * <h3>绑定模式</h3>
      * <ul>
-     * <li><strong>Simple binding</strong>: source + sourcePath for a single value</li>
-     * <li><strong>Composite binding</strong>: object map for DTOs with mixed sources</li>
+     * <li><strong>简单绑定</strong>：source + sourcePath，用于单个值</li>
+     * <li><strong>复合绑定</strong>：对象映射，用于混合来源 DTO</li>
      * </ul>
      *
-     * <h3>Controlled Type Converters</h3>
+     * <h3>受控类型转换器</h3>
      * <ul>
-     * <li>ISO_DATE_TO_EPOCH_MILLIS — ISO-8601 string to epoch millis</li>
-     * <li>ENUM_UPPERCASE — normalize enum string to uppercase</li>
-     * <li>STRING_TRIM — trim whitespace</li>
+     * <li>ISO_DATE_TO_EPOCH_MILLIS — ISO-8601 字符串转 epoch 毫秒</li>
+     * <li>ENUM_UPPERCASE — 将枚举字符串规范化到大写</li>
+     * <li>STRING_TRIM — 去除空白</li>
      * </ul>
      */
     public static void printBindingRules() {
@@ -160,14 +154,14 @@ public class ManifestAuthoringGuide {
             PRINCIPAL - From authenticated Principal, e.g., orgId (never model-visible)
             CONSTANT - From confirmed Manifest constant (never model-visible)
             SYSTEM - Platform context: traceId, deadline, idempotencyKey, locale
-          
+
           Simple Binding Example:
             - position: 0
               name: orgId
               protocolType: java.lang.Long
               source: PRINCIPAL
               sourcePath: /orgId
-          
+
           Composite Binding Example (DTO with mixed sources):
             - position: 1
               name: request
@@ -179,12 +173,12 @@ public class ManifestAuthoringGuide {
                 /channel:
                   source: CONSTANT
                   value: AI_GATEWAY
-          
+
           Controlled Type Converters:
             ISO_DATE_TO_EPOCH_MILLIS "2026-07-21T10:00:00Z" -> 1753092000000L
             ENUM_UPPERCASE "pending" -> "PENDING"
             STRING_TRIM " order123 " -> "order123"
-          
+
           Dubbo Protocol Binding:
             - registryRef references an operationally pre-configured registry
             - Manifests must NOT carry usernames, passwords, or registry addresses
@@ -195,22 +189,22 @@ public class ManifestAuthoringGuide {
     }
 
     /**
-     * Prints the security constraints for Manifest authoring
+     * 打印清单编写的安全约束。
      *
-     * <h3>Input Schema Security</h3>
+     * <h3>入参 Schema 安全</h3>
      * <ul>
-     * <li>{@code additionalProperties: false} is mandatory</li>
-     * <li>PRINCIPAL-sourced fields must NOT appear in inputSchema</li>
-     * <li>String fields should have maxLength and pattern constraints</li>
-     * <li>Numeric fields should have minimum/maximum bounds</li>
+     * <li>{@code additionalProperties: false} 为强制要求</li>
+     * <li>PRINCIPAL 来源字段不得出现在 inputSchema 中</li>
+     * <li>字符串字段应设 maxLength 与 pattern 约束</li>
+     * <li>数值字段应设 minimum/maximum 边界</li>
      * </ul>
      *
-     * <h3>Output Contract Security</h3>
+     * <h3>出参契约安全</h3>
      * <ul>
-     * <li>Projection whitelist: unmapped fields do not leave the gateway</li>
-     * <li>Redaction rules: PARTIAL_MASK, HASH, DELETE</li>
-     * <li>publicSchema validates the final output</li>
-     * <li>maxBytes enforces response size limits</li>
+     * <li>投影白名单：未映射字段不会离开网关</li>
+     * <li>脱敏规则：PARTIAL_MASK、HASH、DELETE</li>
+     * <li>publicSchema 校验最终输出</li>
+     * <li>maxBytes 强制响应大小限制</li>
      * </ul>
      */
     public static void printSecurityConstraints() {
@@ -223,18 +217,18 @@ public class ManifestAuthoringGuide {
             [RECOMMENDED] String fields: maxLength + pattern
             [RECOMMENDED] Numeric fields: minimum + maximum
             [RECOMMENDED] Array fields: maxItems
-          
+
           Output Contract Security:
             Projection Whitelist:
               - Only mapped fields leave the gateway
               - Unmapped Provider fields are silently dropped
               - If no projection, entire data must match publicSchema
-          
+
             Redaction Methods:
               PARTIAL_MASK Keep first/last chars, mask the rest
               HASH Replace with one-way hash
               DELETE Remove field entirely
-          
+
             Response Processing Pipeline:
               1. Adapter converts protocol result to JSON tree
               2. Envelope unwrapping (codePath, successValues, dataPath)
@@ -242,7 +236,7 @@ public class ManifestAuthoringGuide {
               4. Redaction rules applied
               5. publicSchema validation
               6. maxBytes size check
-          
+
             Error Handling:
               - Path-not-found, type mismatch, response-over-limit
                 are treated as protocol errors
@@ -251,17 +245,16 @@ public class ManifestAuthoringGuide {
     }
 
     /**
-     * Validates the sample manifests bundled with this module.
+     * 校验本模块随附的示例清单。
      *
-     * <p>Loads both {@code order-detail-query.yaml} and
-     * {@code purchase-list-query.yaml} from the classpath and performs
-     * basic structural validation:</p>
+     * <p>从 classpath 加载 {@code order-detail-query.yaml} 与
+     * {@code purchase-list-query.yaml}，并执行基础结构校验：</p>
      * <ul>
-     * <li>Valid YAML syntax</li>
-     * <li>Required top-level fields present</li>
-     * <li>inputSchema has additionalProperties: false</li>
-     * <li>PRINCIPAL fields not in inputSchema</li>
-     * <li>Serialization in whitelist</li>
+     * <li>YAML 语法合法</li>
+     * <li>必填顶层字段齐全</li>
+     * <li>inputSchema 含 additionalProperties: false</li>
+     * <li>PRINCIPAL 字段不在 inputSchema 中</li>
+     * <li>序列化方式在白名单中</li>
      * </ul>
      */
     public static void validateSampleManifest() {
@@ -274,10 +267,10 @@ public class ManifestAuthoringGuide {
     }
 
     /**
-     * Validates a single manifest resource from the classpath.
+     * 校验 classpath 中的单个清单资源。
      *
-     * @param resourcePath the classpath resource path
-     * @param expectedId the expected capability ID
+     * @param resourcePath classpath 资源路径
+     * @param expectedId 期望的能力 ID
      */
     private static void validateManifestResource(String resourcePath,
                                                   String expectedId) {
@@ -295,7 +288,7 @@ public class ManifestAuthoringGuide {
             int checks = 0;
             int passed = 0;
 
-            // Check 1: apiVersion
+            // 检查 1：apiVersion
             checks++;
             if (root.has("apiVersion")
                     && "gateway.ai/v1".equals(root.get("apiVersion").asText())) {
@@ -304,7 +297,7 @@ public class ManifestAuthoringGuide {
                 System.out.println(" [FAIL] apiVersion != gateway.ai/v1");
             }
 
-            // Check 2: kind
+            // 检查 2：kind
             checks++;
             if (root.has("kind")
                     && "Capability".equals(root.get("kind").asText())) {
@@ -313,7 +306,7 @@ public class ManifestAuthoringGuide {
                 System.out.println(" [FAIL] kind != Capability");
             }
 
-            // Check 3: metadata.id
+            // 检查 3：metadata.id
             checks++;
             JsonNode metadata = root.get("metadata");
             if (metadata != null && metadata.has("id")
@@ -323,7 +316,7 @@ public class ManifestAuthoringGuide {
                 System.out.println(" [FAIL] metadata.id != " + expectedId);
             }
 
-            // Check 4: metadata.version (SemVer format)
+            // 检查 4：metadata.version（SemVer 格式）
             checks++;
             if (metadata != null && metadata.has("version")
                     && metadata.get("version").asText()
@@ -333,7 +326,7 @@ public class ManifestAuthoringGuide {
                 System.out.println(" [FAIL] metadata.version is not valid SemVer");
             }
 
-            // Check 5: spec.inputSchema.additionalProperties == false
+            // 检查 5：spec.inputSchema.additionalProperties == false
             checks++;
             JsonNode spec = root.get("spec");
             JsonNode inputSchema = spec != null ? spec.get("inputSchema") : null;
@@ -344,7 +337,7 @@ public class ManifestAuthoringGuide {
                 System.out.println(" [FAIL] inputSchema.additionalProperties != false");
             }
 
-            // Check 6: serialization in whitelist
+            // 检查 6：serialization 在白名单中
             checks++;
             JsonNode invocation = spec != null ? spec.get("invocation") : null;
             if (invocation != null && invocation.has("serialization")) {
@@ -359,7 +352,7 @@ public class ManifestAuthoringGuide {
                 System.out.println(" [FAIL] invocation.serialization missing");
             }
 
-            // Check 7: examples have positive >= 3 and negative >= 2
+            // 检查 7：examples 含 positive >= 3 与 negative >= 2
             checks++;
             JsonNode examples = spec != null ? spec.get("examples") : null;
             if (examples != null) {
@@ -393,9 +386,9 @@ public class ManifestAuthoringGuide {
     }
 
     /**
-     * Prints a section header.
+     * 打印分段标题。
      *
-     * @param title the section title
+     * @param title 分段标题
      */
     private static void printSection(String title) {
         System.out.println("-".repeat(70));

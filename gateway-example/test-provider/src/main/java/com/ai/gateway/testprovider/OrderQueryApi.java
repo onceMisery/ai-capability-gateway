@@ -23,6 +23,8 @@ import java.util.Map;
  * <p>方法签名特意只使用 {@code Long} 和 {@code Map} 等 JDK 类型，使网关无需加载
  * 原始业务 API JAR 即可通过 Dubbo 泛化调用执行。返回的 {@code Map} 使用平台标准
  * Envelope 结构：{@code {code, value, message}}。</p>
+ *
+ * @author cmiracle@163.com
  */
 @CapabilityGroup(idPrefix = "order", protocol = CapabilityProtocol.DUBBO)
 public interface OrderQueryApi {

@@ -107,8 +107,8 @@
           <div v-else-if="result.status === 'ERROR' || result.status === 'INVALID'" class="error-result" role="alert">
             <div class="result-icon"><el-icon><CircleClose /></el-icon></div>
             <div>
-              <strong>{{ result.errorCode || '请求失败' }}</strong>
-              <p>{{ result.message || '网关未能完成本次请求。' }}</p>
+              <strong>{{ localizedErrorMessage(result.errorCode, result.message) }}</strong>
+              <p>{{ result.message ? localizedErrorMessage(undefined, result.message) : '网关未能完成本次请求。' }}</p>
             </div>
           </div>
 
@@ -177,7 +177,7 @@ import { computed, nextTick, ref } from 'vue'
 import { CircleCheck, CircleClose, ChatLineSquare, DataAnalysis, Delete, Promotion, Search } from '@element-plus/icons-vue'
 import { ElMessage, type InputInstance } from 'element-plus'
 import { gatewayApi } from '@/api/gateway'
-import { apiErrorMessage } from '@/utils/format'
+import { apiErrorMessage, localizedErrorMessage } from '@/utils/format'
 import type { NaturalLanguageQueryResult } from '@/types/gateway'
 
 const inputRef = ref<InputInstance>()

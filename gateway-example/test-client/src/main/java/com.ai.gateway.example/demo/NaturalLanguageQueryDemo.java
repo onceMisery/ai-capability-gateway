@@ -1,58 +1,57 @@
 package com.ai.gateway.example.demo;
 
 import com.ai.gateway.example.client.GatewayApiClient;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * Demonstrates the natural language query workflow under both
- * authentication modes supported by the gateway.
+ * 演示在网关支持的两种鉴权模式下进行自然语言查询的工作流。
  *
- * <p>This example shows:
+ * <p>本示例展示：
  * <ol>
- * <li>Simple query that returns COMPLETED</li>
- * <li>Query requiring clarification (missing parameters)</li>
- * <li>Clarification continuation</li>
- * <li>Query with no matching capability</li>
- * <li>Error handling (authentication failure, timeout)</li>
+ * <li>返回 COMPLETED 的简单查询</li>
+ * <li>需要澄清的查询（参数缺失）</li>
+ * <li>澄清续接</li>
+ * <li>无匹配能力的查询</li>
+ * <li>错误处理（鉴权失败、超时）</li>
  * </ol>
  *
- * <h3>Authentication modes</h3>
+ * <h3>鉴权模式</h3>
  *
- * <p>The demo picks the authentication mode in this priority order:</p>
+ * <p>示例按如下优先级选择鉴权模式：</p>
  * <ol>
- * <li>{@code args[2]} — explicit {@code stub} | {@code sa-token} | {@code custom}.</li>
- * <li>{@code GATEWAY_AUTH_MODE} environment variable — same values.</li>
- * <li>Default: {@code stub} (works with the default {@code gateway.auth.provider=stub}).</li>
+ * <li>{@code args[2]} — 显式指定 {@code stub} | {@code sa-token} | {@code custom}。</li>
+ * <li>{@code GATEWAY_AUTH_MODE} 环境变量 — 取值同上。</li>
+ * <li>默认：{@code stub}（配合默认的 {@code gateway.auth.provider=stub} 生效）。</li>
  * </ol>
  *
  * <table>
- * <tr><th>Mode</th><th>Source of token</th></tr>
- * <tr><td>{@code stub}</td><td>Placeholder string {@code demo-jwt-token} (accepted by the stub AuthenticationPort).</td></tr>
- * <tr><td>{@code sa-token}</td><td>Minted by {@link SaTokenIssuer} using {@code GATEWAY_AUTH_JWT_SECRET} and {@code GATEWAY_AUTH_LOGIN_ID}.</td></tr>
- * <tr><td>{@code custom}</td><td>Caller-supplied token via {@code args[1]} or {@code GATEWAY_AUTH_TOKEN}.</td></tr>
+ * <tr><th>模式</th><th>Token 来源</th></tr>
+ * <tr><td>{@code stub}</td><td>占位串 {@code demo-jwt-token}（被 stub AuthenticationPort 接受）。</td></tr>
+ * <tr><td>{@code sa-token}</td><td>由 {@link SaTokenIssuer} 使用 {@code GATEWAY_AUTH_JWT_SECRET} 与
+ * {@code GATEWAY_AUTH_LOGIN_ID} 签发。</td></tr>
+ * <tr><td>{@code custom}</td><td>调用方通过 {@code args[1]} 或 {@code GATEWAY_AUTH_TOKEN} 提供的 Token。</td></tr>
  * </table>
  *
- * <p>Prerequisites:
+ * <p>前置条件：
  * <ul>
- * <li>Gateway running at http://localhost:8080</li>
- * <li>A token valid for the configured {@code gateway.auth.provider}</li>
- * <li>At least one PUBLISHED capability in the catalog</li>
+ * <li>网关运行于 http://localhost:8080</li>
+ * <li>对配置的 {@code gateway.auth.provider} 有效的 Token</li>
+ * <li>目录中至少存在一个 PUBLISHED 能力</li>
  * </ul>
  *
- * <p>Run with:
+ * <p>运行方式：
  * <pre>{@code
  * java -cp gateway-example.jar com.ai.gateway.example.demo.NaturalLanguageQueryDemo
  * }</pre>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public class NaturalLanguageQueryDemo {
-
-    private static final Logger log = LoggerFactory.getLogger(NaturalLanguageQueryDemo.class);
 
     private static final String DEFAULT_BASE_URL = "http://localhost:8080";
     private static final String DEFAULT_TOKEN = "demo-jwt-token";
@@ -62,26 +61,26 @@ public class NaturalLanguageQueryDemo {
     private static final String MODE_CUSTOM = "custom";
 
     /**
-     * Main entry point for the natural-language query demo.
+     * 自然语言查询示例的入口方法。
      *
-     * <p>Accepts optional command-line arguments:</p>
+     * <p>接受可选的命令行参数：</p>
      * <ul>
-     * <li>args[0] — gateway base URL (default: http://localhost:8080)</li>
-     * <li>args[1] — pre-minted bearer token (used in {@code custom} mode)</li>
-     * <li>args[2] — authentication mode override: {@code stub} | {@code sa-token} | {@code custom}</li>
+     * <li>args[0] — 网关基础 URL（默认：http://localhost:8080）</li>
+     * <li>args[1] — 预签发的 Bearer Token（用于 {@code custom} 模式）</li>
+     * <li>args[2] — 鉴权模式覆盖：{@code stub} | {@code sa-token} | {@code custom}</li>
      * </ul>
      *
-     * <p>Recognized environment variables:</p>
+     * <p>识别的环境变量：</p>
      * <ul>
-     * <li>{@code GATEWAY_AUTH_MODE} — fallback auth mode</li>
-     * <li>{@code GATEWAY_AUTH_JWT_SECRET} — shared HMAC secret (used in {@code sa-token} mode)</li>
-     * <li>{@code GATEWAY_AUTH_LOGIN_ID} — Sa-Token login subject (default: {@code demo-user})</li>
-     * <li>{@code GATEWAY_AUTH_LOGIN_TYPE} — Sa-Token login type (default: {@code login})</li>
-     * <li>{@code GATEWAY_AUTH_TIMEOUT_SECONDS} — token lifetime (default: 7200)</li>
-     * <li>{@code GATEWAY_AUTH_TOKEN} — fallback pre-minted token for {@code custom} mode</li>
+     * <li>{@code GATEWAY_AUTH_MODE} — 兜底鉴权模式</li>
+     * <li>{@code GATEWAY_AUTH_JWT_SECRET} — 共享 HMAC 密钥（{@code sa-token} 模式使用）</li>
+     * <li>{@code GATEWAY_AUTH_LOGIN_ID} — Sa-Token 登录主体（默认：{@code demo-user}）</li>
+     * <li>{@code GATEWAY_AUTH_LOGIN_TYPE} — Sa-Token 登录类型（默认：{@code login}）</li>
+     * <li>{@code GATEWAY_AUTH_TIMEOUT_SECONDS} — Token 有效期（默认：7200）</li>
+     * <li>{@code GATEWAY_AUTH_TOKEN} — {@code custom} 模式的兜底预签发 Token</li>
      * </ul>
      *
-     * @param args command-line arguments
+     * @param args 命令行参数
      */
     public static void main(String[] args) {
         String baseUrl = args.length > 0 ? args[0] : DEFAULT_BASE_URL;
@@ -90,15 +89,15 @@ public class NaturalLanguageQueryDemo {
 
         String mode = resolveAuthMode(cliMode);
 
-        // Resolve token based on mode
+        // 依据模式解析 Token
         String token;
         String modeDisplay;
         switch (mode) {
             case MODE_SA_TOKEN:
                 String secret = System.getenv("GATEWAY_AUTH_JWT_SECRET");
                 if (secret == null || secret.isBlank()) {
-                    System.err.println("[FATAL] GATEWAY_AUTH_JWT_SECRET is required in sa-token mode. "
-                            + "Set it to the same value as gateway.auth.sa-token.jwt-secret-key on the gateway.");
+                    System.err.println("[FATAL] sa-token 模式需要 GATEWAY_AUTH_JWT_SECRET。"
+                            + "请将其设为与网关侧 gateway.auth.sa-token.jwt-secret-key 相同的值。");
                     return;
                 }
                 String loginType = firstNonBlank(System.getenv("GATEWAY_AUTH_LOGIN_TYPE"),
@@ -116,7 +115,7 @@ public class NaturalLanguageQueryDemo {
                 String envToken = System.getenv("GATEWAY_AUTH_TOKEN");
                 token = cliToken != null ? cliToken : envToken;
                 if (token == null || token.isBlank()) {
-                    System.err.println("[FATAL] custom mode requires a token via args[1] or GATEWAY_AUTH_TOKEN.");
+                    System.err.println("[FATAL] custom 模式需要通过 args[1] 或 GATEWAY_AUTH_TOKEN 提供 Token。");
                     return;
                 }
                 modeDisplay = MODE_CUSTOM + " (length=" + token.length() + ")";
@@ -137,16 +136,16 @@ public class NaturalLanguageQueryDemo {
 
         GatewayApiClient client = new GatewayApiClient(baseUrl, token);
 
-        // Example 1: Direct query that should return COMPLETED
+        // 示例 1：直接查询，预期返回 COMPLETED
         exampleDirectQuery(client);
 
-        // Example 2: Clarification flow (missing parameters)
+        // 示例 2：澄清流程（参数缺失）
         exampleClarificationFlow(client);
 
-        // Example 3: No matching capability
+        // 示例 3：无匹配能力
         exampleNoMatch(client);
 
-        // Example 4: Error handling
+        // 示例 4：错误处理
         exampleErrorHandling(baseUrl);
 
         System.out.println();
@@ -156,7 +155,7 @@ public class NaturalLanguageQueryDemo {
     }
 
     /**
-     * Resolves the authentication mode from CLI → env → default.
+     * 按 CLI → 环境变量 → 默认值的顺序解析鉴权模式。
      */
     private static String resolveAuthMode(String cliMode) {
         String mode = cliMode;
@@ -170,7 +169,7 @@ public class NaturalLanguageQueryDemo {
         if (!MODE_STUB.equals(normalized)
                 && !MODE_SA_TOKEN.equals(normalized)
                 && !MODE_CUSTOM.equals(normalized)) {
-            System.err.println("[WARN] Unknown auth mode '" + mode + "', falling back to stub.");
+            System.err.println("[WARN] 未知鉴权模式 '" + mode + "'，回退到 stub。");
             return MODE_STUB;
         }
         return normalized;
@@ -193,29 +192,28 @@ public class NaturalLanguageQueryDemo {
     }
 
     /**
-     * Example 1: Direct query that returns COMPLETED.
+     * 示例 1：返回 COMPLETED 的直接查询。
      *
-     * <p>Demonstrates a well-formed query where all required parameters
-     * can be extracted by the model from the natural-language text.</p>
+     * <p>演示一条结构良好、所有必填参数都能由模型从自然语言文本中提取的查询。</p>
      *
-     * <p>Expected flow:</p>
+     * <p>预期流程：</p>
      * <ol>
-     * <li>The query "查询订单 SO202607210001" matches the
-     * {@code order.detail.query} capability via BM25 retrieval.</li>
-     * <li>The model extracts {@code orderNo = "SO202607210001"}.</li>
-     * <li>Input Schema validation passes (pattern: ^SO[0-9]{12}$).</li>
-     * <li>Parameter binding injects orgId from Principal.</li>
-     * <li>The Dubbo generic invocation calls OrderQueryApi#query.</li>
-     * <li>The response is unwrapped (envelope), projected, and redacted.</li>
+     * <li>查询 "查询订单 SO202607210001" 通过 BM25 检索匹配到
+     * {@code order.detail.query} 能力。</li>
+     * <li>模型提取 {@code orderNo = "SO202607210001"}。</li>
+     * <li>入参 Schema 校验通过（pattern: ^SO[0-9]{12}$）。</li>
+     * <li>参数绑定从 Principal 注入 orgId。</li>
+     * <li>Dubbo 泛化调用 OrderQueryApi#query。</li>
+     * <li>响应被解包（envelope）、投影并脱敏。</li>
      * </ol>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void exampleDirectQuery(GatewayApiClient client) {
         printSection("Example 1: Direct Query (COMPLETED)");
 
         try {
-            // This query contains all required parameters (orderNo)
+            // 该查询包含全部必填参数（orderNo）
             Map<String, Object> result = client.naturalLanguageQuery(
                     "查询订单 SO202607210001", "zh-CN");
 
@@ -239,36 +237,33 @@ public class NaturalLanguageQueryDemo {
     }
 
     /**
-     * Example 2: Clarification flow (missing parameters).
+     * 示例 2：澄清流程（参数缺失）。
      *
-     * <p>Demonstrates what happens when the model cannot extract all
-     * required parameters from the initial query.</p>
+     * <p>演示当模型无法从初始查询中提取全部必填参数时发生的情况。</p>
      *
-     * <p>Expected flow:</p>
+     * <p>预期流程：</p>
      * <ol>
-     * <li>The query "查询订单" matches {@code order.detail.query} but
-     * the model cannot extract the required {@code orderNo}.</li>
-     * <li>The gateway returns CLARIFICATION_REQUIRED with an
-     * {@code interactionId} and a clarification question.</li>
-     * <li>The user provides the missing orderNo via
-     * {@code continueClarification}.</li>
-     * <li>The gateway completes the query with the supplemented parameter.</li>
+     * <li>查询 "查询订单" 匹配到 {@code order.detail.query}，但模型无法提取必填的
+     * {@code orderNo}。</li>
+     * <li>网关返回 CLARIFICATION_REQUIRED，附带 {@code interactionId} 与澄清问题。</li>
+     * <li>用户通过 {@code continueClarification} 提供缺失的 orderNo。</li>
+     * <li>网关凭补充参数完成查询。</li>
      * </ol>
      *
-     * <p>Important constraints:</p>
+     * <p>重要约束：</p>
      * <ul>
-     * <li>The clarification session is short-lived (expiresAt).</li>
-     * <li>Subsequent answers may only supplement missing information.</li>
-     * <li>Intent jumps invalidate the session and require a full restart.</li>
+     * <li>澄清会话短时效（expiresAt）。</li>
+     * <li>后续回答只能补充缺失信息。</li>
+     * <li>意图跳转会使会话失效并需完整重启。</li>
      * </ul>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void exampleClarificationFlow(GatewayApiClient client) {
         printSection("Example 2: Clarification Flow");
 
         try {
-            // Step 1: Send an ambiguous query missing the required orderNo
+            // 步骤 1：发送缺少必填 orderNo 的歧义查询
             System.out.println(" Step 1: Sending ambiguous query...");
             Map<String, Object> initialResult = client.naturalLanguageQuery(
                     "帮我查询一下订单", "zh-CN");
@@ -283,7 +278,7 @@ public class NaturalLanguageQueryDemo {
                 System.out.println(" Question: " + question);
                 System.out.println(" Interaction ID: " + interactionId);
 
-                // Step 2: Continue the clarification with the missing parameter
+                // 步骤 2：使用缺失参数续接澄清
                 System.out.println();
                 System.out.println(" Step 2: Providing missing parameter...");
                 Map<String, Object> clarResult = client.continueClarification(
@@ -298,7 +293,7 @@ public class NaturalLanguageQueryDemo {
                     System.out.println(" Full response: " + clarResult);
                 }
             } else if ("COMPLETED".equals(status)) {
-                // The model might have been able to handle it directly
+                // 模型可能已能直接处理
                 System.out.println(" (Model resolved without clarification)");
                 System.out.println(" Data: " + initialResult.get("data"));
             } else {
@@ -313,22 +308,19 @@ public class NaturalLanguageQueryDemo {
     }
 
     /**
-     * Example 3: Query with no matching capability.
+     * 示例 3：无匹配能力的查询。
      *
-     * <p>Demonstrates the NO_MATCH response when no capability in the
-     * catalog matches the user's query.</p>
+     * <p>演示当目录中没有任何能力匹配用户查询时返回的 NO_MATCH 响应。</p>
      *
-     * <p>The BM25 retrieval returns no candidates above
-     * the relevance threshold, or the model routing determines that
-     * none of the candidates are appropriate.</p>
+     * <p>BM25 检索未返回高于相关度阈值的候选，或模型路由判定没有任何候选合适。</p>
      *
-     * @param client the gateway API client
+     * @param client 网关 API 客户端
      */
     private static void exampleNoMatch(GatewayApiClient client) {
         printSection("Example 3: No Match");
 
         try {
-            // This query should not match any capability in the catalog
+            // 该查询不应匹配目录中的任何能力
             Map<String, Object> result = client.naturalLanguageQuery(
                     "今天天气怎么样", "zh-CN");
 
@@ -337,7 +329,7 @@ public class NaturalLanguageQueryDemo {
 
             if ("NO_MATCH".equals(status)) {
                 System.out.println(" Message: " + result.get("message"));
-                System.out.println(" (Expected: no capability handles weather queries)");
+                System.out.println(" (预期：没有能力处理天气查询)");
             } else {
                 System.out.println(" Full response: " + result);
             }
@@ -350,34 +342,32 @@ public class NaturalLanguageQueryDemo {
     }
 
     /**
-     * Example 4: Error handling.
+     * 示例 4：错误处理。
      *
-     * <p>Demonstrates how the client handles various error conditions
-     *:</p>
+     * <p>演示客户端如何处理各类错误条件：</p>
      * <ul>
-     * <li>Authentication failure (invalid token)</li>
-     * <li>Connection failure (gateway not running)</li>
-     * <li>Malformed response</li>
+     * <li>鉴权失败（Token 无效）</li>
+     * <li>连接失败（网关未运行）</li>
+     * <li>响应格式异常</li>
      * </ul>
      *
-     * <p>The gateway returns stable error codes that
-     * clients can use for programmatic error handling:</p>
+     * <p>网关返回稳定的错误码，客户端可据此进行程序化处理：</p>
      * <ul>
-     * <li>{@code AUTHENTICATION_FAILED} — invalid or expired token</li>
-     * <li>{@code PERMISSION_DENIED} — insufficient permissions</li>
-     * <li>{@code PROVIDER_TIMEOUT} — downstream provider timeout</li>
-     * <li>{@code PROTOCOL_ERROR} — internal protocol error</li>
+     * <li>{@code AUTHENTICATION_FAILED} — Token 无效或过期</li>
+     * <li>{@code PERMISSION_DENIED} — 权限不足</li>
+     * <li>{@code PROVIDER_TIMEOUT} — 下游 Provider 超时</li>
+     * <li>{@code PROTOCOL_ERROR} — 内部协议错误</li>
      * </ul>
      *
-     * @param baseUrl the gateway base URL to test against
+     * @param baseUrl 待测试的网关基础 URL
      */
     private static void exampleErrorHandling(String baseUrl) {
         printSection("Example 4: Error Handling");
 
-        // Test with an invalid token to demonstrate authentication error.
-        // Under stub mode, stub AuthenticationPort accepts any non-blank token,
-        // so we use an empty string to force AUTHENTICATION_FAILED.
-        // Under sa-token mode, any non-signed token produces AUTHENTICATION_FAILED.
+        // 使用无效 Token 触发鉴权错误。
+        // 在 stub 模式下，stub AuthenticationPort 接受任意非空 Token，
+        // 因此使用空串强制 AUTHENTICATION_FAILED。
+        // 在 sa-token 模式下，任何未签名的 Token 都会触发 AUTHENTICATION_FAILED。
         System.out.println(" Testing with invalid token...");
         GatewayApiClient badClient = new GatewayApiClient(
                 baseUrl, "");
@@ -394,7 +384,7 @@ public class NaturalLanguageQueryDemo {
             System.out.println(" [EXPECTED ERROR] " + e.getMessage());
         }
 
-        // Test connection failure with an unreachable URL
+        // 使用不可达 URL 测试连接失败
         System.out.println();
         System.out.println(" Testing with unreachable gateway...");
         GatewayApiClient unreachableClient = new GatewayApiClient(
@@ -412,9 +402,9 @@ public class NaturalLanguageQueryDemo {
     }
 
     /**
-     * Prints a section header for the demo output.
+     * 打印示例输出的分段标题。
      *
-     * @param title the section title
+     * @param title 分段标题
      */
     private static void printSection(String title) {
         System.out.println("-".repeat(70));

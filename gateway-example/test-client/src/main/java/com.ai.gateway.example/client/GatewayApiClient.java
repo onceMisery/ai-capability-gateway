@@ -2,8 +2,7 @@ package com.ai.gateway.example.client;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -15,36 +14,36 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Example client demonstrating how to interact with the AI Capability Gateway API.
+ * 演示如何与 AI 能力网关 API 交互的示例客户端。
  *
- * <p>This client covers:
+ * <p>该客户端覆盖以下能力：
  * <ul>
- * <li>Natural language queries</li>
- * <li>Clarification session continuation</li>
- * <li>Write operation prepare/confirm</li>
- * <li>Admin operations: import, validate, approve, publish</li>
+ * <li>自然语言查询</li>
+ * <li>澄清会话续接</li>
+ * <li>写操作的 prepare/confirm</li>
+ * <li>管理面操作：导入、校验、审批、发布</li>
  * </ul>
  *
- * <p>Usage example:
+ * <p>使用示例：
  * <pre>{@code
  * GatewayApiClient client = new GatewayApiClient("http://localhost:8080", "my-jwt-token");
  *
- * // Natural language query
+ * // 自然语言查询
  * var result = client.naturalLanguageQuery("查询订单 SO202607210001", "zh-CN");
  * System.out.println(result);
  *
- * // Admin: import manifest
+ * // 管理面：导入清单
  * client.importManifest(manifestYaml);
  * }</pre>
  *
- * <p>This client uses only JDK {@link HttpClient} and Jackson
- * for JSON processing. No Spring or other framework dependencies are required.</p>
+ * <p>该客户端仅使用 JDK {@link HttpClient} 与 Jackson 处理 JSON，无需 Spring
+ * 或其他框架依赖。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public class GatewayApiClient {
-
-    private static final Logger log = LoggerFactory.getLogger(GatewayApiClient.class);
 
     private static final String CONTENT_TYPE_JSON = "application/json";
     private static final Duration DEFAULT_TIMEOUT = Duration.ofSeconds(30);
@@ -55,11 +54,11 @@ public class GatewayApiClient {
     private final ObjectMapper objectMapper;
 
     /**
-     * Constructs a new GatewayApiClient.
+     * 构造一个新的 GatewayApiClient。
      *
-     * @param baseUrl the gateway base URL (e.g., "http://localhost:8080")
-     * @param authToken the JWT or SSO bearer token for authentication
-     * @throws NullPointerException if baseUrl or authToken is null
+     * @param baseUrl 网关基础 URL（如 "http://localhost:8080"）
+     * @param authToken 用于鉴权的 JWT 或 SSO Bearer Token
+     * @throws NullPointerException 当 baseUrl 或 authToken 为 null 时
      */
     public GatewayApiClient(String baseUrl, String authToken) {
         this.baseUrl = Objects.requireNonNull(baseUrl, "baseUrl must not be null");
@@ -75,23 +74,23 @@ public class GatewayApiClient {
     // ========================================================================
 
     /**
-     * Sends a natural-language query to the gateway.
+     * 向网关发送自然语言查询。
      *
-     * <p>Endpoint: {@code POST /api/v1/natural-language/queries}</p>
+     * <p>接口：{@code POST /api/v1/natural-language/queries}</p>
      *
-     * <p>The response status field indicates the outcome:</p>
+     * <p>响应状态字段指示结果：</p>
      * <ul>
-     * <li>{@code COMPLETED} — query executed successfully, data is in "data" field.</li>
-     * <li>{@code CLARIFICATION_REQUIRED} — additional input needed, use
-     * {@link #continueClarification(String, String)} with the returned interactionId.</li>
-     * <li>{@code NO_MATCH} — no capability matched the query.</li>
-     * <li>{@code ERROR} — an error occurred, check "errorCode" and "message".</li>
+     * <li>{@code COMPLETED} — 查询执行成功，数据位于 "data" 字段。</li>
+     * <li>{@code CLARIFICATION_REQUIRED} — 需要补充输入，使用返回的 interactionId 调用
+     * {@link #continueClarification(String, String)}。</li>
+     * <li>{@code NO_MATCH} — 无能力匹配该查询。</li>
+     * <li>{@code ERROR} — 发生错误，查看 "errorCode" 与 "message"。</li>
      * </ul>
      *
-     * @param text the natural-language query text (e.g., "查询订单 SO202607210001")
-     * @param locale the request locale (e.g., "zh-CN")
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param text 自然语言查询文本（如 "查询订单 SO202607210001"）
+     * @param locale 请求语言区域（如 "zh-CN"）
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> naturalLanguageQuery(String text, String locale) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -104,28 +103,25 @@ public class GatewayApiClient {
     }
 
     /**
-     * Continues a clarification session with additional user input.
+     * 使用用户补充输入续接澄清会话。
      *
-     * <p>Endpoint: {@code POST /api/v1/natural-language/interactions/{interactionId}/messages}</p>
+     * <p>接口：{@code POST /api/v1/natural-language/interactions/{interactionId}/messages}</p>
      *
-     * <p>When a query returns {@code CLARIFICATION_REQUIRED}, the response includes
-     * an {@code interactionId}. Use this method to provide the missing information.</p>
+     * <p>当查询返回 {@code CLARIFICATION_REQUIRED} 时，响应会包含
+     * {@code interactionId}。使用本方法提供缺失信息。</p>
      *
-     * <p>Important constraints:</p>
+     * <p>重要约束：</p>
      * <ul>
-     * <li>Subsequent answers may only supplement missing information or
-     * disambiguate within the original candidate set.</li>
-     * <li>If the user's reply triggers a NO_MATCH or selects an alias outside
-     * the original candidate set, the interactionId is invalidated and a
-     * full routing pipeline restart is required.</li>
-     * <li>Principal change, session expiry, capability suspension, or policy
-     * change also forces a fresh start.</li>
+     * <li>后续回答只能补充缺失信息，或在原候选集内消歧。</li>
+     * <li>若用户回复触发 NO_MATCH，或选择了原候选集之外的别名，
+     * 该 interactionId 将失效，需重新启动完整路由流程。</li>
+     * <li>Principal 变更、会话过期、能力下线或策略变更也会强制重新开始。</li>
      * </ul>
      *
-     * @param interactionId the clarification interaction ID from a previous response
-     * @param text the user's additional input text
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param interactionId 来自之前响应的澄清交互 ID
+     * @param text 用户的补充输入文本
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> continueClarification(String interactionId, String text) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -140,25 +136,24 @@ public class GatewayApiClient {
     // ========================================================================
 
     /**
-     * Prepares a write operation for confirmation.
+     * 准备一次写操作以供确认。
      *
-     * <p>Endpoint: {@code POST /api/v1/natural-language/actions:prepare}</p>
+     * <p>接口：{@code POST /api/v1/natural-language/actions:prepare}</p>
      *
-     * <p>The Prepare phase performs: parameter binding, authorization check,
-     * and persists an immutable operation record. A short-lived confirmation
-     * token is issued for the Confirm phase.</p>
+     * <p>Prepare 阶段执行：参数绑定、鉴权检查，并持久化一条不可变操作记录。
+     * 同时为 Confirm 阶段签发一个短时效的确认令牌。</p>
      *
-     * <p>The response includes:</p>
+     * <p>响应包含：</p>
      * <ul>
-     * <li>{@code operationId} — the unique operation identifier.</li>
-     * <li>{@code confirmationToken} — the token required for the Confirm phase.</li>
-     * <li>{@code summary} — a human-readable summary of the operation.</li>
-     * <li>{@code expiresAt} — when the confirmation token expires.</li>
+     * <li>{@code operationId} — 唯一的操作标识。</li>
+     * <li>{@code confirmationToken} — Confirm 阶段所需的令牌。</li>
+     * <li>{@code summary} — 人类可读的操作摘要。</li>
+     * <li>{@code expiresAt} — 确认令牌的过期时间。</li>
      * </ul>
      *
-     * @param text the natural-language write request (e.g., "取消订单 SO202607210001")
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param text 自然语言写请求（如 "取消订单 SO202607210001"）
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> prepareAction(String text) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -170,18 +165,17 @@ public class GatewayApiClient {
     }
 
     /**
-     * Confirms and executes a prepared write operation.
+     * 确认并执行一个已准备的写操作。
      *
-     * <p>Endpoint: {@code POST /api/v1/operations/{operationId}:confirm}</p>
+     * <p>接口：{@code POST /api/v1/operations/{operationId}:confirm}</p>
      *
-     * <p>The Confirm phase atomically claims execution using the confirmation
-     * token and invokes the Provider. The response includes the final operation
-     * state (SUCCEEDED, FAILED, UNKNOWN, etc.).</p>
+     * <p>Confirm 阶段使用确认令牌原子地认领执行权并调用 Provider。响应包含最终的操作
+     * 状态（SUCCEEDED、FAILED、UNKNOWN 等）。</p>
      *
-     * @param operationId the operation ID from the Prepare phase
-     * @param confirmToken the confirmation token from the Prepare phase
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param operationId 来自 Prepare 阶段的操作 ID
+     * @param confirmToken 来自 Prepare 阶段的确认令牌
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> confirmOperation(String operationId, String confirmToken) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -191,12 +185,11 @@ public class GatewayApiClient {
     }
 
     /**
-     * Queries the current status of a write operation.
+     * 查询写操作的当前状态。
      *
-     * <p>Endpoint: {@code GET /api/v1/operations/{operationId}}</p>
+     * <p>接口：{@code GET /api/v1/operations/{operationId}}</p>
      *
-     * <p>The response includes the operation state, which follows the state
-     * machine defined in :</p>
+     * <p>响应包含操作状态，遵循如下状态机：</p>
      * <pre>
      * PREPARED -> EXECUTING -> SUCCEEDED
      * | |----> FAILED
@@ -205,9 +198,9 @@ public class GatewayApiClient {
      * +-----------------> CANCELLED
      * </pre>
      *
-     * @param operationId the operation identifier
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param operationId 操作标识
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> getOperationStatus(String operationId) {
         return get("/api/v1/operations/" + operationId);
@@ -218,24 +211,21 @@ public class GatewayApiClient {
     // ========================================================================
 
     /**
-     * Imports a Capability Manifest through the 10-step validation pipeline
+     * 通过 10 步校验流水线导入能力清单（Capability Manifest）。
      *
-     * <p>Endpoint: {@code POST /admin/v1/manifests:import}</p>
+     * <p>接口：{@code POST /admin/v1/manifests:import}</p>
      *
-     * <p>The manifest is validated against the versioned JSON Schema and the
-     * 10-step pipeline including: Schema validation, ID/version format check,
-     * input Schema security constraints, parameter binding consistency,
-     * serialization whitelist, output contract validation, and more.</p>
+     * <p>清单将依据带版本的 JSON Schema 与 10 步流水线进行校验，包括：Schema 校验、
+     * ID/版本格式检查、入参 Schema 安全约束、参数绑定一致性、序列化白名单、
+     * 出参契约校验等。</p>
      *
-     * @param manifestYaml the Capability Manifest in YAML format
-     * @return the parsed JSON response as a Map containing status and validationReport
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param manifestYaml YAML 格式的能力清单
+     * @return 解析后的 JSON 响应（Map 形式），含 status 与 validationReport
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> importManifest(String manifestYaml) {
-        // The admin import endpoint accepts the manifest as a JSON body.
-        // In a real scenario, the YAML would be converted to JSON first,
-        // or the endpoint would accept YAML content-type.
-        // Here we send the raw YAML string as the body with a YAML content type.
+        // 管理面导入接口以 JSON 体接收清单。真实场景下 YAML 会先转为 JSON，
+        // 或接口直接接受 YAML content-type。此处直接以 YAML content-type 发送原始 YAML 字符串。
         try {
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl + "/admin/v1/manifests:import"))
@@ -261,14 +251,14 @@ public class GatewayApiClient {
     }
 
     /**
-     * Re-validates an existing manifest version.
+     * 重新校验一个已存在的清单版本。
      *
-     * <p>Endpoint: {@code POST /admin/v1/capabilities/{id}/versions/{version}:validate}</p>
+     * <p>接口：{@code POST /admin/v1/capabilities/{id}/versions/{version}:validate}</p>
      *
-     * @param id the capability identifier (e.g., "order.detail.query")
-     * @param version the semantic version (e.g., "1.0.0")
-     * @return the parsed JSON response as a Map containing validation status
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param id 能力标识（如 "order.detail.query"）
+     * @param version 语义化版本（如 "1.0.0"）
+     * @return 解析后的 JSON 响应（Map 形式），含校验状态
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> validateCapability(String id, String version) {
         return post("/admin/v1/capabilities/" + id + "/versions/" + version + ":validate",
@@ -276,17 +266,16 @@ public class GatewayApiClient {
     }
 
     /**
-     * Approves a validated manifest.
+     * 审批一个已校验的清单。
      *
-     * <p>Endpoint: {@code POST /admin/v1/capabilities/{id}/versions/{version}:approve}</p>
+     * <p>接口：{@code POST /admin/v1/capabilities/{id}/versions/{version}:approve}</p>
      *
-     * <p>Approval transitions the manifest from VALIDATED to APPROVED state,
-     * making it eligible for publication.</p>
+     * <p>审批将清单从 VALIDATED 状态迁移至 APPROVED，使其具备发布资格。</p>
      *
-     * @param id the capability identifier
-     * @param version the semantic version
-     * @return the parsed JSON response as a Map containing approval status
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param id 能力标识
+     * @param version 语义化版本
+     * @return 解析后的 JSON 响应（Map 形式），含审批状态
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> approveCapability(String id, String version) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -297,17 +286,16 @@ public class GatewayApiClient {
     }
 
     /**
-     * Publishes a new catalog snapshot to the specified environment
+     * 向指定环境发布新的目录快照。
      *
-     * <p>Endpoint: {@code POST /admin/v1/releases:publish}</p>
+     * <p>接口：{@code POST /admin/v1/releases:publish}</p>
      *
-     * <p>Publication generates an immutable snapshot containing all APPROVED
-     * capabilities. The snapshot version is monotonically increasing and
-     * the snapshot content cannot be modified after creation.</p>
+     * <p>发布会生成一个包含全部 APPROVED 能力的不可变快照。快照版本单调递增，
+     * 创建后其内容不可再修改。</p>
      *
-     * @param environment the target environment (e.g., "production", "staging")
-     * @return the parsed JSON response as a Map containing the new snapshotVersion
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param environment 目标环境（如 "production"、"staging"）
+     * @return 解析后的 JSON 响应（Map 形式），含新的 snapshotVersion
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> publishRelease(String environment) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -317,18 +305,17 @@ public class GatewayApiClient {
     }
 
     /**
-     * Suspends a capability immediately.
+     * 立即下线一个能力。
      *
-     * <p>Endpoint: {@code POST /admin/v1/capabilities/{id}:suspend}</p>
+     * <p>接口：{@code POST /admin/v1/capabilities/{id}:suspend}</p>
      *
-     * <p>Suspension is an emergency operation that immediately removes the
-     * capability from the active catalog snapshot. A new snapshot version
-     * is generated without the suspended capability.</p>
+     * <p>下线是一项应急操作，会立即从活动目录快照中移除该能力，并生成一份不包含
+     * 该能力的新快照版本。</p>
      *
-     * @param id the capability identifier to suspend
-     * @param reason the suspension reason (for audit trail)
-     * @return the parsed JSON response as a Map containing suspension status
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param id 待下线能力的标识
+     * @param reason 下线原因（用于审计追溯）
+     * @return 解析后的 JSON 响应（Map 形式），含下线状态
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> suspendCapability(String id, String reason) {
         Map<String, Object> requestBody = new LinkedHashMap<>();
@@ -343,15 +330,14 @@ public class GatewayApiClient {
     // ========================================================================
 
     /**
-     * Checks the gateway health status.
+     * 检查网关健康状态。
      *
-     * <p>Endpoint: {@code GET /health/readiness}</p>
+     * <p>接口：{@code GET /health/readiness}</p>
      *
-     * <p>The readiness probe checks: database connectivity, active snapshot
-     * loaded, required secrets available, and adapter initialization.</p>
+     * <p>就绪探针检查：数据库连通性、活动快照已加载、所需密钥可用、适配器已初始化。</p>
      *
-     * @return the parsed JSON response as a Map containing health check results
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @return 解析后的 JSON 响应（Map 形式），含健康检查结果
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     public Map<String, Object> getHealth() {
         return get("/health/readiness");
@@ -362,12 +348,12 @@ public class GatewayApiClient {
     // ========================================================================
 
     /**
-     * Sends a POST request with a JSON body and returns the parsed response.
+     * 发送带 JSON 体的 POST 请求并返回解析后的响应。
      *
-     * @param path the API path (appended to baseUrl)
-     * @param requestBody the request body to serialize as JSON
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param path API 路径（拼接在 baseUrl 之后）
+     * @param requestBody 需序列化为 JSON 的请求体
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     private Map<String, Object> post(String path, Map<String, Object> requestBody) {
         try {
@@ -400,11 +386,11 @@ public class GatewayApiClient {
     }
 
     /**
-     * Sends a GET request and returns the parsed response.
+     * 发送 GET 请求并返回解析后的响应。
      *
-     * @param path the API path (appended to baseUrl)
-     * @return the parsed JSON response as a Map
-     * @throws GatewayApiException if the request fails or the response cannot be parsed
+     * @param path API 路径（拼接在 baseUrl 之后）
+     * @return 解析后的 JSON 响应（Map 形式）
+     * @throws GatewayApiException 当请求失败或响应无法解析时
      */
     private Map<String, Object> get(String path) {
         try {
@@ -434,15 +420,14 @@ public class GatewayApiClient {
     }
 
     /**
-     * Parses an HTTP response body as a JSON Map.
+     * 将 HTTP 响应体解析为 JSON Map。
      *
-     * <p>If the response body is empty or not valid JSON, a descriptive
-     * error map is returned instead of throwing an exception, allowing
-     * callers to inspect the HTTP status code.</p>
+     * <p>若响应体为空或不是合法 JSON，则返回一份描述性的错误 Map 而非抛异常，
+     * 以便调用方查看 HTTP 状态码。</p>
      *
-     * @param response the HTTP response
-     * @return the parsed response body as a Map
-     * @throws GatewayApiException if the response body cannot be parsed
+     * @param response HTTP 响应
+     * @return 解析后的响应体（Map 形式）
+     * @throws GatewayApiException 当响应体无法解析时
      */
     private Map<String, Object> parseResponse(HttpResponse<String> response) {
         String body = response.body();
@@ -466,11 +451,11 @@ public class GatewayApiClient {
     }
 
     /**
-     * Truncates a string to the specified maximum length for logging.
+     * 将字符串截断到指定最大长度，用于日志输出。
      *
-     * @param value the string to truncate
-     * @param maxLength the maximum length
-     * @return the truncated string with "..." suffix if truncated
+     * @param value 待截断的字符串
+     * @param maxLength 最大长度
+     * @return 截断后的字符串，若被截断则末尾追加 "..." 后缀
      */
     private static String truncate(String value, int maxLength) {
         if (value == null) {
@@ -483,18 +468,19 @@ public class GatewayApiClient {
     }
 
     /**
-     * Exception thrown when a gateway API call fails.
+     * 网关 API 调用失败时抛出的异常。
      *
-     * <p>This wraps transport errors, JSON parsing errors, and other
-     * failures with descriptive messages.</p>
+     * <p>该类将传输错误、JSON 解析错误及其他失败以描述性消息进行包装。</p>
+     *
+     * @author cmiracle@163.com
      */
     public static class GatewayApiException extends RuntimeException {
 
         /**
-         * Constructs a new GatewayApiException.
+         * 构造一个新的 GatewayApiException。
          *
-         * @param message the error message
-         * @param cause the underlying cause
+         * @param message 错误消息
+         * @param cause 底层原因
          */
         public GatewayApiException(String message, Throwable cause) {
             super(message, cause);
