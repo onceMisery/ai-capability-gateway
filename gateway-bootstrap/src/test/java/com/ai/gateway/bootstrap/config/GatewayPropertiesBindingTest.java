@@ -9,6 +9,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * GatewayPropertiesBindingTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class GatewayPropertiesBindingTest {
 
     @Test

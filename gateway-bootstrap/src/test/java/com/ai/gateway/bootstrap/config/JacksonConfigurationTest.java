@@ -6,6 +6,11 @@ import org.springframework.http.converter.json.Jackson2ObjectMapperBuilder;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * JacksonConfigurationTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class JacksonConfigurationTest {
 
     @Test

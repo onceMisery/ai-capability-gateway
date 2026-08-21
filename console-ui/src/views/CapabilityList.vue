@@ -77,6 +77,7 @@
                   <el-button v-if="auth.isAdmin && nextAction(row) === 'validate'" text type="primary" :loading="isBusy(row, 'validate')" @click="validate(row)">校验</el-button>
                   <el-button v-if="auth.isAdmin && nextAction(row) === 'approve'" text type="primary" :loading="isBusy(row, 'approve')" @click="approve(row)">审批</el-button>
                   <el-button v-if="auth.isAdmin && nextAction(row) === 'suspend'" text type="danger" :loading="isBusy(row, 'suspend')" @click="suspend(row)">停用</el-button>
+                  <el-button v-if="auth.isAdmin && nextAction(row) === 'resume'" text type="primary" :loading="isBusy(row, 'resume')" @click="resume(row)">启用</el-button>
                 </div>
               </template>
             </el-table-column>
@@ -135,6 +136,7 @@
           <el-button v-if="auth.isAdmin && selectedSummary && nextAction(selectedSummary) === 'validate'" type="primary" :loading="isBusy(selectedSummary, 'validate')" @click="validate(selectedSummary)">重新校验</el-button>
           <el-button v-if="auth.isAdmin && selectedSummary && nextAction(selectedSummary) === 'approve'" type="primary" :loading="isBusy(selectedSummary, 'approve')" @click="approve(selectedSummary)">审批通过</el-button>
           <el-button v-if="auth.isAdmin && selectedSummary && nextAction(selectedSummary) === 'suspend'" type="danger" :loading="isBusy(selectedSummary, 'suspend')" @click="suspend(selectedSummary)">停用能力</el-button>
+          <el-button v-if="auth.isAdmin && selectedSummary && nextAction(selectedSummary) === 'resume'" type="primary" :loading="isBusy(selectedSummary, 'resume')" @click="resume(selectedSummary)">启用能力</el-button>
         </div>
       </template>
     </el-drawer>
@@ -261,10 +263,11 @@ function lifecycleType(value: string): 'primary' | 'success' | 'warning' | 'dang
 }
 function riskLabel(value: string) { return value === 'READ_ONLY' ? '只读' : ({ LOW: '低风险', MEDIUM: '中风险', HIGH: '高风险', CRITICAL: '严重' } as Record<string, string>)[value] || value }
 function riskType(value: RiskLevel): 'success' | 'warning' | 'danger' | 'info' { return value === 'READ_ONLY' || value === 'LOW' ? 'success' : value === 'MEDIUM' ? 'warning' : value === 'HIGH' || value === 'CRITICAL' ? 'danger' : 'info' }
-function nextAction(row: CapabilitySummary): 'validate' | 'approve' | 'suspend' | undefined {
+function nextAction(row: CapabilitySummary): 'validate' | 'approve' | 'suspend' | 'resume' | undefined {
   if (row.lifecycle === 'DRAFT') return 'validate'
   if (row.lifecycle === 'VALIDATED') return 'approve'
   if (row.lifecycle === 'PUBLISHED') return 'suspend'
+  if (row.lifecycle === 'SUSPENDED') return 'resume'
   return undefined
 }
 function operationKey(row: CapabilitySummary, action: string) { return `${row.capabilityId}@${row.version}:${action}` }
@@ -321,6 +324,29 @@ async function suspend(row: CapabilitySummary) {
   finally { setBusy(row, 'suspend', false) }
 }
 
+async function resume(row: CapabilitySummary) {
+  try {
+    await ElMessageBox.confirm(
+      `确认启用 ${row.displayName} v${row.version}？启用后会重新校验，仍需审批并发布后才会进入活动目录。`,
+      '确认启用',
+      { type: 'warning', confirmButtonText: '确认启用', cancelButtonText: '取消' }
+    )
+  } catch { return }
+  setBusy(row, 'resume', true)
+  try {
+    await gatewayApi.resumeCapability(row.capabilityId, row.version)
+    ElMessage.success('能力已启用，请继续审批并发布')
+    await loadData()
+    if (selectedSummary.value?.capabilityId === row.capabilityId
+      && selectedSummary.value.version === row.version) {
+      selectedSummary.value = capabilities.value.find((item) =>
+        item.capabilityId === row.capabilityId && item.version === row.version
+      )
+    }
+  } catch (error) { ElMessage.error(apiErrorMessage(error)) }
+  finally { setBusy(row, 'resume', false) }
+}
+
 function openImport() {
   importText.value = ''
   importParseError.value = ''
@@ -337,6 +363,14 @@ async function submitImport() {
     manifest = parsed as CapabilityManifest
   } catch (error) {
     importParseError.value = `JSON 格式无效：${error instanceof Error ? error.message : '无法解析'}`
+    return
+  }
+  const existing = capabilities.value.filter((item) => item.capabilityId === manifest.metadata.id)
+  const blocked = existing.find((item) =>
+    !['SUSPENDED', 'RETIRED', 'REJECTED'].includes(item.lifecycle)
+  )
+  if (blocked) {
+    importParseError.value = `能力 ${manifest.metadata.id} 已存在${lifecycleLabel(blocked.lifecycle)}版本，请先停用后再导入新版本`
     return
   }
   importLoading.value = true

@@ -9,6 +9,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * <p>请求/响应字节上限继续由 {@link GatewayProperties} 维护；本类只维护
  * 原先散落在 YAML 和领域服务中的结构限制，避免出现第二套默认值。</p>
+ * @author cmiracle@163.com
  */
 @Getter
 @Setter

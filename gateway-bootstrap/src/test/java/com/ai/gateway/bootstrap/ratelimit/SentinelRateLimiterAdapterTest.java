@@ -12,11 +12,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Unit tests for {@link SentinelRateLimiterAdapter}.
+ * {@link SentinelRateLimiterAdapter} 的单元测试。
  *
- * <p>Verifies the programmatic Sentinel integration: with no rule a resource
- * is acquired; with a zero-threshold flow rule the acquisition is blocked
- * (Fail Fast).</p>
+ * <p>验证编程式 Sentinel 集成：无规则时可获取资源；配置零阈值流控规则时
+ * 获取被阻断（快速失败）。</p>
+ *
+ * @author cmiracle@163.com
  */
 class SentinelRateLimiterAdapterTest {
 

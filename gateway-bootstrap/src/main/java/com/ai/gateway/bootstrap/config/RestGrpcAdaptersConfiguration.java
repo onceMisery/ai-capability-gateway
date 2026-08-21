@@ -19,6 +19,11 @@ import org.springframework.context.annotation.Configuration;
 import java.net.URI;
 import java.util.Map;
 
+/**
+ * RestGrpcAdaptersConfiguration 类。
+ *
+ * @author cmiracle@163.com
+ */
 @Configuration
 public class RestGrpcAdaptersConfiguration {
 

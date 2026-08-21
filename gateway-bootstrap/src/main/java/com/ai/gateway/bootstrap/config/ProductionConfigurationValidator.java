@@ -11,8 +11,10 @@ import java.util.Locale;
 import java.util.Set;
 
 /**
- * Fails application startup when the deployment environment is ambiguous or
- * a production deployment still relies on development defaults.
+ * 当部署环境不明确，或生产部署仍沿用开发期默认配置时，
+ * 使应用启动失败。
+ *
+ * @author cmiracle@163.com
  */
 @Component
 public final class ProductionConfigurationValidator implements InitializingBean {

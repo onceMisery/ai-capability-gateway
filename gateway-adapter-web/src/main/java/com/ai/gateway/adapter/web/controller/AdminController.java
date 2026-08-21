@@ -2,6 +2,7 @@ package com.ai.gateway.adapter.web.controller;
 
 import com.ai.gateway.adapter.web.manifest.ManifestDocumentMapper;
 import com.ai.gateway.application.controlplane.CapabilitySuspendUseCase;
+import com.ai.gateway.application.controlplane.CapabilityResumeUseCase;
 import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
 import com.ai.gateway.application.controlplane.ManifestApprovalUseCase;
@@ -52,6 +53,8 @@ import java.util.Map;
  * <li>{@code POST /admin/v1/releases:publish} — 发布新快照。</li>
  * <li>{@code POST /admin/v1/releases:rollback} — 回滚至历史快照。</li>
  * <li>{@code POST /admin/v1/capabilities/{id}:suspend} — 紧急下线能力。</li>
+ * <li>{@code POST /admin/v1/capabilities/{id}/versions/{version}:resume}
+ * — 重新校验已停用能力。</li>
  * <li>{@code GET /admin/v1/releases/{snapshotVersion}} — 按版本获取快照。</li>
  * <li>{@code GET /admin/v1/audits} — 查询审计事件。</li>
  * </ul>
@@ -70,6 +73,7 @@ public class AdminController {
     private final CatalogPublishUseCase catalogPublishUseCase;
     private final CatalogRollbackUseCase catalogRollbackUseCase;
     private final CapabilitySuspendUseCase capabilitySuspendUseCase;
+    private final CapabilityResumeUseCase capabilityResumeUseCase;
     private final ManifestValidationUseCase manifestValidationUseCase;
     private final CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase;
     private final AuthenticationPort authenticationPort;
@@ -313,6 +317,35 @@ public class AdminController {
             body.put("message", sanitizeErrorMessage(result.error()));
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(body);
         }
+    }
+
+    /**
+     * 重新启用已停用能力。
+     *
+     * <p>该操作只恢复到 {@code VALIDATED}，随后仍需审批并发布新快照。</p>
+     */
+    @PostMapping("/capabilities/{id}/versions/{version}:resume")
+    public ResponseEntity<Map<String, Object>> resume(
+            @PathVariable String id,
+            @PathVariable String version) {
+
+        SecurityHelper.requireAdmin(authenticationPort, authorizationPort, AdminAction.APPROVE);
+        log.info("Capability resume requested: id={}, version={}", id, version);
+
+        CapabilityResumeUseCase.ResumeResult result =
+                capabilityResumeUseCase.resume(id, version);
+        Map<String, Object> body = new LinkedHashMap<>();
+        if (result.success()) {
+            body.put("status", result.status().name());
+            body.put("capabilityId", id);
+            body.put("capabilityVersion", version);
+            return ResponseEntity.ok(body);
+        }
+        body.put("status", result.status().name());
+        body.put("message", sanitizeErrorMessage(result.error()));
+        HttpStatus status = result.status() == CapabilityResumeUseCase.Status.NOT_FOUND
+                ? HttpStatus.NOT_FOUND : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(body);
     }
 
     /**

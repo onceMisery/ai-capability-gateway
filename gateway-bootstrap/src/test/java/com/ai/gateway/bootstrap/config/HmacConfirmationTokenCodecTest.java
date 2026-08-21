@@ -8,6 +8,11 @@ import java.time.Instant;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * HmacConfirmationTokenCodecTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class HmacConfirmationTokenCodecTest {
 
     private final HmacConfirmationTokenCodec codec = new HmacConfirmationTokenCodec(properties(

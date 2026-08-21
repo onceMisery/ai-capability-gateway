@@ -31,6 +31,7 @@ import com.ai.gateway.application.console.ConfigQueryUseCase;
 import com.ai.gateway.application.console.ConsoleAuthUseCase;
 import com.ai.gateway.application.console.StatsQueryUseCase;
 import com.ai.gateway.application.controlplane.CapabilitySuspendUseCase;
+import com.ai.gateway.application.controlplane.CapabilityResumeUseCase;
 import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
 import com.ai.gateway.application.controlplane.ManifestApprovalUseCase;
@@ -124,30 +125,24 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * Manual bean assembly for the AI Capability Gateway.
+ * AI 能力网关的手动 Bean 装配。
  *
- * <p>This is the <b>single place</b> where adapter implementations are wired
- * to application use cases. Adapter beans are injected into use case
- * constructors by Spring's dependency resolution — no field injection or
- * {@code @Autowired} is used.</p>
+ * <p>这是适配器实现与应用用例装配的<b>唯一场所</b>。适配器 Bean 由 Spring
+ * 的依赖解析注入到用例构造函数中——不使用字段注入，也不使用 {@code @Autowired}。</p>
  *
- * <p>Port interfaces that have dedicated adapter implementations (e.g.,
- * {@link CatalogPort}, {@link ManifestRepository}) are brought in via
- * {@code @Import} on the main application class and resolved here as
- * constructor parameters.</p>
+ * <p>拥有专属适配器实现的端口接口（如 {@link CatalogPort}、{@link ManifestRepository}）
+ * 通过主应用类上的 {@code @Import} 引入，并在此作为构造函数参数被解析。</p>
  *
- * <p>Port interfaces without dedicated adapters (e.g.,
- * {@link AuthenticationPort}, {@link EncryptionPort}) receive inline stub
- * implementations in this class. These stubs follow the spec's initial-release
- * degradation rules: authorization is optional, encryption uses
- * Base64 (development only), etc.</p>
+ * <p>没有专属适配器的端口接口（如 {@link AuthenticationPort}、{@link EncryptionPort}）
+ * 在本类中接收内联桩实现。这些桩遵循规范的初始发布降级规则：
+ * 授权为可选项、加密使用 Base64（仅开发）等。</p>
  *
- * <p><b>ArgumentBinder</b> and <b>ResultNormalizer</b> are per-request domain
- * services that require runtime context (Principal, SystemContext,
- * CapabilityManifest, OutputContract). They are created by the use cases
- * on each request and do not have singleton {@code @Bean} definitions.</p>
+ * <p><b>ArgumentBinder</b> 与 <b>ResultNormalizer</b> 是按需请求的领域服务，
+ * 需要运行时上下文（Principal、SystemContext、CapabilityManifest、OutputContract）。
+ * 它们由用例在每次请求时创建，没有单例 {@code @Bean} 定义。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 public class BeanConfig {
@@ -175,11 +170,11 @@ public class BeanConfig {
     private static final Logger log = LoggerFactory.getLogger(BeanConfig.class);
 
     // ======================================================================
-    // Domain Services
+    // 领域服务
     // ======================================================================
 
     /**
-     * Alias generator for stable parameter-name resolution.
+     * 用于稳定参数名解析的别名生成器。
      */
     @Bean
     public AliasGenerator aliasGenerator() {
@@ -187,7 +182,7 @@ public class BeanConfig {
     }
 
     /**
-     * Redaction service for sensitive-data masking.
+     * 用于敏感数据脱敏的编辑服务。
      */
     @Bean
     public RedactionService redactionService() {
@@ -195,7 +190,7 @@ public class BeanConfig {
     }
 
     /**
-     * Manifest validator performing the 10-step validation pipeline
+     * 执行 10 步校验流水线的清单校验器。
      */
     @Bean
     public ManifestValidator manifestValidator(
@@ -213,7 +208,7 @@ public class BeanConfig {
     }
 
     /**
-     * Lifecycle state machine for manifest transitions.
+     * 用于清单状态流转的生命周期状态机。
      */
     @Bean
     public LifecycleStateMachine lifecycleStateMachine() {
@@ -221,7 +216,7 @@ public class BeanConfig {
     }
 
     /**
-     * Operation state machine for two-phase write operations.
+     * 用于两阶段写操作的操作状态机。
      */
     @Bean
     public OperationStateMachine operationStateMachine() {
@@ -229,7 +224,7 @@ public class BeanConfig {
     }
 
     /**
-     * Text normalizer for query pre-processing.
+     * 用于查询预处理的文本归一化器。
      */
     @Bean
     public TextNormalizer textNormalizer() {
@@ -237,7 +232,7 @@ public class BeanConfig {
     }
 
     /**
-     * Threshold evaluator for LLM decision confidence checks.
+     * 用于 LLM 决策置信度检查的阈值评估器。
      */
     @Bean
     public ThresholdEvaluator thresholdEvaluator() {
@@ -245,7 +240,7 @@ public class BeanConfig {
     }
 
     /**
-     * Deadline budget manager for end-to-end timeout enforcement
+     * 用于端到端超时控制的截止时间预算管理器。
      */
     @Bean
     public DeadlineBudgetManager deadlineBudgetManager() {
@@ -253,8 +248,7 @@ public class BeanConfig {
     }
 
     /**
-     * Loads the latest catalog snapshot on application startup so that
-     * the in-memory catalog is immediately available for routing.
+     * 在应用启动时加载最新目录快照，使内存目录立即可用于路由。
      */
     @Bean
     public org.springframework.boot.ApplicationRunner catalogStartupLoader(
@@ -263,7 +257,7 @@ public class BeanConfig {
             GatewayProperties gatewayProperties,
             @org.springframework.beans.factory.annotation.Value("${dubbo.registry.address:nacos://nacos.dev.com:8848}") String dubboRegistryAddress) {
         return args -> {
-            // Register the Dubbo registry address for manifest registryRef resolution
+            // 为清单 registryRef 解析注册 Dubbo 注册中心地址
             dubboReferenceManager.registerRegistryAddress("nacos-main", dubboRegistryAddress);
 
             log.info("Loading catalog snapshot on startup...");
@@ -278,18 +272,17 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Stub Port Implementations (Ports without dedicated adapters)
+    // 桩端口实现（无专属适配器的端口）
     // ======================================================================
     //
-    // AuthenticationPort/AuthorizationPort stubs live in StubAuthConfiguration
-    // (conditional on gateway.auth.provider). EncryptionPort/CompatibilityTestPort
-    // stubs live in StubAdaptersConfiguration with a production fail-fast guard.
+    // AuthenticationPort/AuthorizationPort 桩位于 StubAuthConfiguration
+    // （条件为 gateway.auth.provider）。EncryptionPort/CompatibilityTestPort
+    // 桩位于 StubAdaptersConfiguration，并带生产快速失败保护。
 
     /**
-     * {@link TypeConverterRegistry} implementing the three built-in
-     * controlled type converters.
+     * 实现三种内置受控类型转换器的 {@link TypeConverterRegistry}。
      *
-     * <p>The closed whitelist contains:</p>
+     * <p>封闭的白名单包含：</p>
      * <ul>
      * <li>{@link ConverterType#ISO_DATE_TO_EPOCH_MILLIS}</li>
      * <li>{@link ConverterType#ENUM_UPPERCASE}</li>
@@ -331,17 +324,16 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // LLM HTTP Adapter
+    // LLM HTTP 适配器
     // ======================================================================
 
     /**
-     * Creates the {@link HttpLlmRouterAdapter} as a {@link LlmRouterPort}
-     * bean with configuration values from {@code application.yml}.
+     * 基于 {@code application.yml} 中的配置值创建 {@link HttpLlmRouterAdapter}
+     * 作为 {@link LlmRouterPort} Bean。
      *
-     * <p>The adapter cannot be {@code @Import}-ed because its constructor
-     * requires non-bean parameters (endpoint URL, API key, model name,
-     * temperature, max tokens) that are resolved from configuration
-     * properties, not from Spring autowiring.</p>
+     * <p>该适配器无法使用 {@code @Import} 引入，因为其构造函数需要非 Bean
+     * 参数（端点 URL、API Key、模型名、温度、最大 Token 数），这些参数来自
+     * 配置属性而非 Spring 自动装配。</p>
      */
     @Bean
     public LlmRouterPort llmRouterPort(
@@ -373,7 +365,7 @@ public class BeanConfig {
         return new MicrometerTelemetryAdapter(observationRegistry, meterRegistry);
     }
 
-    /** Primary runtime adapter; the concrete Dubbo bean remains available for diagnostics. */
+    /** 主运行期适配器；具体的 Dubbo Bean 仍保留以供诊断使用。 */
     @Bean
     @Primary
     public InvocationAdapter resilientInvocationAdapter(
@@ -392,12 +384,11 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Catalog Managers
+    // 目录管理器
     // ======================================================================
 
     /**
-     * In-memory catalog manager that caches the active snapshot and
-     * coordinates index rebuilding.
+     * 缓存活动快照并协调索引重建的内存目录管理器。
      */
     @Bean
     public InMemoryCatalogManager inMemoryCatalogManager(
@@ -418,7 +409,7 @@ public class BeanConfig {
     }
 
     /**
-     * Lucene-based candidate retriever using BM25 scoring.
+     * 基于 Lucene、使用 BM25 评分的候选检索器。
      */
     @Bean
     public LuceneCandidateRetriever luceneCandidateRetriever() {
@@ -426,9 +417,8 @@ public class BeanConfig {
     }
 
     /**
-     * Isolates database snapshot reads and Lucene/View construction from
-     * request and Redis listener threads. A single worker also prevents
-     * overlapping generations from doubling the catalog build footprint.
+     * 将数据库快照读取与 Lucene/视图构建从请求线程和 Redis 监听线程中隔离。
+     * 单一工作线程还可避免重叠生成导致目录构建开销翻倍。
      */
     @Bean(name = "catalogRefreshExecutor", destroyMethod = "shutdown")
     public ExecutorService catalogRefreshExecutor() {
@@ -440,11 +430,11 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Resilience Managers (Section 18)
+    // 韧性管理器（第 18 节）
     // ======================================================================
 
     /**
-     * Rate limiter manager for bounded resource enforcement.
+     * 用于有限资源约束的限流管理器。
      */
     @Bean
     public RateLimiterManager rateLimiterManager(RateLimiterPort rateLimiterPort) {
@@ -452,7 +442,7 @@ public class BeanConfig {
     }
 
     /**
-     * Circuit breaker manager for Provider/Capability fault isolation
+     * 用于 Provider/能力故障隔离的熔断器管理器。
      */
     @Bean
     public CircuitBreakerManager circuitBreakerManager() {
@@ -460,7 +450,7 @@ public class BeanConfig {
     }
 
     /**
-     * Bulkhead manager for per-Provider/Capability concurrency isolation
+     * 用于按 Provider/能力进行并发隔离的舱壁管理器。
      */
     @Bean
     public BulkheadManager bulkheadManager() {
@@ -468,7 +458,7 @@ public class BeanConfig {
     }
 
     /**
-     * Fault handler for determining fault responses.
+     * 用于判定故障响应的故障处理器。
      */
     @Bean
     public FaultHandler faultHandler() {
@@ -476,11 +466,11 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Use Cases — Control Plane (Section 8)
+    // 用例 — 控制面（第 8 节）
     // ======================================================================
 
     /**
-     * Manifest import use case — 10-step validation pipeline.
+     * 清单导入用例 — 10 步校验流水线。
      */
     @Bean
     public ManifestImportUseCase manifestImportUseCase(
@@ -503,12 +493,21 @@ public class BeanConfig {
     }
 
     @Bean
+    public CapabilityResumeUseCase capabilityResumeUseCase(
+            ManifestRepository manifestRepository,
+            ManifestValidationUseCase manifestValidationUseCase,
+            LifecycleStateMachine lifecycleStateMachine) {
+        return new CapabilityResumeUseCase(
+                manifestRepository, manifestValidationUseCase, lifecycleStateMachine);
+    }
+
+    @Bean
     public CatalogSnapshotQueryUseCase catalogSnapshotQueryUseCase(CatalogPort catalogPort) {
         return new CatalogSnapshotQueryUseCase(catalogPort);
     }
 
     /**
-     * Manifest approval use case — lifecycle state transition
+     * 清单审批用例 — 生命周期状态流转。
      */
     @Bean
     public ManifestApprovalUseCase manifestApprovalUseCase(
@@ -520,7 +519,7 @@ public class BeanConfig {
     }
 
     /**
-     * Catalog publish use case — single-transaction publication
+     * 目录发布用例 — 单事务发布。
      */
     @Bean
     public CatalogPublishUseCase catalogPublishUseCase(
@@ -540,7 +539,7 @@ public class BeanConfig {
     }
 
     /**
-     * Catalog rollback use case — historical snapshot copy.
+     * 目录回滚用例 — 历史快照复制。
      */
     @Bean
     public CatalogRollbackUseCase catalogRollbackUseCase(
@@ -554,7 +553,7 @@ public class BeanConfig {
     }
 
     /**
-     * Capability suspend use case — emergency suspension.
+     * 能力停用用例 — 紧急停用。
      */
     @Bean
     public CapabilitySuspendUseCase capabilitySuspendUseCase(
@@ -569,11 +568,11 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Use Cases — Runtime Plane (Section 9)
+    // 用例 — 运行面（第 9 节）
     // ======================================================================
 
     /**
-     * Natural-language query use case — 11-step routing pipeline
+     * 自然语言查询用例 — 11 步路由流水线。
      */
     @Bean
     public NaturalLanguageQueryUseCase naturalLanguageQueryUseCase(
@@ -614,8 +613,7 @@ public class BeanConfig {
     }
 
     /**
-     * Deterministic execution use case — Provider invocation with
-     * result normalization (Section 11).
+     * 确定性执行用例 — 带结果归一化的 Provider 调用（第 11 节）。
      */
     @Bean
     public DeterministicExecutionUseCase deterministicExecutionUseCase(
@@ -638,7 +636,7 @@ public class BeanConfig {
                 payloadLimits);
     }
 
-    /** Structured tool invocation shares the same deterministic execution kernel as NL. */
+    /** 结构化工具调用与 NL 查询共享同一确定性执行内核。 */
     @Bean
     public StructuredInvocationUseCase structuredInvocationUseCase(
             AuthenticationPort authenticationPort,
@@ -656,7 +654,7 @@ public class BeanConfig {
                 payloadLimits);
     }
 
-    /** Agent-facing discovery keeps only a small authorized Top-K in context. */
+    /** 面向 Agent 的发现仅在上下文中保留少量已授权的 Top-K。 */
     @Bean
     public AgentToolCatalogUseCase agentToolCatalogUseCase(
             AuthenticationPort authenticationPort,
@@ -670,7 +668,7 @@ public class BeanConfig {
                 gatewayProperties.getEnvironment());
     }
 
-    /** Unified Agent read/prepare dispatcher. */
+    /** 统一的 Agent 读取/准备分发器。 */
     @Bean
     public AgentToolCallUseCase agentToolCallUseCase(
             AuthenticationPort authenticationPort,
@@ -917,7 +915,7 @@ public class BeanConfig {
     }
 
     /**
-     * Clarification use case — multi-turn parameter disambiguation
+     * 澄清用例 — 多轮参数消歧。
      */
     @Bean
     public ClarificationUseCase clarificationUseCase(
@@ -934,11 +932,11 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Use Cases — Write Operation (Section 13)
+    // 用例 — 写操作（第 13 节）
     // ======================================================================
 
     /**
-     * Operation prepare use case — two-phase write Prepare.
+     * 操作准备用例 — 两阶段写之 Prepare。
      */
     @Bean
     public OperationPrepareUseCase operationPrepareUseCase(
@@ -970,7 +968,7 @@ public class BeanConfig {
     }
 
     /**
-     * Operation confirm use case — two-phase write Confirm.
+     * 操作确认用例 — 两阶段写之 Confirm。
      */
     @Bean
     public OperationConfirmUseCase operationConfirmUseCase(
@@ -996,7 +994,7 @@ public class BeanConfig {
     }
 
     /**
-     * Operation cancel use case — the sole owner of PREPARED -> CANCELLED.
+     * 操作取消用例 — PREPARED -> CANCELLED 的唯一归属者。
      */
     @Bean
     public OperationCancelUseCase operationCancelUseCase(
@@ -1007,7 +1005,7 @@ public class BeanConfig {
     }
 
     /**
-     * Operation status use case — write operation status query
+     * 操作状态用例 — 写操作状态查询。
      */
     @Bean
     public OperationStatusUseCase operationStatusUseCase(
@@ -1016,11 +1014,11 @@ public class BeanConfig {
     }
 
     // ======================================================================
-    // Use Cases — Admin Console
+    // 用例 — 管理控制台
     // ======================================================================
 
     /**
-     * Console auth use case — admin console authentication.
+     * 控制台认证用例 — 管理控制台登录认证。
      */
     @Bean
     public ConsoleAuthUseCase consoleAuthUseCase(
@@ -1052,7 +1050,7 @@ public class BeanConfig {
     }
 
     /**
-     * Stats query use case — admin console statistics queries.
+     * 统计查询用例 — 管理控制台统计数据查询。
      */
     @Bean
     public StatsQueryUseCase statsQueryUseCase(StatsQueryPort statsQueryPort) {
@@ -1060,7 +1058,7 @@ public class BeanConfig {
     }
 
     /**
-     * ACL manage use case — admin console ACL/role/permission management.
+     * ACL 管理用例 — 管理控制台 ACL/角色/权限管理。
      */
     @Bean
     public AclManageUseCase aclManageUseCase(AclRepository aclRepository,

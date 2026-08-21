@@ -10,24 +10,21 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Guarantees that Java 8 date/time types such as {@link java.time.Instant} are
- * serializable through the shared application {@code ObjectMapper} used by the
- * Spring MVC {@code MappingJackson2HttpMessageConverter} (and every other
- * consumer, e.g. the catalog snapshot mapper).
+ * 保证 {@link java.time.Instant} 等 Java 8 日期/时间类型可通过共享的
+ * 应用级 {@code ObjectMapper} 序列化，该 {@code ObjectMapper} 被 Spring MVC 的
+ * {@code MappingJackson2HttpMessageConverter}（以及目录快照映射器等其它消费者）使用。
  *
- * <p>Spring Boot auto-registers {@code JavaTimeModule} only when the
- * {@code jackson-datatype-jsr310} artifact is discovered on the classpath, and
- * that auto-registration has proven unreliable in this build. Defining an
- * explicit {@code ObjectMapper} bean here removes that dependency on
- * autodiscovery.</p>
+ * <p>Spring Boot 仅在类路径上发现 {@code jackson-datatype-jsr310} 时才会自动注册
+ * {@code JavaTimeModule}，而本构建已证实自动注册不可靠。此处显式定义
+ * {@code ObjectMapper} Bean，从而解除对自动发现的依赖。</p>
  *
- * <p>The mapper is built from the {@link Jackson2ObjectMapperBuilder} bean that
- * Spring Boot itself configures (with all {@code spring.jackson.*} properties
- * and {@code Jackson2ObjectMapperBuilderCustomizer} beans already applied), so
- * existing settings such as {@code non_null} inclusion are preserved; we only
- * add the JSR-310 module and disable timestamp-style date serialization.</p>
+ * <p>该映射器基于 Spring Boot 自身配置的 {@link Jackson2ObjectMapperBuilder} Bean
+ * （已应用所有 {@code spring.jackson.*} 属性与 {@code Jackson2ObjectMapperBuilderCustomizer}
+ * Bean）构建，因此 {@code non_null} 等既有配置得以保留；我们只额外添加 JSR-310 模块
+ * 并禁用基于时间戳的日期序列化。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 public class JacksonConfiguration {

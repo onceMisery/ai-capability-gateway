@@ -17,27 +17,23 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * Custom health indicator for gateway readiness checks.
+ * 用于网关就绪检查的自定义健康指示器。
  *
- * <p>This indicator contributes to the {@code /actuator/health} endpoint
- * under the {@code gateway-readiness} component name. It performs four
- * checks:</p>
+ * <p>该指示器以 {@code gateway-readiness} 组件名参与
+ * {@code /actuator/health} 端点，执行四项检查：</p>
  * <ol>
- * <li><b>Database connectivity</b> — verifies that a JDBC connection
- * can be obtained from the {@link DataSource}.</li>
- * <li><b>Active snapshot loaded</b> — verifies that the {@link CatalogPort}
- * can load the current production snapshot.</li>
- * <li><b>Required secrets present</b> — verifies that critical secrets
- * (e.g., database credentials, LLM API key) are resolvable via
- * {@link SecretManager}.</li>
- * <li><b>Adapter initialization</b> — verifies that key adapter beans
- * (catalog port, secret manager) are initialized and non-null.</li>
+ * <li><b>数据库连接性</b> — 验证能否从 {@link DataSource} 获取 JDBC 连接。</li>
+ * <li><b>已加载活动快照</b> — 验证 {@link CatalogPort} 能否加载当前生产快照。</li>
+ * <li><b>必要密钥存在</b> — 验证关键密钥（如数据库凭据、LLM API Key）
+ * 可通过 {@link SecretManager} 解析。</li>
+ * <li><b>适配器初始化</b> — 验证关键适配器 Bean（目录端口、密钥管理器）
+ * 已初始化且非 null。</li>
  * </ol>
  *
- * <p>If any check fails, the overall status is {@code DOWN} with details
- * indicating which checks failed.</p>
+ * <p>若任意检查失败，整体状态为 {@code DOWN}，并在详情中指明失败项。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Component("gateway-readiness")
 public class GatewayHealthIndicator implements HealthIndicator {
@@ -51,12 +47,12 @@ public class GatewayHealthIndicator implements HealthIndicator {
     private final InMemoryCatalogManager catalogManager;
 
     /**
-     * Constructs a new GatewayHealthIndicator.
+     * 构造一个新的 GatewayHealthIndicator。
      *
-     * @param dataSource the JDBC data source for database connectivity checks
-     * @param catalogPort the catalog port for snapshot checks
-     * @param secretManager the secret manager for secret presence checks
-     * @param environment the active gateway environment (e.g. "production")
+     * @param dataSource 用于数据库连接性检查的 JDBC 数据源
+     * @param catalogPort 用于快照检查的目录端口
+     * @param secretManager 用于密钥存在性检查的密钥管理器
+     * @param environment 当前网关运行环境（如 "production"）
      */
     @Autowired
     public GatewayHealthIndicator(DataSource dataSource,
@@ -82,25 +78,25 @@ public class GatewayHealthIndicator implements HealthIndicator {
         Map<String, Object> details = new LinkedHashMap<>();
         boolean allHealthy = true;
 
-        // Check 1: Database connectivity
+        // 检查一：数据库连接性
         boolean dbOk = checkDatabase(details);
         if (!dbOk) {
             allHealthy = false;
         }
 
-        // Check 2: Active snapshot loaded
+        // 检查二：已加载活动快照
         boolean snapshotOk = checkSnapshot(details);
         if (!snapshotOk) {
             allHealthy = false;
         }
 
-        // Check 3: Required secrets present
+        // 检查三：必要密钥存在
         boolean secretsOk = checkSecrets(details);
         if (!secretsOk) {
             allHealthy = false;
         }
 
-        // Check 4: Adapter initialization status
+        // 检查四：适配器初始化状态
         boolean adaptersOk = checkAdapters(details);
         if (!adaptersOk) {
             allHealthy = false;
@@ -118,10 +114,10 @@ public class GatewayHealthIndicator implements HealthIndicator {
     }
 
     /**
-     * Checks database connectivity by obtaining a JDBC connection.
+     * 通过获取 JDBC 连接检查数据库连接性。
      *
-     * @param details the details map to populate with check results
-     * @return {@code true} if the database is reachable
+     * @param details 用于填充检查结果的详情映射
+     * @return 数据库可达时为 {@code true}
      */
     private boolean checkDatabase(Map<String, Object> details) {
         try (Connection conn = dataSource.getConnection()) {
@@ -139,10 +135,10 @@ public class GatewayHealthIndicator implements HealthIndicator {
     }
 
     /**
-     * Checks that the active catalog snapshot is loaded.
+     * 检查当前目录快照是否已加载。
      *
-     * @param details the details map to populate with check results
-     * @return {@code true} if the snapshot is loaded
+     * @param details 用于填充检查结果的详情映射
+     * @return 快照已加载时为 {@code true}
      */
     private boolean checkSnapshot(Map<String, Object> details) {
         try {
@@ -166,10 +162,10 @@ public class GatewayHealthIndicator implements HealthIndicator {
     }
 
     /**
-     * Checks that required secrets are present.
+     * 检查必要的密钥是否齐备。
      *
-     * @param details the details map to populate with check results
-     * @return {@code true} if all required secrets are resolvable
+     * @param details 用于填充检查结果的详情映射
+     * @return 所有必要密钥均可解析时为 {@code true}
      */
     private boolean checkSecrets(Map<String, Object> details) {
         String[] requiredSecrets = {"DB_PASSWORD", "LLM_API_KEY"};
@@ -192,10 +188,10 @@ public class GatewayHealthIndicator implements HealthIndicator {
     }
 
     /**
-     * Checks that adapter beans are initialized.
+     * 检查适配器 Bean 是否已初始化。
      *
-     * @param details the details map to populate with check results
-     * @return {@code true} if all adapters are initialized
+     * @param details 用于填充检查结果的详情映射
+     * @return 所有适配器均已初始化时为 {@code true}
      */
     private boolean checkAdapters(Map<String, Object> details) {
         boolean catalogOk = catalogPort != null;

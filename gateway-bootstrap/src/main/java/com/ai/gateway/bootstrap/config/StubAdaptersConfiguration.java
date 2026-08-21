@@ -12,24 +12,23 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 /**
- * Inline stub adapters for ports that have no dedicated adapter
- * implementation yet.
+ * 针对尚无专属适配器实现的能力端口的内联桩适配器。
  *
- * <p>These stubs follow the spec's initial-release degradation rules and are
- * <b>development only</b>:</p>
+ * <p>这些桩遵循规范的初始发布降级规则，且<b>仅用于开发</b>：</p>
  * <ul>
- * <li>{@link EncryptionPort} — Base64 "encryption" (NOT secure; production
- * must use a KMS-managed envelope encryption adapter).</li>
- * <li>{@link CompatibilityTestPort} — always passes the compatibility test
- * (production must invoke the target Provider in a test environment).</li>
+ * <li>{@link EncryptionPort} — Base64 “加密”（不安全；生产必须使用 KMS
+ * 托管的信封加密适配器）。</li>
+ * <li>{@link CompatibilityTestPort} — 始终通过兼容性测试
+ * （生产必须在测试环境中调用目标 Provider）。</li>
  * </ul>
  *
- * <p>Both stubs are fail-fast guarded: when {@code gateway.environment} is
- * {@code production} the application refuses to start instead of silently
- * degrading, mirroring {@link StubAuthConfiguration}'s guard. This prevents
- * an accidental production deployment from running on insecure stubs.</p>
+ * <p>两个桩均受快速失败保护：当 {@code gateway.environment} 为
+ * {@code production} 时，应用拒绝启动而非静默降级，与
+ * {@link StubAuthConfiguration} 的保护一致。这可避免生产环境意外运行在
+ * 不安全的桩上。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 public class StubAdaptersConfiguration {
@@ -50,11 +49,10 @@ public class StubAdaptersConfiguration {
     }
 
     /**
-     * Stub {@link EncryptionPort} for development and testing.
+     * 用于开发与测试的桩 {@link EncryptionPort}。
      *
-     * <p>Uses Base64 encoding — it is NOT secure and must be replaced with a
-     * real KMS adapter (e.g., AWS KMS, HashiCorp Vault Transit) before
-     * production deployment.</p>
+     * <p>使用 Base64 编码——它并不安全，生产部署前必须替换为真实的 KMS
+     * 适配器（如 AWS KMS、HashiCorp Vault Transit）。</p>
      */
     @Bean
     public EncryptionPort encryptionPort() {
@@ -82,10 +80,10 @@ public class StubAdaptersConfiguration {
     }
 
     /**
-     * Stub {@link CompatibilityTestPort} that returns success.
+     * 始终返回成功的桩 {@link CompatibilityTestPort}。
      *
-     * <p>Production should invoke the target Provider in the test environment.
-     * This stub always returns a valid report with no errors or warnings.</p>
+     * <p>生产环境应在测试环境中调用目标 Provider。该桩始终返回一个无错误、
+     * 无警告的有效报告。</p>
      */
     @Bean
     public CompatibilityTestPort compatibilityTestPort() {

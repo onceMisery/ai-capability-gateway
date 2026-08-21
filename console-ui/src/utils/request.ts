@@ -352,7 +352,7 @@ function normalizeError(error: AxiosError): GatewayApiError {
   if (isRecord(body)) {
     const apiError = isRecord(body.error) ? body.error : undefined
     errorCode = String(apiError?.errorCode || body.errorCode || errorCode)
-    message = String(apiError?.message || body.message || message)
+    message = String(apiError?.message || body.message || (typeof body.error === 'string' ? body.error : message))
   }
 
   return new GatewayApiError(message, {

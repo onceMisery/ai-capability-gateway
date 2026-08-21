@@ -10,6 +10,11 @@ import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * WebAdaptersConfigurationTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class WebAdaptersConfigurationTest {
 
     @Test

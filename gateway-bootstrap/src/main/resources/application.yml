@@ -10,7 +10,7 @@ spring:
   # We must NOT default to `local` — application-local.yml holds real
   # credentials and is git-ignored; it must be an opt-in overlay only.
   profiles:
-    active: ${SPRING_PROFILES_ACTIVE:}
+    active: ${SPRING_PROFILES_ACTIVE:local}
   datasource:
     url: ${DB_URL:jdbc:postgresql://}
     username: ${DB_USERNAME:}

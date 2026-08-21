@@ -20,19 +20,18 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Default (stub) authentication/authorization wiring for the initial release.
+ * 初始发布版本的默认（桩）认证/授权装配。
  *
- * <p>Active when {@code gateway.auth.provider} is unset or {@code stub}.
- * Selecting a concrete provider (e.g., {@code gateway.auth.provider=sa-token})
- * deactivates these stubs and activates the corresponding adapter
- * configuration instead — this is the pluggability seam described in
- * {@code docs/extensibility-tech-selection.md}.</p>
+ * <p>当 {@code gateway.auth.provider} 未设置或为 {@code stub} 时生效。
+ * 选择具体提供者（如 {@code gateway.auth.provider=sa-token}）会停用这些桩，
+ * 转而激活对应的适配器配置——这正是 {@code docs/extensibility-tech-selection.md}
+ * 中描述的可插拔接缝。</p>
  *
- * <p>The stubs are development-only: authentication accepts any non-blank
- * Bearer token and authorization allows all authenticated calls. Production
- * must use the configured Sa-Token and ACL adapters.</p>
+ * <p>这些桩仅用于开发：认证接受任意非空 Bearer 令牌，授权放行所有已认证调用。
+ * 生产环境必须使用配置好的 Sa-Token 与 ACL 适配器。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @ConditionalOnProperty(name = "gateway.auth.provider", havingValue = "stub", matchIfMissing = true)
@@ -53,14 +52,13 @@ public class StubAuthConfiguration {
     }
 
     /**
-     * Stub {@link AuthenticationPort} for the initial release.
+     * 初始发布版本的桩 {@link AuthenticationPort}。
      *
-     * <p>Resolves a subject from the Authorization header (or the
-     * {@code subject} query parameter) and builds a minimal {@link Principal}.
-     * Production must replace this with a real JWT/OIDC or SSO adapter
-     * (e.g., the Sa-Token adapter).</p>
+     * <p>从 Authorization 头（或 {@code subject} 查询参数）解析主体，
+     * 并构建一个最小化的 {@link Principal}。生产环境必须用真实的
+     * JWT/OIDC 或 SSO 适配器（如 Sa-Token 适配器）替换它。</p>
      *
-     * @return the stub authentication port
+     * @return 桩认证端口
      */
     @Bean
     public AuthenticationPort authenticationPort() {
@@ -73,15 +71,13 @@ public class StubAuthConfiguration {
     }
 
     /**
-     * Development-only stub {@link AuthorizationPort}.
+     * 仅用于开发的桩 {@link AuthorizationPort}。
      *
-     * <p>"In the initial release, authorization is optional. All
-     * authenticated users may call all published read-only capabilities.
-     * Visibility authorization degrades to authentication status check;
-     * execution authorization degrades to Schema validation and Principal
-     * parameter injection."</p>
+     * <p>“初始发布版本中，授权为可选项。所有已认证用户均可调用所有已发布的
+     * 只读能力。可见性授权降级为仅检查认证状态；执行授权降级为 Schema
+     * 校验与 Principal 参数注入。”</p>
      *
-     * @return the stub authorization port
+     * @return 桩授权端口
      */
     @Bean
     public AuthorizationPort authorizationPort() {
@@ -99,20 +95,20 @@ public class StubAuthConfiguration {
             @Override
             public List<CapabilityManifest> filterVisibleCapabilities(
                     Principal principal, List<CapabilityManifest> candidates) {
-                // Initial release: all authenticated users see all capabilities
+                // 初始发布：所有已认证用户可见全部能力
                 return candidates;
             }
 
             @Override
             public boolean authorizeExecution(
                     Principal principal, String capabilityId, String version) {
-                // Initial release: allow all authenticated users
+                // 初始发布：放行所有已认证用户
                 return true;
             }
 
             @Override
             public boolean authorizeAdmin(Principal principal, AdminAction action) {
-                // Initial release: allow all authenticated users
+                // 初始发布：放行所有已认证用户
                 return true;
             }
 

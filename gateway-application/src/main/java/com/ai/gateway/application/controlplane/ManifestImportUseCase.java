@@ -94,6 +94,15 @@ public final class ManifestImportUseCase {
         log.info("Importing manifest: id={}, version={}",
                 manifest.metadata().id(), manifest.metadata().version());
 
+        String capabilityId = manifest.metadata().id();
+        String capabilityVersion = manifest.metadata().version();
+        String duplicateError = duplicateError(capabilityId, capabilityVersion);
+        if (duplicateError != null) {
+            log.warn("Manifest import rejected for id={}, version={}: {}",
+                    capabilityId, capabilityVersion, duplicateError);
+            return new ImportResult(false, ValidationReport.success(), null, duplicateError);
+        }
+
         // Step 1-10: Run the full validation pipeline via the domain validator
         ValidationReport report = manifestValidator.validate(manifest);
 
@@ -115,13 +124,12 @@ public final class ManifestImportUseCase {
         }
 
         // Check for duplicate id+version
-        if (manifestRepository.findByIdAndVersion(
-                manifest.metadata().id(), manifest.metadata().version()).isPresent()) {
+        if (manifestRepository.findByIdAndVersion(capabilityId, capabilityVersion).isPresent()) {
             log.warn("Manifest with id={} and version={} already exists; cannot overwrite",
-                    manifest.metadata().id(), manifest.metadata().version());
+                    capabilityId, capabilityVersion);
             return new ImportResult(false, report, digest,
-                    "A manifest with id '" + manifest.metadata().id()
-                            + "' and version '" + manifest.metadata().version()
+                    "A manifest with id '" + capabilityId
+                            + "' and version '" + capabilityVersion
                             + "' already exists; modifications must produce a new version");
         }
 
@@ -132,6 +140,23 @@ public final class ManifestImportUseCase {
                 manifest.metadata().id(), manifest.metadata().version(), digest);
 
         return new ImportResult(true, report, digest, null);
+    }
+
+    private String duplicateError(String capabilityId, String version) {
+        if (manifestRepository.findByIdAndVersion(capabilityId, version).isPresent()) {
+            return "A manifest with id '" + capabilityId + "' and version '" + version
+                    + "' already exists; modifications must produce a new version";
+        }
+        return manifestRepository.findAllWithDetails().stream()
+                .filter(detail -> detail.manifest().metadata().id().equals(capabilityId))
+                .filter(detail -> detail.lifecycle() != CapabilityLifecycle.SUSPENDED
+                        && detail.lifecycle() != CapabilityLifecycle.RETIRED
+                        && detail.lifecycle() != CapabilityLifecycle.REJECTED)
+                .findFirst()
+                .map(detail -> "Capability '" + capabilityId + "' already has an active manifest "
+                        + "in lifecycle " + detail.lifecycle()
+                        + "; suspend it before importing another version")
+                .orElse(null);
     }
 
     /**

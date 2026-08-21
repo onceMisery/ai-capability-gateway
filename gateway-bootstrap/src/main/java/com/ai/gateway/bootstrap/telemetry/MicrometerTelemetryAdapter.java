@@ -16,7 +16,11 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
-/** Micrometer-backed adapter for the framework-neutral telemetry port. */
+/**
+ * 基于 Micrometer 实现的、与框架无关的遥测端口适配器。
+ *
+ * @author cmiracle@163.com
+ */
 public final class MicrometerTelemetryAdapter implements TelemetryPort {
 
     private final ObservationRegistry observationRegistry;
@@ -73,7 +77,7 @@ public final class MicrometerTelemetryAdapter implements TelemetryPort {
         holder.set(value);
     }
 
-    /** Keep only bounded, low-cardinality dimensions from application callers. */
+    /** 仅保留应用调用方传来的有界、低基数的维度。 */
     private Map<String, String> safeTags(Map<String, String> tags) {
         if (tags == null || tags.isEmpty()) return Map.of();
         return tags.entrySet().stream()

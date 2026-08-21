@@ -19,23 +19,22 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Bootstrap adapter implementing {@link SchemaValidator} using the
- * <a href="https://github.com/networknt/json-schema-validator">networknt
- * JSON Schema Validator</a> with JSON Schema 2020-12 support.
+ * 使用 <a href="https://github.com/networknt/json-schema-validator">networknt
+ * JSON Schema Validator</a>（支持 JSON Schema 2020-12）实现 {@link SchemaValidator}
+ * 的引导适配器。
  *
- * <p>This adapter validates JSON-compatible data trees against JSON Schema
- * 2020-12 documents. It is used for:</p>
+ * <p>该适配器针对 JSON Schema 2020-12 文档校验 JSON 兼容的数据树，用于：</p>
  * <ul>
- * <li>Input Schema validation — {@code spec.inputSchema}.</li>
- * <li>LLM output validation.</li>
- * <li>Public output Schema validation.</li>
- * <li>Manifest structural validation.</li>
+ * <li>输入 Schema 校验 — {@code spec.inputSchema}。</li>
+ * <li>LLM 输出校验。</li>
+ * <li>公开输出 Schema 校验。</li>
+ * <li>清单结构校验。</li>
  * </ul>
  *
- * <p>A report is considered valid only if {@code errors} is empty.
- * Warnings are informational and do not block processing.</p>
+ * <p>仅当 {@code errors} 为空时，报告才视为有效。警告仅作提示，不会阻断处理。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Component
 public class SchemaValidatorAdapter implements SchemaValidator {
@@ -47,8 +46,8 @@ public class SchemaValidatorAdapter implements SchemaValidator {
     private final SchemaValidatorsConfig config;
 
     /**
-     * Constructs a new SchemaValidatorAdapter configured for JSON Schema
-     * 2020-12 (Draft 2020-12).
+     * 构造一个针对 JSON Schema 2020-12（Draft 2020-12）配置的
+     * SchemaValidatorAdapter。
      */
     public SchemaValidatorAdapter() {
         this.schemaFactory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);

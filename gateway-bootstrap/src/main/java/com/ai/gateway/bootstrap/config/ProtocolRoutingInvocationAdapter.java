@@ -14,6 +14,11 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 按协议将调用路由到对应委托适配器的路由适配器。
+ *
+ * @author cmiracle@163.com
+ */
 @RequiredArgsConstructor
 final class ProtocolRoutingInvocationAdapter implements InvocationAdapter {
 

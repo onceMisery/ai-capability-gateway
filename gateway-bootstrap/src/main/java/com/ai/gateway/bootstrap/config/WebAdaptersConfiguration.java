@@ -30,6 +30,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
  * （管理后台认证、目录查询、监控统计、ACL 管理、系统配置）均在此注册。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @EnableConfigurationProperties(GatewayWebProperties.class)

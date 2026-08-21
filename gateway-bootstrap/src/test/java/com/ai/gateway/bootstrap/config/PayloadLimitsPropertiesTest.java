@@ -9,7 +9,9 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** 验证 Payload 预算配置能够被强类型绑定。 */
+/** 验证 Payload 预算配置能够被强类型绑定。
+ * @author cmiracle@163.com
+ */
 class PayloadLimitsPropertiesTest {
 
     @Test

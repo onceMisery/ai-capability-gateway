@@ -6,6 +6,11 @@ import java.lang.reflect.InvocationTargetException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * StubAuthProductionGuardTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class StubAuthProductionGuardTest {
 
     @Test

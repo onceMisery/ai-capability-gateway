@@ -12,18 +12,18 @@ import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Default catalog wiring: registers {@link JdbcCatalogPort} directly.
+ * 默认目录装配：直接注册 {@link JdbcCatalogPort}。
  *
- * <p>{@link JdbcCatalogPort} is always registered and addressable via the
- * {@code postgresCatalogPort} qualifier. When {@code gateway.cache.provider=redis},
- * {@link com.ai.gateway.adapter.redis.RedisCacheConfiguration} registers a
- * caching {@code RedisCatalogPortDecorator} (marked {@code @Primary}) that wraps
- * the {@code postgresCatalogPort} qualifier. When the cache provider is
- * {@code stub} (or unset), this configuration additionally exposes the
- * PostgreSQL port as the primary {@link CatalogPort} so unqualified injections
- * resolve to it.</p>
+ * <p>{@link JdbcCatalogPort} 始终被注册，并可通过 {@code postgresCatalogPort}
+ * 限定符引用。当 {@code gateway.cache.provider=redis} 时，
+ * {@link com.ai.gateway.adapter.redis.RedisCacheConfiguration} 会注册一个带缓存的
+ * {@code RedisCatalogPortDecorator}（标注 {@code @Primary}）来包装
+ * {@code postgresCatalogPort} 限定符。当缓存提供方为 {@code stub}（或未设置）时，
+ * 本配置额外将 PostgreSQL 端口暴露为主 {@link CatalogPort}，使未限定的注入
+ * 解析到它。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @Import(JdbcCatalogPort.class)
@@ -31,14 +31,13 @@ import org.springframework.context.annotation.Primary;
 public class DirectCatalogConfiguration {
 
     /**
-     * Exposes the PostgreSQL catalog port as the primary {@link CatalogPort}
-     * only when the gateway runs without the Redis cache layer (stub cache
-     * provider, or unset). When {@code gateway.cache.provider=redis} the Redis
-     * decorator from {@code RedisCacheConfiguration} takes over as the primary
-     * bean and wraps the still-registered {@code postgresCatalogPort}.
+     * 仅在网关未启用 Redis 缓存层（stub 缓存提供方或未设置）时，将 PostgreSQL
+     * 目录端口作为主 {@link CatalogPort} 暴露。当 {@code gateway.cache.provider=redis}
+     * 时，来自 {@code RedisCacheConfiguration} 的 Redis 装饰器接管为主 Bean，
+     * 并包装仍被注册的 {@code postgresCatalogPort}。
      *
-     * @param postgresCatalogPort the PostgreSQL catalog port (qualified)
-     * @return the same PostgreSQL catalog port, as the primary bean
+     * @param postgresCatalogPort PostgreSQL 目录端口（限定符引用）
+     * @return 同一个 PostgreSQL 目录端口，作为主 Bean
      */
     @Bean
     @Primary

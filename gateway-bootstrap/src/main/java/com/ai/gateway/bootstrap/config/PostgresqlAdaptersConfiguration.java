@@ -25,6 +25,7 @@ import org.springframework.context.annotation.Import;
  * 提供的定时任务能力。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @Import({

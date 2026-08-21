@@ -10,7 +10,9 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * JSON codec for encrypted, positionally ordered invocation arguments.
+ * 针对加密、按位置排序的调用参数的 JSON 编解码器。
+ *
+ * @author cmiracle@163.com
  */
 @Component
 public final class JacksonArgumentPayloadCodec implements ArgumentPayloadCodec {

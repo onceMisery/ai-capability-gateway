@@ -15,6 +15,7 @@ import org.springframework.context.annotation.Import;
  * 结果剥离、附件透传与调用适配器本身。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @Import({

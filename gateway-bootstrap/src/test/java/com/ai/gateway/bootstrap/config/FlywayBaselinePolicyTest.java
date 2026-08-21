@@ -8,6 +8,11 @@ import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * FlywayBaselinePolicyTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class FlywayBaselinePolicyTest {
 
     @Test

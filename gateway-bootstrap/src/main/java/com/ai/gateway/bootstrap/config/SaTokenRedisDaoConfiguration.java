@@ -10,22 +10,21 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Wires Sa-Token's session storage onto the shared Redis infrastructure.
+ * 将 Sa-Token 的会话存储接入共享 Redis 基础设施。
  *
- * <p>Activated only when both {@code gateway.auth.provider=sa-token} and
- * {@code gateway.cache.provider=redis} are set. It registers a
- * {@link SaTokenDaoRedissonJackson} — initialized with the same
- * {@link RedissonClient} used by the snapshot cache and distributed locks —
- * as Sa-Token's global {@code SaTokenDao}, so Sa-Token sessions persist to
- * Redis per the tech-selection doc §12 confirmed decision (Sa-Token session
- * storage = Redis).</p>
+ * <p>仅当同时设置 {@code gateway.auth.provider=sa-token} 与
+ * {@code gateway.cache.provider=redis} 时生效。它注册一个
+ * {@link SaTokenDaoRedissonJackson}（使用与快照缓存、分布式锁相同的
+ * {@link RedissonClient} 初始化）作为 Sa-Token 的全局 {@code SaTokenDao}，
+ * 从而使 Sa-Token 会话按技术选型文档 §12 的确认结论持久化到 Redis
+ * （Sa-Token 会话存储 = Redis）。</p>
  *
- * <p>The gateway's primary authentication path remains stateless JWT
- * verification (confirmed decision #2); this DAO additionally enables
- * Sa-Token's session-based operations (login/logout, kick-out) to share the
- * Redis instance when an integration chooses to use them.</p>
+ * <p>网关的主认证路径仍保持无状态 JWT 校验（确认结论 #2）；该 DAO 额外使
+ * Sa-Token 基于会话的操作（登录/登出、踢下线）在集成选择使用时可共享同一
+ * Redis 实例。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @ConditionalOnExpression("'${gateway.auth.provider}' == 'sa-token' && '${gateway.cache.provider}' == 'redis'")
@@ -34,10 +33,10 @@ public class SaTokenRedisDaoConfiguration {
     private static final Logger log = LoggerFactory.getLogger(SaTokenRedisDaoConfiguration.class);
 
     /**
-     * Creates and registers the Redisson-backed Sa-Token DAO.
+     * 创建并注册基于 Redisson 的 Sa-Token DAO。
      *
-     * @param redissonClient the shared Redisson client
-     * @return the Sa-Token DAO backed by Redis
+     * @param redissonClient 共享的 Redisson 客户端
+     * @return 基于 Redis 的 Sa-Token DAO
      */
     @Bean
     public SaTokenDaoRedissonJackson saTokenDao(RedissonClient redissonClient) {

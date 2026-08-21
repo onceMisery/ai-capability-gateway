@@ -49,6 +49,11 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/**
+ * McpSdkInteropTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 @SpringBootTest(
         classes = McpSdkInteropTest.TestApplication.class,
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

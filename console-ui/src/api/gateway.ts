@@ -64,6 +64,8 @@ export const gatewayApi = {
     post<ManifestMutationResult>(`/admin/v1/capabilities/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}:validate`),
   approveCapability: (id: string, version: string) =>
     post<ManifestMutationResult>(`/admin/v1/capabilities/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}:approve`, {}),
+  resumeCapability: (id: string, version: string) =>
+    post<ManifestMutationResult>(`/admin/v1/capabilities/${encodeURIComponent(id)}/versions/${encodeURIComponent(version)}:resume`, {}),
   suspendCapability: (id: string, reason: string) =>
     post<ManifestMutationResult>(`/admin/v1/capabilities/${encodeURIComponent(id)}:suspend`, { reason }),
 

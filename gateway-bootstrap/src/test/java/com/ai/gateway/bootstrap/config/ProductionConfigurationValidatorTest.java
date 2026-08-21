@@ -6,6 +6,11 @@ import org.springframework.mock.env.MockEnvironment;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * ProductionConfigurationValidatorTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class ProductionConfigurationValidatorTest {
 
     @Test

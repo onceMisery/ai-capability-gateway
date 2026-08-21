@@ -14,6 +14,7 @@ import org.springframework.context.annotation.Import;
  * apiKey、model），无法由 Spring 自动装配，由 {@link BeanConfig} 手工创建。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @Import({

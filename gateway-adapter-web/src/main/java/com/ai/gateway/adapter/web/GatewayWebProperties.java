@@ -1,5 +1,6 @@
 package com.ai.gateway.adapter.web;
 
+import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
@@ -11,37 +12,18 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Data
 @ConfigurationProperties(prefix = "gateway")
 public class GatewayWebProperties {
 
     private int maxRequestSizeBytes = 65_536;
+
     private Provider ratelimit = new Provider();
 
-    public int getMaxRequestSizeBytes() {
-        return maxRequestSizeBytes;
-    }
 
-    public void setMaxRequestSizeBytes(int maxRequestSizeBytes) {
-        this.maxRequestSizeBytes = maxRequestSizeBytes;
-    }
-
-    public Provider getRatelimit() {
-        return ratelimit;
-    }
-
-    public void setRatelimit(Provider ratelimit) {
-        this.ratelimit = ratelimit;
-    }
-
+    @Data
     public static class Provider {
         private String provider = "";
 
-        public String getProvider() {
-            return provider;
-        }
-
-        public void setProvider(String provider) {
-            this.provider = provider;
-        }
     }
 }

@@ -16,31 +16,27 @@ import org.springframework.context.annotation.Import;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
- * Spring Boot entry point for the AI Capability Gateway.
+ * AI 能力网关的 Spring Boot 启动入口。
  *
- * <p>This class assembles all adapters and use cases without relying on
- * broad component scanning. The {@code @SpringBootApplication} annotation
- * scans only the {@code com.ai.gateway.bootstrap} package (this class's
- * package and sub-packages) for bootstrap-local {@code @Component} and
- * {@code @Configuration} classes such as {@link
- * com.ai.gateway.bootstrap.config.BeanConfig BeanConfig}, {@link
- * com.ai.gateway.bootstrap.config.SchemaValidatorAdapter SchemaValidatorAdapter},
- * {@link com.ai.gateway.bootstrap.config.SecretManagerAdapter SecretManagerAdapter},
- * and {@link com.ai.gateway.bootstrap.config.GatewayHealthIndicator
- * GatewayHealthIndicator}.</p>
+ * <p>该类在不依赖大范围组件扫描的前提下，装配所有适配器与用例。
+ * {@code @SpringBootApplication} 注解仅扫描 {@code com.ai.gateway.bootstrap}
+ * 包（即本类所在包及其子包）下的引导本地 {@code @Component} 与
+ * {@code @Configuration} 类，例如 {@link
+ * com.ai.gateway.bootstrap.config.BeanConfig BeanConfig}、{@link
+ * com.ai.gateway.bootstrap.config.SchemaValidatorAdapter SchemaValidatorAdapter}、
+ * {@link com.ai.gateway.bootstrap.config.SecretManagerAdapter SecretManagerAdapter}
+ * 以及 {@link com.ai.gateway.bootstrap.config.GatewayHealthIndicator
+ * GatewayHealthIndicator}。</p>
  *
- * <p>Adapter implementations living in other packages are brought in
- * explicitly via {@link Import}, grouped by adapter domain into dedicated
- * configuration classes under {@code com.ai.gateway.bootstrap.config}:
- * pluggable providers (auth, catalog, rate limiting) and adapter groups
- * (PostgreSQL, Dubbo, LLM HTTP, Web). The application layer stays
- * framework-free — the bootstrap module is the single place where adapter
- * classes are wired to application use cases.</p>
+ * <p>位于其它包中的适配器实现通过 {@link Import} 显式引入，并按适配器域归组到
+ * {@code com.ai.gateway.bootstrap.config} 下的专用配置类中：可插拔提供者
+ * （认证、目录、限流）与适配器组（PostgreSQL、Dubbo、LLM HTTP、Web）。
+ * 应用层保持与框架无关——bootstrap 模块是适配器类与应用用例装配的唯一场所。</p>
  *
- * <p>{@link EnableScheduling} activates scheduled tasks such as the
- * outbox relay and data-retention cleanup.</p>
+ * <p>{@link EnableScheduling} 激活诸如发件箱中继与数据留存清理等定时任务。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @SpringBootApplication(exclude = SaTokenDaoRedissonJackson.class)
 @EnableScheduling
@@ -49,14 +45,13 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         com.ai.gateway.bootstrap.config.PayloadLimitsProperties.class
 })
 @Import({
-        // --- Pluggable provider wiring (auth / catalog / rate limiting) ---
-        // Each provider group contains mutually exclusive implementations
-        // activated by their own @ConditionalOnProperty annotations.
+        // --- 可插拔提供者装配（认证 / 目录 / 限流）---
+        // 每个提供者组包含互斥的实现，由其各自的 @ConditionalOnProperty 注解激活。
         AuthProviderConfiguration.class,
         CatalogProviderConfiguration.class,
         RateLimitProviderConfiguration.class,
 
-        // --- Adapter-layer wiring (grouped by adapter domain) ---
+        // --- 适配器层装配（按适配器域分组）---
         PostgresqlAdaptersConfiguration.class,
         DubboAdaptersConfiguration.class,
         LlmAdaptersConfiguration.class,
@@ -66,9 +61,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class AiCapabilityGatewayApplication {
 
     /**
-     * Boots the AI Capability Gateway Spring Boot application.
+     * 启动 AI 能力网关 Spring Boot 应用。
      *
-     * @param args command-line arguments forwarded to Spring Boot
+     * @param args 透传给 Spring Boot 的命令行参数
      */
     public static void main(String[] args) {
         SpringApplication.run(AiCapabilityGatewayApplication.class, args);

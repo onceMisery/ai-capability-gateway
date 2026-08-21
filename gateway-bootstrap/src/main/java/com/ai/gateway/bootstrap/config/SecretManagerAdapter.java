@@ -15,24 +15,22 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Bootstrap adapter implementing {@link SecretManager}.
+ * 实现 {@link SecretManager} 的引导适配器。
  *
- * <p>This adapter resolves secrets in two layers:</p>
+ * <p>该适配器分两层解析密钥：</p>
  * <ol>
- * <li><b>Environment variables</b> — checked first. The key is
- * transformed to uppercase with underscores (e.g.,
- * {@code "db.password"} becomes {@code "DB_PASSWORD"}).</li>
- * <li><b>Secret file</b> — if the environment variable is not set, the
- * adapter reads from a properties file located at
- * {@code gateway.secret-file-path} (if configured). The file uses
- * {@code key=value} format.</li>
+ * <li><b>环境变量</b> — 优先检查。键名会被转换为大写并使用下划线连接
+ * （例如 {@code "db.password"} 转换为 {@code "DB_PASSWORD"}）。</li>
+ * <li><b>密钥文件</b> — 若环境变量未设置，则读取位于
+ * {@code gateway.secret-file-path}（如已配置）的 properties 文件，
+ * 文件采用 {@code key=value} 格式。</li>
  * </ol>
  *
- * <p>Production deployments should use a dedicated Secret Manager (e.g.,
- * HashiCorp Vault, Kubernetes Secrets) or Workload Identity. Configuration
- * files and Manifests must never contain secrets.</p>
+ * <p>生产环境应使用专用的密钥管理服务（如 HashiCorp Vault、Kubernetes
+ * Secrets）或工作负载身份认证。配置文件与清单中绝不可包含明文密钥。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Component
 public class SecretManagerAdapter implements SecretManager {
@@ -43,11 +41,10 @@ public class SecretManagerAdapter implements SecretManager {
     private final Map<String, String> fileSecrets;
 
     /**
-     * Constructs a new SecretManagerAdapter.
+     * 构造一个新的 SecretManagerAdapter。
      *
-     * @param secretFilePath the path to the secret properties file, resolved
-     * from {@code gateway.secret-file-path}; may be
-     * empty or {@code null} if no file is configured
+     * @param secretFilePath 密钥 properties 文件路径，解析自
+     * {@code gateway.secret-file-path}；若未配置文件则为空或 {@code null}
      */
     public SecretManagerAdapter(GatewayProperties properties) {
         String secretFilePath = properties.getSecretFilePath();
@@ -64,20 +61,20 @@ public class SecretManagerAdapter implements SecretManager {
             throw new IllegalArgumentException("secret key must not be null or blank");
         }
 
-        // Layer 1: environment variable
+        // 第一层：环境变量
         String envKey = key.toUpperCase().replace('.', '_').replace('-', '_');
         String envValue = System.getenv(envKey);
         if (envValue != null && !envValue.isBlank()) {
             return envValue;
         }
 
-        // Also try the original key as an environment variable
+        // 同时尝试以原始键名作为环境变量
         envValue = System.getenv(key);
         if (envValue != null && !envValue.isBlank()) {
             return envValue;
         }
 
-        // Layer 2: secret file
+        // 第二层：密钥文件
         String fileValue = fileSecrets.get(key);
         if (fileValue != null && !fileValue.isBlank()) {
             return fileValue;
@@ -89,13 +86,12 @@ public class SecretManagerAdapter implements SecretManager {
     }
 
     /**
-     * Loads the secret properties file into a map.
+     * 将密钥 properties 文件加载为映射。
      *
-     * <p>If the file does not exist or cannot be read, an empty map is
-     * returned and a warning is logged. This allows the gateway to start
-     * even without a secret file, relying solely on environment variables.</p>
+     * <p>若文件不存在或无法读取，则返回空映射并记录警告。这样即使没有
+     * 密钥文件，网关也能仅依赖环境变量正常启动。</p>
      *
-     * @return an immutable map of secret key-value pairs
+     * @return 不可变的密钥键值对映射
      */
     private Map<String, String> loadSecretFile() {
         if (secretFilePath == null) {

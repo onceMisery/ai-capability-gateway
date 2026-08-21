@@ -13,7 +13,10 @@ import java.time.Instant;
 import java.util.Base64;
 
 /**
- * HMAC-SHA256 confirmation token codec. Token claims are signed and treated as opaque by HTTP clients.
+ * 基于 HMAC-SHA256 的确认令牌编解码器。令牌声明经过签名，
+ * 对 HTTP 客户端而言是透明的（opaque）。
+ *
+ * @author cmiracle@163.com
  */
 @Component
 public final class HmacConfirmationTokenCodec implements ConfirmationTokenCodec {

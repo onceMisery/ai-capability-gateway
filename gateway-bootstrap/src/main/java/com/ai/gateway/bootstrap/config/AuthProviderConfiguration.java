@@ -22,6 +22,7 @@ import org.springframework.context.annotation.Import;
  * Bean，具体由各自的条件装配注解控制，主启动类无需关心。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @Import({

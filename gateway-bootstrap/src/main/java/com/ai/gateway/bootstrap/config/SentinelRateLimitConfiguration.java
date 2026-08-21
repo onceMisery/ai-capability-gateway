@@ -10,27 +10,25 @@ import org.springframework.context.annotation.Configuration;
 import java.util.List;
 
 /**
- * Conditional Spring wiring for the Sentinel rate-limiting engine.
+ * Sentinel 限流引擎的条件化 Spring 装配。
  *
- * <p>Activated only when {@code gateway.ratelimit.provider=sentinel}. When
- * inactive, the always-allow stub {@link RateLimiterPort} (registered by
- * {@code StubRateLimitConfiguration}) is used.</p>
+ * <p>仅当 {@code gateway.ratelimit.provider=sentinel} 时生效。未生效时，
+ * 使用始终放行的桩 {@link RateLimiterPort}（由 {@code StubRateLimitConfiguration} 注册）。</p>
  *
- * <p>Per the tech-selection doc §10, Sentinel is merged into the bootstrap
- * module (not a separate adapter) because it implements a single port with a
- * small footprint and is a cross-cutting concern naturally assembled at
- * startup.</p>
+ * <p>依据技术选型文档 §10，Sentinel 被合并进 bootstrap 模块（而非独立适配器），
+ * 因为它以极小体积实现单一端口，且属于在启动时自然装配的横切关注点。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 @ConditionalOnProperty(name = "gateway.ratelimit.provider", havingValue = "sentinel")
 public class SentinelRateLimitConfiguration {
 
     /**
-     * The Sentinel {@link RateLimiterPort} implementation.
+     * Sentinel 的 {@link RateLimiterPort} 实现。
      *
-     * @return the Sentinel rate limiter adapter
+     * @return Sentinel 限流适配器
      */
     @Bean
     public RateLimiterPort rateLimiterPort() {
@@ -38,12 +36,12 @@ public class SentinelRateLimitConfiguration {
     }
 
     /**
-     * Loads the hardcoded Sentinel rules at startup.
+     * 在启动时加载硬编码的 Sentinel 规则。
      *
-     * @param globalQps the global QPS threshold
-     * @param llmQps the LLM routing QPS threshold
-     * @param llmMaxQueueingMs the maximum queueing time for LLM routing
-     * @return the rule initializer
+     * @param globalQps 全局 QPS 阈值
+     * @param llmQps LLM 路由 QPS 阈值
+     * @param llmMaxQueueingMs LLM 路由的最大排队时间
+     * @return 规则初始化器
      */
     @Bean
     public SentinelRuleInitializer sentinelRuleInitializer(

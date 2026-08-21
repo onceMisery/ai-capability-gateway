@@ -7,6 +7,11 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * ManifestDocumentValidatorAdapterTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class ManifestDocumentValidatorAdapterTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();

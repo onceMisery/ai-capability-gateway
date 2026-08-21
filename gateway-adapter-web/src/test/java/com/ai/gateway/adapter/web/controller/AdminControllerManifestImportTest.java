@@ -3,6 +3,7 @@ package com.ai.gateway.adapter.web.controller;
 import com.ai.gateway.adapter.web.filter.AdminAuthenticationFilter;
 import com.ai.gateway.adapter.web.manifest.ManifestDocumentMapper;
 import com.ai.gateway.application.controlplane.CapabilitySuspendUseCase;
+import com.ai.gateway.application.controlplane.CapabilityResumeUseCase;
 import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
 import com.ai.gateway.application.controlplane.CatalogSnapshotQueryUseCase;
@@ -117,6 +118,7 @@ class AdminControllerManifestImportTest {
                 mock(CatalogPublishUseCase.class),
                 mock(CatalogRollbackUseCase.class),
                 mock(CapabilitySuspendUseCase.class),
+                mock(CapabilityResumeUseCase.class),
                 mock(ManifestValidationUseCase.class),
                 mock(CatalogSnapshotQueryUseCase.class),
                 authenticationPort,

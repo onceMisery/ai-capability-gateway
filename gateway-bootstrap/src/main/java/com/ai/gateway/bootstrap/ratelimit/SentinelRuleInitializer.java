@@ -15,23 +15,22 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Loads the initial hardcoded Sentinel flow and degrade rules at startup.
+ * 在启动时加载初始的硬编码 Sentinel 流控与降级规则。
  *
- * <p>Per the tech-selection doc §5.4–5.5 and the confirmed decision
- * (hardcoded rules first, Nacos DataSource later), the following rules are
- * registered:</p>
+ * <p>依据技术选型文档 §5.4–5.5 及已确认决策（先硬编码规则，后续接入 Nacos
+ * DataSource），注册以下规则：</p>
  * <ul>
- * <li>{@code gateway:global} — global QPS 2000, fast fail.</li>
- * <li>{@code gateway:llm:routing} — LLM routing QPS 20, queue up to 2s.</li>
- * <li>{@code gateway:capability:{id}} — per-capability degrade rules
- * (exception ratio &gt; 50% and slow-call ratio &gt; 80% with RT &gt; 3s).</li>
+ * <li>{@code gateway:global} — 全局 QPS 2000，快速失败。</li>
+ * <li>{@code gateway:llm:routing} — LLM 路由 QPS 20，最多排队 2 秒。</li>
+ * <li>{@code gateway:capability:{id}} — 按能力维度降级规则
+ * （异常比例 &gt; 50% 且慢调用比例 &gt; 80%、RT &gt; 3 秒）。</li>
  * </ul>
  *
- * <p>Per-capability flow rules are keyed by capability id; the initial set
- * is empty and grows as rules are added (a production deployment would load
- * them from a Nacos DataSource).</p>
+ * <p>按能力的流控规则以能力 id 为键；初始集合为空，随规则新增而增长
+ * （生产部署会从 Nacos DataSource 加载）。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 public class SentinelRuleInitializer implements InitializingBean {
 
@@ -47,12 +46,12 @@ public class SentinelRuleInitializer implements InitializingBean {
     private final double mcpCallQps;
 
     /**
-     * Constructs a new initializer.
+     * 构造一个新的初始化器。
      *
-     * @param globalQps the global QPS threshold
-     * @param llmQps the LLM routing QPS threshold
-     * @param llmMaxQueueingMs the maximum queueing time for LLM routing
-     * @param capabilityIds the capability ids to seed degrade rules for
+     * @param globalQps 全局 QPS 阈值
+     * @param llmQps LLM 路由 QPS 阈值
+     * @param llmMaxQueueingMs LLM 路由的最大排队时间
+     * @param capabilityIds 用于初始化降级规则的能力 id 列表
      */
     public SentinelRuleInitializer(double globalQps, double llmQps, int llmMaxQueueingMs,
                                    List<String> capabilityIds) {
@@ -75,7 +74,7 @@ public class SentinelRuleInitializer implements InitializingBean {
     }
 
     /**
-     * Loads the flow and degrade rules into Sentinel.
+     * 将流控与降级规则加载进 Sentinel。
      */
     @Override
     public void afterPropertiesSet() {

@@ -20,6 +20,7 @@ import java.util.List;
  *
  * <p>Schema 在应用启动时加载并编译一次。资源缺失或 Schema 无法解析时直接阻止
  * 应用启动，避免导入接口在缺少契约的情况下继续运行。</p>
+ * @author cmiracle@163.com
  */
 @Component
 public final class ManifestDocumentValidatorAdapter implements ManifestDocumentValidator {

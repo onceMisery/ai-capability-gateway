@@ -8,6 +8,11 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * MicrometerTelemetryAdapterTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class MicrometerTelemetryAdapterTest {
 
     @Test

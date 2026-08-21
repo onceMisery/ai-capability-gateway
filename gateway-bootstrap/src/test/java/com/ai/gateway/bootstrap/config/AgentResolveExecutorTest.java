@@ -8,6 +8,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * AgentResolveExecutorTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class AgentResolveExecutorTest {
 
     @Test

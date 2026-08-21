@@ -9,14 +9,14 @@ import org.springframework.transaction.support.TransactionTemplate;
 import java.util.Objects;
 
 /**
- * Wires the {@link TransactionPort} to Spring's transaction infrastructure.
+ * 将 {@link TransactionPort} 接入 Spring 的事务基础设施。
  *
- * <p>Adapts {@link TransactionTemplate} so application use cases (which are
- * framework-free) can demarcate a single transaction across multiple
- * repositories. Repository methods annotated {@code @Transactional} with the
- * default {@code REQUIRED} propagation join this boundary.</p>
+ * <p>适配 {@link TransactionTemplate}，使与框架无关的应用用例能够在多个
+ * 仓储之间划定单一事务边界。标注了 {@code @Transactional} 且使用默认
+ * {@code REQUIRED} 传播行为的仓储方法会加入该边界。</p>
  *
  * @since 0.1.0
+ * @author cmiracle@163.com
  */
 @Configuration
 public class TransactionConfiguration {
@@ -27,7 +27,7 @@ public class TransactionConfiguration {
     }
 
     /**
-     * Spring-backed {@link TransactionPort} implementation.
+     * 基于 Spring 的 {@link TransactionPort} 实现。
      */
     static final class SpringTransactionPortAdapter implements TransactionPort {
 

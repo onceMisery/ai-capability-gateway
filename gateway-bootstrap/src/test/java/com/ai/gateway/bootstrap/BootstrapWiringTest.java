@@ -8,6 +8,11 @@ import java.util.Arrays;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * BootstrapWiringTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class BootstrapWiringTest {
 
     @Test

@@ -7,6 +7,11 @@ import java.lang.reflect.InvocationTargetException;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+/**
+ * StubAdaptersProductionGuardTest 类。
+ *
+ * @author cmiracle@163.com
+ */
 class StubAdaptersProductionGuardTest {
 
     @Test
