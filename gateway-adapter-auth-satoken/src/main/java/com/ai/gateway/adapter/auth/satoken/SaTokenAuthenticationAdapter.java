@@ -8,8 +8,7 @@ import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.TokenIssuerPort;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -44,9 +43,8 @@ import java.util.UUID;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 public class SaTokenAuthenticationAdapter implements AuthenticationPort, TokenIssuerPort {
-
-    private static final Logger log = LoggerFactory.getLogger(SaTokenAuthenticationAdapter.class);
 
     private static final String BEARER_PREFIX = "Bearer ";
     private static final String AUTH_METHOD = "SA_TOKEN_JWT";

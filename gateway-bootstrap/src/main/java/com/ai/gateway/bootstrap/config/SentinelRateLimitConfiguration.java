@@ -49,7 +49,10 @@ public class SentinelRateLimitConfiguration {
     public SentinelRuleInitializer sentinelRuleInitializer(
             GatewayProperties properties) {
         GatewayProperties.Sentinel sentinel = properties.getSentinel();
+        GatewayProperties.Agent agent = properties.getAgent();
         return new SentinelRuleInitializer(sentinel.getGlobalQps(), sentinel.getLlmQps(),
-                sentinel.getLlmMaxQueueingMs(), List.of());
+                sentinel.getLlmMaxQueueingMs(), List.of(),
+                agent.getMcpSseQps(), agent.getMcpMessageQps(),
+                agent.getMcpResolveQps(), agent.getMcpCallQps());
     }
 }

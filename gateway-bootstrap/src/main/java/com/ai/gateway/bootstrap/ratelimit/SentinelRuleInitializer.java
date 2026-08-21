@@ -6,6 +6,7 @@ import com.alibaba.csp.sentinel.slots.block.degrade.DegradeRuleManager;
 import com.alibaba.csp.sentinel.slots.block.degrade.circuitbreaker.CircuitBreakerStrategy;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRule;
 import com.alibaba.csp.sentinel.slots.block.flow.FlowRuleManager;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -40,6 +41,10 @@ public class SentinelRuleInitializer implements InitializingBean {
     private final double llmQps;
     private final int llmMaxQueueingMs;
     private final List<String> capabilityIds;
+    private final double mcpSseQps;
+    private final double mcpMessageQps;
+    private final double mcpResolveQps;
+    private final double mcpCallQps;
 
     /**
      * Constructs a new initializer.
@@ -51,10 +56,22 @@ public class SentinelRuleInitializer implements InitializingBean {
      */
     public SentinelRuleInitializer(double globalQps, double llmQps, int llmMaxQueueingMs,
                                    List<String> capabilityIds) {
+        this(globalQps, llmQps, llmMaxQueueingMs, capabilityIds,
+                100d, 500d, 200d, 200d);
+    }
+
+    public SentinelRuleInitializer(double globalQps, double llmQps, int llmMaxQueueingMs,
+                                   List<String> capabilityIds,
+                                   double mcpSseQps, double mcpMessageQps,
+                                   double mcpResolveQps, double mcpCallQps) {
         this.globalQps = globalQps;
         this.llmQps = llmQps;
         this.llmMaxQueueingMs = llmMaxQueueingMs;
         this.capabilityIds = capabilityIds == null ? List.of() : List.copyOf(capabilityIds);
+        this.mcpSseQps = mcpSseQps;
+        this.mcpMessageQps = mcpMessageQps;
+        this.mcpResolveQps = mcpResolveQps;
+        this.mcpCallQps = mcpCallQps;
     }
 
     /**
@@ -62,22 +79,11 @@ public class SentinelRuleInitializer implements InitializingBean {
      */
     @Override
     public void afterPropertiesSet() {
-        List<FlowRule> flowRules = new ArrayList<>();
-
-        FlowRule global = new FlowRule("gateway:global");
-        global.setCount(globalQps);
-        global.setGrade(RuleConstant.FLOW_GRADE_QPS);
-        global.setStrategy(RuleConstant.STRATEGY_DIRECT);
-        global.setControlBehavior(RuleConstant.CONTROL_BEHAVIOR_DEFAULT);
-        flowRules.add(global);
-
-        FlowRule llm = new FlowRule("gateway:llm:routing");
-        llm.setCount(llmQps);
-        llm.setGrade(RuleConstant.FLOW_GRADE_QPS);
-        llm.setStrategy(RuleConstant.STRATEGY_DIRECT);
-        llm.setControlBehavior(RuleConstant.CONTROL_BEHAVIOR_RATE_LIMITER);
-        llm.setMaxQueueingTimeMs(llmMaxQueueingMs);
-        flowRules.add(llm);
+        List<FlowRule> flowRules = getFlowRules();
+        addMcpRule(flowRules, "mcp-sse", mcpSseQps);
+        addMcpRule(flowRules, "mcp-message", mcpMessageQps);
+        addMcpRule(flowRules, "mcp-resolve", mcpResolveQps);
+        addMcpRule(flowRules, "mcp-call", mcpCallQps);
 
         FlowRuleManager.loadRules(flowRules);
 
@@ -106,5 +112,38 @@ public class SentinelRuleInitializer implements InitializingBean {
 
         log.info("Sentinel rules initialized: flowRules={}, degradeRules={}",
                 flowRules.size(), degradeRules.size());
+    }
+
+    private @NonNull List<FlowRule> getFlowRules() {
+        List<FlowRule> flowRules = new ArrayList<>();
+
+        FlowRule global = new FlowRule("gateway:global");
+        global.setCount(globalQps);
+        global.setGrade(RuleConstant.FLOW_GRADE_QPS);
+        global.setStrategy(RuleConstant.STRATEGY_DIRECT);
+        global.setControlBehavior(RuleConstant.CONTROL_BEHAVIOR_DEFAULT);
+        flowRules.add(global);
+
+        FlowRule llm = new FlowRule("gateway:llm:routing");
+        llm.setCount(llmQps);
+        llm.setGrade(RuleConstant.FLOW_GRADE_QPS);
+        llm.setStrategy(RuleConstant.STRATEGY_DIRECT);
+        llm.setControlBehavior(RuleConstant.CONTROL_BEHAVIOR_RATE_LIMITER);
+        llm.setMaxQueueingTimeMs(llmMaxQueueingMs);
+        flowRules.add(llm);
+        return flowRules;
+    }
+
+    private static void addMcpRule(List<FlowRule> flowRules, String dimension,
+                                   double qps) {
+        if (qps <= 0) {
+            throw new IllegalArgumentException("MCP QPS must be positive: " + dimension);
+        }
+        FlowRule rule = new FlowRule("gateway:" + dimension + ":global");
+        rule.setCount(qps);
+        rule.setGrade(RuleConstant.FLOW_GRADE_QPS);
+        rule.setStrategy(RuleConstant.STRATEGY_DIRECT);
+        rule.setControlBehavior(RuleConstant.CONTROL_BEHAVIOR_DEFAULT);
+        flowRules.add(rule);
     }
 }

@@ -4,8 +4,7 @@ import com.ai.gateway.domain.model.Protocol;
 import org.apache.dubbo.config.ReferenceConfig;
 import org.apache.dubbo.config.RegistryConfig;
 import org.apache.dubbo.rpc.service.GenericService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PreDestroy;
@@ -31,10 +30,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class DubboReferenceManager {
-
-    private static final Logger log = LoggerFactory.getLogger(DubboReferenceManager.class);
 
     /**
      * 缓存引用的默认最大数量。

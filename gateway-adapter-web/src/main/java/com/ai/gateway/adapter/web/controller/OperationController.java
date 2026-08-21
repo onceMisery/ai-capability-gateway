@@ -6,7 +6,6 @@ import com.ai.gateway.application.operation.OperationPrepareUseCase;
 import com.ai.gateway.application.operation.OperationStatusUseCase;
 import com.ai.gateway.adapter.web.support.RequestContextFactory;
 import com.ai.gateway.domain.model.OperationRecord;
-import com.ai.gateway.domain.model.OperationState;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.port.AuthenticationPort;
@@ -135,14 +134,12 @@ public class OperationController {
     }
 
     /**
-     * Confirms and executes a prepared write operation.
+     * 确认并执行已预准备的写操作。
      *
-     * @param operationId the operation identifier from the Prepare phase
-     * @param request the confirm request containing the confirmation token
-     * @param authHeader the Authorization header (Bearer token)
-     * @param servletRequest the underlying servlet request used to build the
-     * {@link RequestContext}
-     * @return the confirm result with the final operation state
+     * @param operationId 预准备阶段返回的操作标识
+     * @param request 含确认令牌的确认请求
+     * @param servletRequest 用于构建 {@link RequestContext} 的底层 Servlet 请求
+     * @return 含最终操作状态的确认结果
      */
     @PostMapping("/operations/{operationId}:confirm")
     public ResponseEntity<Map<String, Object>> confirm(
@@ -154,7 +151,7 @@ public class OperationController {
         RequestContext requestContext = requestContextFactory.from(servletRequest);
         log.info("Confirm phase requested: operationId={}", operationId);
 
-        // Authenticate the caller to construct the Principal
+        // 认证调用方以构建 Principal
         Principal principal;
         try {
             principal = authenticationPort.authenticate(requestContext);
@@ -185,10 +182,10 @@ public class OperationController {
     }
 
     /**
-     * Cancels a prepared write operation before confirmation.
+     * 在确认前取消已预准备的写操作。
      *
-     * @param operationId the operation identifier to cancel
-     * @return the cancel result
+     * @param operationId 待取消的操作标识
+     * @return 取消结果
      */
     @PostMapping("/operations/{operationId}:cancel")
     public ResponseEntity<Map<String, Object>> cancel(
@@ -216,10 +213,10 @@ public class OperationController {
     }
 
     /**
-     * Queries the current status of a write operation.
+     * 查询写操作的当前状态。
      *
-     * @param operationId the operation identifier
-     * @return the operation status
+     * @param operationId 操作标识
+     * @return 操作状态
      */
     @GetMapping("/operations/{operationId}")
     public ResponseEntity<Map<String, Object>> getStatus(
@@ -257,7 +254,7 @@ public class OperationController {
         body.put("snapshotVersion", record.snapshotVersion());
         body.put("expiresAt", record.expiresAt());
 
-        // Never expose encrypted arguments, argumentsDigest, or principalDigest
+        // 绝不暴露加密参数、argumentsDigest 或 principalDigest
         return ResponseEntity.ok(body);
     }
 
@@ -287,10 +284,10 @@ public class OperationController {
     }
 
     /**
-     * Maps a confirm result final state to the appropriate HTTP status.
+     * 将确认结果的终态映射为对应的 HTTP 状态码。
      *
-     * @param finalState the final state name
-     * @return the corresponding HTTP status
+     * @param finalState 终态名称
+     * @return 对应的 HTTP 状态码
      */
     private HttpStatus mapConfirmErrorToStatus(String finalState) {
         if (finalState == null) {
@@ -305,10 +302,10 @@ public class OperationController {
     }
 
     /**
-     * Sanitizes an error message for external exposure.
+     * 对外暴露前清理错误消息中的内部信息。
      *
-     * @param message the raw error message
-     * @return the sanitized message safe for external exposure
+     * @param message 原始错误消息
+     * @return 可安全对外暴露的清理后消息
      */
     private String sanitizeErrorMessage(String message) {
         if (message == null) {
@@ -320,11 +317,11 @@ public class OperationController {
     }
 
     /**
-     * Request body for POST /natural-language/actions:prepare.
+     * POST /natural-language/actions:prepare 的请求体。
      *
-     * @param text the natural-language request text
-     * @param locale the request locale
-     * @param timezone the request timezone
+     * @param text 自然语言请求文本
+     * @param locale 请求 locale
+     * @param timezone 请求时区
      */
     public record PrepareRequest(
             @NotBlank
@@ -338,9 +335,9 @@ public class OperationController {
     }
 
     /**
-     * Request body for POST /operations/{operationId}:confirm.
+     * POST /operations/{operationId}:confirm 的请求体。
      *
-     * @param token the confirmation token string from the Prepare phase
+     * @param token 预准备阶段返回的确认令牌字符串
      */
     public record ConfirmRequest(
             @NotBlank

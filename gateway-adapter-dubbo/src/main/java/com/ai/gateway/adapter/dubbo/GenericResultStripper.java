@@ -1,7 +1,6 @@
 package com.ai.gateway.adapter.dubbo;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -30,10 +29,9 @@ import java.util.Map;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class GenericResultStripper {
-
-    private static final Logger log = LoggerFactory.getLogger(GenericResultStripper.class);
 
     /**
      * Dubbo 在泛化调用 Map 结果中添加的协议元数据键，用于指示原始 Java 类型。

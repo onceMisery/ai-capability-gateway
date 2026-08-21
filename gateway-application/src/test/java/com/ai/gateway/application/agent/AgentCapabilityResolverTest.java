@@ -31,6 +31,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,6 +63,33 @@ class AgentCapabilityResolverTest {
 
             assertThat(result.status()).isEqualTo(AgentCapabilityResolver.Status.ERROR);
             assertThat(result.errorCode()).isEqualTo("RESOLVE_TIMEOUT");
+        } finally {
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void nullAuthenticationPrincipalFailsClosedWithoutCallingAuthorization() {
+        AuthenticationPort authentication = mock(AuthenticationPort.class);
+        AuthorizationPort authorization = mock(AuthorizationPort.class);
+        CandidateRetriever retriever = mock(CandidateRetriever.class);
+        CatalogPort catalog = mock(CatalogPort.class);
+        when(authentication.authenticate(any())).thenReturn(null);
+
+        InMemoryCatalogManager manager = new InMemoryCatalogManager(catalog);
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            AgentCapabilityResolver resolver = new AgentCapabilityResolver(
+                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    new ToolReferenceService("k1", key("current-key"), null, null, 120L),
+                    mock(TelemetryPort.class), executor, 1_000L);
+
+            AgentCapabilityResolver.Resolution result = resolver.resolve(
+                    RequestContext.empty(), "Order detail", 5);
+
+            assertThat(result.status()).isEqualTo(AgentCapabilityResolver.Status.ERROR);
+            assertThat(result.errorCode()).isEqualTo("AUTHENTICATION_FAILED");
+            verify(authorization, never()).resolvePolicySnapshot(any());
         } finally {
             executor.shutdownNow();
         }

@@ -16,7 +16,11 @@ import com.ai.gateway.application.agent.InMemoryPendingConfirmationStore;
 import com.ai.gateway.application.agent.PendingConfirmationStore;
 import com.ai.gateway.application.agent.ToolReferenceService;
 import com.ai.gateway.adapter.mcp.McpGatewayAdapter;
+import com.ai.gateway.adapter.mcp.McpClientTrustProfile;
+import com.ai.gateway.adapter.mcp.McpClientTrustRegistry;
 import com.ai.gateway.adapter.mcp.McpRequestContextFilter;
+import com.ai.gateway.adapter.mcp.McpRateLimiter;
+import com.ai.gateway.adapter.mcp.McpSecurityMode;
 import com.ai.gateway.adapter.mcp.McpWebMvcTransportAdapter;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import com.ai.gateway.application.catalog.LuceneCandidateRetriever;
@@ -101,6 +105,8 @@ import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.ServerResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ai.gateway.adapter.dubbo.DubboInvocationAdapter;
+import com.ai.gateway.adapter.rest.RestInvocationAdapter;
+import com.ai.gateway.adapter.grpc.GrpcInvocationAdapter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 
@@ -372,11 +378,16 @@ public class BeanConfig {
     @Primary
     public InvocationAdapter resilientInvocationAdapter(
             DubboInvocationAdapter delegate,
+            RestInvocationAdapter restInvocationAdapter,
+            GrpcInvocationAdapter grpcInvocationAdapter,
+            ManifestRepository manifestRepository,
             RateLimiterManager rateLimiterManager,
             CircuitBreakerManager circuitBreakerManager,
             BulkheadManager bulkheadManager,
             TelemetryPort telemetryPort) {
-        return new ResilientInvocationAdapter(delegate, rateLimiterManager,
+        InvocationAdapter routed = ProtocolRoutingInvocationAdapter.of(
+                manifestRepository, List.of(delegate, restInvocationAdapter, grpcInvocationAdapter));
+        return new ResilientInvocationAdapter(routed, rateLimiterManager,
                 circuitBreakerManager, bulkheadManager, telemetryPort);
     }
 
@@ -797,8 +808,31 @@ public class BeanConfig {
 
     @Bean
     public McpGatewayAdapter mcpGatewayAdapter(
-            AgentHostConnector connector) {
-        return new McpGatewayAdapter(connector);
+            AgentHostConnector connector,
+            GatewayProperties gatewayProperties,
+            McpClientTrustRegistry trustRegistry,
+            McpRateLimiter mcpRateLimiter) {
+        McpSecurityMode mode = McpSecurityMode.parse(
+                gatewayProperties.getAgent().getMcpSecurityMode());
+        if (mode == McpSecurityMode.DISABLED) {
+            throw new IllegalStateException("MCP is disabled by configuration");
+        }
+        return new McpGatewayAdapter(connector, mode, trustRegistry, mcpRateLimiter);
+    }
+
+    @Bean
+    public McpClientTrustRegistry mcpClientTrustRegistry(
+            GatewayProperties gatewayProperties) {
+        List<McpClientTrustProfile> profiles = gatewayProperties.getAgent()
+                .getMcpTrustedClients().stream()
+                .map(BeanConfig::toMcpTrustProfile)
+                .toList();
+        return new McpClientTrustRegistry(profiles);
+    }
+
+    @Bean
+    public McpRateLimiter mcpRateLimiter(RateLimiterManager rateLimiterManager) {
+        return McpRateLimiter.from(rateLimiterManager);
     }
 
     @Bean
@@ -807,12 +841,16 @@ public class BeanConfig {
             McpGatewayAdapter gatewayAdapter,
             AuthenticationPort authenticationPort,
             TelemetryPort telemetryPort,
+            McpRateLimiter mcpRateLimiter,
             GatewayProperties gatewayProperties) {
         GatewayProperties.Agent agent = gatewayProperties.getAgent();
         return new McpWebMvcTransportAdapter(
                 objectMapper, gatewayAdapter, authenticationPort, telemetryPort,
                 agent.getMcpMaxSessions(),
-                java.time.Duration.ofSeconds(agent.getMcpSessionIdleSeconds()));
+                java.time.Duration.ofSeconds(agent.getMcpSessionIdleSeconds()),
+                java.time.Duration.ofMillis(agent.getMcpCallTimeoutMs()),
+                java.time.Duration.ofMillis(agent.getMcpCloseTimeoutMs()),
+                agent.getMcpNodeId(), mcpRateLimiter);
     }
 
     @Bean
@@ -841,6 +879,31 @@ public class BeanConfig {
         byte[] generated = new byte[32];
         new SecureRandom().nextBytes(generated);
         return generated;
+    }
+
+    private static McpClientTrustProfile toMcpTrustProfile(
+            GatewayProperties.McpTrustedClient configured) {
+        if (configured == null) {
+            throw new IllegalStateException("gateway.agent.mcp-trusted-clients contains null");
+        }
+        try {
+            Instant expiresAt = configured.getExpiresAt() == null
+                    || configured.getExpiresAt().isBlank()
+                    ? null : Instant.parse(configured.getExpiresAt());
+            return new McpClientTrustProfile(
+                    configured.getClientId(),
+                    configured.getTokenFingerprint(),
+                    McpClientTrustProfile.TokenAssurance.valueOf(
+                            configured.getTokenAssurance().trim().toUpperCase(
+                                    java.util.Locale.ROOT)),
+                    McpClientTrustProfile.ConfirmationChannel.valueOf(
+                            configured.getConfirmationChannel().trim().toUpperCase(
+                                    java.util.Locale.ROOT)),
+                    configured.isEnabled(), expiresAt);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException(
+                    "Invalid gateway.agent.mcp-trusted-clients entry", e);
+        }
     }
 
     @Bean

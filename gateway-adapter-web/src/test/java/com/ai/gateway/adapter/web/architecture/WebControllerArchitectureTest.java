@@ -8,7 +8,7 @@ import com.tngtech.archunit.lang.ArchRule;
 
 import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
-/** Web adapters delegate state and persistence changes to application use cases. */
+/** Web 适配器将状态与持久化变更委托给应用用例。 */
 @AnalyzeClasses(packages = "com.ai.gateway.adapter.web.controller")
 class WebControllerArchitectureTest {
 

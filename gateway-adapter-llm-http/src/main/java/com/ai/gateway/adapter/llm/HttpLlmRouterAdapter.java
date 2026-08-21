@@ -8,8 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.PreDestroy;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.net.URI;
@@ -41,10 +40,9 @@ import java.util.Objects;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class HttpLlmRouterAdapter implements LlmRouterPort {
-
-    private static final Logger log = LoggerFactory.getLogger(HttpLlmRouterAdapter.class);
 
     private static final String AUTH_HEADER = "Authorization";
     private static final String AUTH_PREFIX = "Bearer ";

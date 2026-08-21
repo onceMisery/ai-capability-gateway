@@ -14,8 +14,7 @@ import com.ai.gateway.domain.port.ManifestRepository;
 import org.apache.dubbo.rpc.RpcContext;
 import org.apache.dubbo.rpc.RpcException;
 import org.apache.dubbo.rpc.service.GenericService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -50,10 +49,9 @@ import java.util.Optional;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class DubboInvocationAdapter implements InvocationAdapter {
-
-    private static final Logger log = LoggerFactory.getLogger(DubboInvocationAdapter.class);
 
     private final DubboReferenceManager referenceManager;
     private final GenericArgumentBuilder argumentBuilder;

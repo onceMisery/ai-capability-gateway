@@ -61,6 +61,16 @@ public final class AgentHostToolCallUseCase {
                        Map<String, Object> arguments,
                        String locale,
                        String idempotencyKey) {
+        return call(principal, requestId, toolRef, arguments, locale, idempotencyKey, true);
+    }
+
+    public Result call(Principal principal,
+                       String requestId,
+                       String toolRef,
+                       Map<String, Object> arguments,
+                       String locale,
+                       String idempotencyKey,
+                       boolean allowWritePrepare) {
         Objects.requireNonNull(principal, "principal must not be null");
         requireText(requestId, "requestId");
         requireText(toolRef, "toolRef");
@@ -100,14 +110,24 @@ public final class AgentHostToolCallUseCase {
                         view.catalogVersion(), policyEpoch);
             }
 
-            AgentToolCallUseCase.Result delegated = delegate.callResolved(
-                    requestId,
-                    principal,
-                    view.snapshot(),
-                    verification.manifest(),
-                    arguments,
-                    locale,
-                    idempotencyKey);
+            AgentToolCallUseCase.Result delegated = allowWritePrepare
+                    ? delegate.callResolved(
+                            requestId,
+                            principal,
+                            view.snapshot(),
+                            verification.manifest(),
+                            arguments,
+                            locale,
+                            idempotencyKey)
+                    : delegate.callResolved(
+                            requestId,
+                            principal,
+                            view.snapshot(),
+                            verification.manifest(),
+                            arguments,
+                            locale,
+                            idempotencyKey,
+                            false);
             outcome = delegated.status().name().toLowerCase(java.util.Locale.ROOT);
             return Result.from(delegated, verification.policyEpoch());
             } finally {

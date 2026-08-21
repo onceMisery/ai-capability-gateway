@@ -24,7 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 public final class SecurityHelper {
 
     private SecurityHelper() {
-        // utility class
+        // 工具类
     }
 
     /**

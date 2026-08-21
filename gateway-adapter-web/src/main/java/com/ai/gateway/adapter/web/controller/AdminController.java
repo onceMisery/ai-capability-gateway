@@ -39,11 +39,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * REST controller for the management/admin API
+ * 管理/后台 API 的 REST 控制器。
  *
- * <p>This controller exposes control-plane endpoints for manifest lifecycle
- * management, catalog publication, rollback, capability suspension, and audit
- * querying:</p>
+ * <p>该控制器暴露控制平面端点，用于清单生命周期管理、目录发布、回滚、
+ * 能力下线以及审计查询：</p>
  * <ul>
  * <li>{@code POST /admin/v1/manifests:import} — 通过 10 步校验流水线导入清单。</li>
  * <li>{@code POST /admin/v1/capabilities/{id}/versions/{version}:validate}

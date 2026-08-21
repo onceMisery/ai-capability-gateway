@@ -14,6 +14,7 @@ import type {
   HealthStatus,
   LoginResult,
   ManifestMutationResult,
+  NaturalLanguageQueryResult,
   Permission,
   PrincipalInfo,
   RateLimitRule,
@@ -85,6 +86,18 @@ export const gatewayApi = {
     get<CapabilityStat[]>('/admin/v1/stats/capabilities', { params: { from, to } }),
   timeSeries: (from: number, to: number) =>
     get<TimeSeriesPoint[]>('/admin/v1/stats/time-series', { params: { from, to } }),
+  naturalLanguageQuery: (requestId: string, text: string, locale = 'zh-CN', timezone = 'Asia/Shanghai') =>
+    post<NaturalLanguageQueryResult>('/api/v1/natural-language/queries', {
+      requestId,
+      text,
+      locale,
+      timezone
+    }),
+  continueClarification: (interactionId: string, text: string) =>
+    post<NaturalLanguageQueryResult>(
+      `/api/v1/natural-language/interactions/${encodeURIComponent(interactionId)}/messages`,
+      { text }
+    ),
   readiness: () =>
     get<HealthStatus>('/health/readiness', {
       validateStatus: (status) => status === 200 || status === 503

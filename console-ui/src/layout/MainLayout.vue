@@ -85,7 +85,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown, ArrowLeft, ArrowRight, Cpu, DataLine, Document,
-  Lock, Menu, Monitor, Refresh, Setting, SwitchButton, Warning
+  Lock, Menu, Monitor, Refresh, Setting, SwitchButton, Warning, Connection
 } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
@@ -102,6 +102,7 @@ const menuItems = [
   { path: '/capabilities', title: '能力目录', icon: Cpu },
   { path: '/snapshots', title: '快照版本', icon: Document },
   { path: '/monitor', title: '运行监控', icon: Monitor },
+  { path: '/debug', title: '能力调试', icon: Connection },
   { path: '/audit', title: '审计追踪', icon: Warning },
   { path: '/acl', title: '访问控制', icon: Lock },
   { path: '/system', title: '系统配置', icon: Setting }

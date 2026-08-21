@@ -26,6 +26,7 @@ public class GatewayProperties {
     private Audit audit = new Audit();
     private Snapshot snapshot = new Snapshot();
     private Sentinel sentinel = new Sentinel();
+    private Protocol protocol = new Protocol();
 
     public String getEnvironment() {
         return environment;
@@ -136,6 +137,17 @@ public class GatewayProperties {
 
     public Sentinel getSentinel() { return sentinel; }
     public void setSentinel(Sentinel sentinel) { this.sentinel = sentinel; }
+
+    public Protocol getProtocol() { return protocol; }
+    public void setProtocol(Protocol protocol) { this.protocol = protocol; }
+
+    @Getter
+    @Setter
+    public static class Protocol {
+        private java.util.Map<String, String> restEndpoints = new java.util.LinkedHashMap<>();
+        private java.util.Map<String, String> grpcEndpoints = new java.util.LinkedHashMap<>();
+        private java.util.Map<String, String> grpcDescriptorSets = new java.util.LinkedHashMap<>();
+    }
 
     public static class Provider {
         private String provider = "";
@@ -251,6 +263,27 @@ public class GatewayProperties {
         private long catalogIoMaxPayloadBytes = 134_217_728L;
         private int mcpMaxSessions = 1_000;
         private long mcpSessionIdleSeconds = 1_800L;
+        private String mcpSecurityMode = "READ_ONLY";
+        private long mcpCallTimeoutMs = 30_000L;
+        private long mcpCloseTimeoutMs = 5_000L;
+        private String mcpNodeId = "local";
+        private double mcpSseQps = 100d;
+        private double mcpMessageQps = 500d;
+        private double mcpResolveQps = 200d;
+        private double mcpCallQps = 200d;
+        private java.util.List<McpTrustedClient> mcpTrustedClients =
+                new java.util.ArrayList<>();
+    }
+
+    @Getter
+    @Setter
+    public static class McpTrustedClient {
+        private String clientId = "";
+        private String tokenFingerprint = "";
+        private String tokenAssurance = "HIGH";
+        private String confirmationChannel = "HOST_UI";
+        private boolean enabled = true;
+        private String expiresAt = "";
     }
 
     public static class Redis {

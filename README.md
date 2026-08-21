@@ -21,7 +21,7 @@ AI 能力网关是受治理的能力目录与可信执行平面：把微服务 A
 | 自然语言路由 | BM25 候选检索 + LLM 受限选择 + 确定性校验 |
 | 结构化工具调用 | 授权后的 `/api/v1/tools` 目录与 `:invoke` 调用（只允许只读能力） |
 | 确定性执行链路 | 参数绑定、Principal 注入、协议调用、结果脱敏 |
-| 协议适配 | Dubbo GenericService 泛化调用（当前唯一支持协议） |
+| 协议适配 | Dubbo 泛化调用、REST over HTTP、gRPC 动态一元调用 |
 | 写操作二阶段协议 | Prepare/Confirm/Status 状态机，幂等键，CAS 防重 |
 | 审计与可观测性 | 三检查点持久化、Micro-batching 分组提交、Outbox 导出 |
 | 弹性控制 | 限流、熔断、舱壁隔离、超时预算逐层递减 |
@@ -160,8 +160,8 @@ ai-capability-gateway/
 ├── gateway-adapter-postgresql/  # 持久化（Flyway + JDBC + Audit Micro-batching）
 ├── gateway-adapter-llm-http/    # LLM 结构化调用
 ├── gateway-adapter-dubbo/       # Dubbo 泛化调用
-├── gateway-adapter-rest/        # 已退役：未实现，不进入运行时制品
-├── gateway-adapter-grpc/        # 已退役：未实现，不进入运行时制品
+├── gateway-adapter-rest/        # REST over HTTP 调用（受控 endpointRef）
+├── gateway-adapter-grpc/        # gRPC 动态一元调用（FileDescriptorSet）
 ├── gateway-bootstrap/           # Spring Boot 启动 + Bean 装配
 ├── gateway-contract-schema/     # Manifest JSON Schema (2020-12)
 ├── gateway-manifest-cli/        # 离线 Manifest 校验工具

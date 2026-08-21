@@ -25,7 +25,7 @@ import java.util.Map;
 public final class ApiResponse {
 
     private ApiResponse() {
-        // utility class
+        // 工具类
     }
 
     /**

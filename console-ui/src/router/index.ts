@@ -47,6 +47,12 @@ const router = createRouter({
           meta: { title: '运行监控', requiredRole: 'admin' }
         },
         {
+          path: 'debug',
+          name: 'Debug',
+          component: () => import('@/views/CapabilityDebug.vue'),
+          meta: { title: '能力调试', requiredRole: 'admin' }
+        },
+        {
           path: 'audit',
           name: 'Audit',
           component: () => import('@/views/AuditList.vue'),

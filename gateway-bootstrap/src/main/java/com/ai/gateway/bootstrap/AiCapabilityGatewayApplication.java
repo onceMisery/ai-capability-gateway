@@ -7,6 +7,7 @@ import com.ai.gateway.bootstrap.config.LlmAdaptersConfiguration;
 import com.ai.gateway.bootstrap.config.PostgresqlAdaptersConfiguration;
 import com.ai.gateway.bootstrap.config.RateLimitProviderConfiguration;
 import com.ai.gateway.bootstrap.config.WebAdaptersConfiguration;
+import com.ai.gateway.bootstrap.config.RestGrpcAdaptersConfiguration;
 import cn.dev33.satoken.dao.SaTokenDaoRedissonJackson;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -59,6 +60,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
         PostgresqlAdaptersConfiguration.class,
         DubboAdaptersConfiguration.class,
         LlmAdaptersConfiguration.class,
+        RestGrpcAdaptersConfiguration.class,
         WebAdaptersConfiguration.class,
 })
 public class AiCapabilityGatewayApplication {

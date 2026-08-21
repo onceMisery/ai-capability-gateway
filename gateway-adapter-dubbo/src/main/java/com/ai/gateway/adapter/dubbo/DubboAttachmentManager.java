@@ -2,8 +2,7 @@ package com.ai.gateway.adapter.dubbo;
 
 import com.ai.gateway.domain.model.AttachmentWhitelist;
 import com.ai.gateway.domain.model.SystemContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -34,10 +33,9 @@ import java.util.UUID;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class DubboAttachmentManager {
-
-    private static final Logger log = LoggerFactory.getLogger(DubboAttachmentManager.class);
 
     /**
      * 分布式链路追踪标识的附件键。

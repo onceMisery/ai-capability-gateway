@@ -105,6 +105,18 @@ public final class AgentToolCallUseCase {
                                Map<String, Object> modelArguments,
                                String locale,
                                String clientIdempotencyKey) {
+        return callResolved(requestId, principal, snapshot, manifest, modelArguments,
+                locale, clientIdempotencyKey, true);
+    }
+
+    public Result callResolved(String requestId,
+                               com.ai.gateway.domain.model.Principal principal,
+                               CatalogSnapshot snapshot,
+                               CapabilityManifest manifest,
+                               Map<String, Object> modelArguments,
+                               String locale,
+                               String clientIdempotencyKey,
+                               boolean allowWritePrepare) {
         requireText(requestId, "requestId");
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(snapshot, "snapshot must not be null");
@@ -122,6 +134,11 @@ public final class AgentToolCallUseCase {
             return fromStructured(structuredInvocationUseCase.invokeResolved(
                     requestId, principal, snapshot, manifest,
                     modelArguments, locale));
+        }
+        if (!allowWritePrepare) {
+            return error("MCP_WRITE_DISABLED",
+                    "Write capability is disabled for this MCP client",
+                    snapshot.snapshotVersion(), capabilityId, capabilityVersion);
         }
 
         OperationPrepareUseCase.PrepareResult prepared = operationPrepareUseCase.prepareResolved(

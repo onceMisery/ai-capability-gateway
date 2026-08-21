@@ -1,272 +1,198 @@
 package com.ai.gateway.adapter.rest;
 
+import com.ai.gateway.domain.model.ArgumentBinding;
+import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.InvocationRequest;
 import com.ai.gateway.domain.model.InvocationResult;
 import com.ai.gateway.domain.model.Protocol;
 import com.ai.gateway.domain.model.ProtocolBinding;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.InvocationAdapter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.ai.gateway.domain.port.ManifestRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpRequest;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
-/**
- * REST invocation adapter skeleton implementing {@link InvocationAdapter}
- *
- * <p>This is an evolution protocol adapter. The initial production release
- * supports {@link Protocol#DUBBO Dubbo} only. REST is an
- * evolution protocol that shares the same lifecycle, confirmation,
- * natural-language semantics, input/output JSON Schema, Principal injection,
- * authorization, risk, audit, and write-operation state machine as all other
- * protocols.</p>
- *
- * <p>The REST adapter will convert neutral invocation requests to HTTP
- * calls and convert HTTP responses back to JSON-compatible results.
- * The adapter must not perform natural-language routing, user authorization,
- * or capability state changes.</p>
- *
- * <p><strong>Future implementation fields:</strong></p>
- * <ul>
- * <li><strong>endpointRef resolution</strong> — resolve the REST endpoint
- * URL from a pre-configured service registry or API gateway. Manifests
- * must not carry arbitrary URLs; only registry references.</li>
- * <li><strong>HTTP Method mapping</strong> — map the protocol binding's
- * method to an HTTP verb (GET, POST, PUT, PATCH, DELETE).</li>
- * <li><strong>HTTP Path mapping</strong> — construct the request path
- * from the endpointRef and path template.</li>
- * <li><strong>HTTP Query parameter mapping</strong> — map MODEL-sourced
- * arguments to query parameters for GET requests.</li>
- * <li><strong>HTTP Header mapping</strong> — map PRINCIPAL-sourced and
- * SYSTEM-sourced arguments to HTTP headers.</li>
- * <li><strong>HTTP Body mapping</strong> — map MODEL-sourced arguments
- * to the request body for POST/PUT/PATCH requests.</li>
- * <li><strong>Redirect prohibition</strong> — the adapter must not follow
- * HTTP redirects. Redirects are treated as protocol errors.</li>
- * </ul>
- *
- * <p>OpenAPI 3.1 is the primary import source for REST capabilities
- *. The Manifest's protocol binding carries only type-name
- * strings and registry references; the gateway does not load any business
- * API class at compile or runtime.</p>
- *
- * @since 0.1.0
- * @see InvocationAdapter
- * @see Protocol#REST
- */
+@Slf4j
+@RequiredArgsConstructor
 public class RestInvocationAdapter implements InvocationAdapter {
 
-    private static final Logger log = LoggerFactory.getLogger(RestInvocationAdapter.class);
+    private static final List<String> METHODS = List.of("GET", "POST", "PUT", "PATCH", "DELETE");
 
-    // --- Future implementation fields ---
-
-    /**
-     * Future: the service endpoint resolver for REST endpoint URLs.
-     * Resolves {@code endpointRef} from the protocol binding to a concrete
-     * base URL using a pre-configured service registry or API gateway.
-     * Manifests must not carry arbitrary URLs.
-     */
-    private final Object endpointResolver;
-
-    /**
-     * Future: the HTTP client used for REST invocations.
-     * Will be configured with connection pooling, timeouts, and redirect
-     * prohibition.
-     */
-    private final Object httpClient;
-
-    /**
-     * Future: the HTTP method mapper. Maps the protocol binding's
-     * {@code method} field to an HTTP verb (GET, POST, PUT, PATCH, DELETE).
-     */
-    private final Object httpMethodMapper;
-
-    /**
-     * Future: the HTTP path builder. Constructs the request path from
-     * the endpointRef and path template, substituting path parameters
-     * from MODEL-sourced arguments.
-     */
-    private final Object httpPathBuilder;
-
-    /**
-     * Future: the HTTP query parameter mapper. Maps MODEL-sourced
-     * arguments to query parameters for GET requests.
-     */
-    private final Object httpQueryMapper;
-
-    /**
-     * Future: the HTTP header mapper. Maps PRINCIPAL-sourced and
-     * SYSTEM-sourced arguments to HTTP headers.
-     */
-    private final Object httpHeaderMapper;
-
-    /**
-     * Future: the HTTP body mapper. Maps MODEL-sourced arguments
-     * to the JSON request body for POST/PUT/PATCH requests.
-     */
-    private final Object httpBodyMapper;
-
-    /**
-     * Future: the redirect prohibition policy. The REST adapter must
-     * not follow HTTP redirects (3xx responses). Redirects are treated
-     * as protocol errors.
-     */
-    private final boolean redirectProhibited;
-
-    /**
-     * Constructs a new RestInvocationAdapter skeleton.
-     *
-     * <p>All future implementation fields are initialized to null or
-     * default values. The adapter is registered with protocol
-     * {@link Protocol#REST} but cannot perform actual invocations.</p>
-     */
-    public RestInvocationAdapter() {
-        this.endpointResolver = null;
-        this.httpClient = null;
-        this.httpMethodMapper = null;
-        this.httpPathBuilder = null;
-        this.httpQueryMapper = null;
-        this.httpHeaderMapper = null;
-        this.httpBodyMapper = null;
-        this.redirectProhibited = true;
-        log.info("RestInvocationAdapter skeleton initialized");
-    }
+    private final ManifestRepository manifestRepository;
+    private final RestEndpointResolver endpointResolver;
+    private final RestHttpClient httpClient;
+    private final ObjectMapper objectMapper;
 
     @Override
     public Protocol protocol() {
         return Protocol.REST;
     }
 
-    /**
-     * Validates the REST protocol binding for structural, semantic, and
-     * security compliance.
-     *
-     * <p>This is a placeholder that returns success. When fully implemented,
-     * validation will include:</p>
-     * <ul>
-     * <li>Protocol is {@link Protocol#REST}.</li>
-     * <li>{@code endpointRef} references a pre-configured service registry
-     * entry (no arbitrary URLs in manifests).</li>
-     * <li>HTTP method is valid and consistent with the risk level.</li>
-     * <li>Path template, query mappings, header mappings, and body
-     * mappings are structurally valid.</li>
-     * <li>Redirect is prohibited in the HTTP client configuration.</li>
-     * </ul>
-     *
-     * @param binding the protocol binding to validate
-     * @return a valid validation report (placeholder)
-     */
     @Override
     public ValidationReport validate(ProtocolBinding binding) {
-        Objects.requireNonNull(binding, "binding must not be null");
-        log.debug("REST binding validation (placeholder): interface={}, method={}",
-                binding.interfaceName(), binding.method());
-
-        // Placeholder: always returns success
-        return ValidationReport.success();
+        List<String> errors = new ArrayList<>();
+        if (binding == null) {
+            return ValidationReport.failure(List.of("REST binding must not be null"));
+        }
+        if (binding.protocol() != Protocol.REST) errors.add("Protocol must be REST");
+        if (blank(binding.registryRef())) errors.add("REST endpoint reference must not be blank");
+        if (blank(binding.interfaceName()) || !binding.interfaceName().startsWith("/")) {
+            errors.add("REST path template must start with '/'");
+        }
+        if (blank(binding.method())
+                || !METHODS.contains(binding.method().trim().toUpperCase())) {
+            errors.add("REST method must be one of " + METHODS);
+        }
+        if (binding.arguments().size() != binding.parameterTypes().size()) {
+            errors.add("REST parameterTypes and arguments must have the same size");
+        }
+        return errors.isEmpty() ? ValidationReport.success() : ValidationReport.failure(errors);
     }
 
-    /**
-     * Invokes the target capability using REST over HTTP.
-     *
-     * <p>This method is not yet implemented. REST is an evolution protocol
-     *. The initial production release supports Dubbo only
-     *.</p>
-     *
-     * @param request the protocol-neutral invocation request
-     * @return never returns normally; always throws
-     * @throws UnsupportedOperationException always, as the REST adapter
-     * is not yet implemented
-     */
     @Override
     public InvocationResult invoke(InvocationRequest request) {
-        Objects.requireNonNull(request, "request must not be null");
-        log.error("REST adapter invoke called but not yet implemented: capability={}, version={}",
-                request.capabilityId(), request.capabilityVersion());
-        throw new UnsupportedOperationException(
-                "REST adapter not yet implemented");
+        long started = System.currentTimeMillis();
+        try {
+            CapabilityManifest manifest = manifestRepository
+                    .findByIdAndVersion(request.capabilityId(), request.capabilityVersion())
+                    .orElse(null);
+            if (manifest == null) {
+                return failure(ErrorCode.CAPABILITY_UNAVAILABLE,
+                        "Published manifest not found", started, "CAPABILITY_NOT_FOUND");
+            }
+            ProtocolBinding binding = manifest.spec().invocation();
+            ValidationReport validation = validate(binding);
+            if (!validation.valid()) {
+                return failure(ErrorCode.PROTOCOL_ERROR,
+                        "REST binding validation failed", started, "INVALID_BINDING");
+            }
+            long timeoutMs = request.deadlineBudget().remainingMs();
+            if (timeoutMs <= 0) {
+                return failure(ErrorCode.PROVIDER_TIMEOUT,
+                        "REST provider timed out", started, "DEADLINE_EXPIRED");
+            }
+
+            Map<String, Object> values = namedArguments(binding.arguments(), request.boundArguments());
+            String method = binding.method().trim().toUpperCase();
+            URI uri = buildUri(endpointResolver.resolve(binding.registryRef()),
+                    binding.interfaceName(), method, values, request.systemContext().locale());
+            HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
+                    .header("Accept", "application/json")
+                    .header("X-Trace-Id", request.systemContext().traceId());
+            if (request.idempotencyKey() != null) {
+                builder.header("Idempotency-Key", request.idempotencyKey());
+            }
+            if (method.equals("GET") || method.equals("DELETE")) {
+                builder.method(method, HttpRequest.BodyPublishers.noBody());
+            } else {
+                builder.header("Content-Type", contentType(binding.serialization()));
+                builder.method(method, HttpRequest.BodyPublishers.ofString(
+                        objectMapper.writeValueAsString(values)));
+            }
+
+            RestHttpResponse response = httpClient.send(builder.build(), timeoutMs);
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                return failure(classifyStatus(response.statusCode()),
+                        stableStatusMessage(response.statusCode()), started,
+                        "HTTP_" + response.statusCode());
+            }
+            Object data = response.body() == null || response.body().isBlank()
+                    ? null : objectMapper.readValue(response.body(), Object.class);
+            return new InvocationResult(data, "HTTP_" + response.statusCode(), null, null,
+                    Map.of("durationMs", elapsed(started),
+                            "statusCode", String.valueOf(response.statusCode()),
+                            "method", method));
+        } catch (java.net.http.HttpTimeoutException e) {
+            return failure(ErrorCode.PROVIDER_TIMEOUT,
+                    "REST provider timed out", started, "TIMEOUT");
+        } catch (java.net.ConnectException e) {
+            return failure(ErrorCode.PROVIDER_TIMEOUT,
+                    "REST provider unavailable", started, "CONNECT_FAILED");
+        } catch (Exception e) {
+            log.warn("REST invocation failed: capability={}, reason={}",
+                    request.capabilityId(), e.getClass().getSimpleName());
+            return failure(ErrorCode.PROTOCOL_ERROR,
+                    "REST provider invocation failed", started, "INVOCATION_FAILED");
+        }
     }
 
-    // --- Future implementation helper methods ---
-
-    /**
-     * Future: Resolves the REST endpoint URL from the endpointRef.
-     *
-     * <p>Manifests must not carry arbitrary URLs. The endpointRef references
-     * a pre-configured service registry entry. This method resolves the
-     * reference to a concrete base URL.</p>
-     *
-     * @param endpointRef the registry reference from the protocol binding
-     * @return the resolved base URL (not yet implemented)
-     */
-    @SuppressWarnings("unused")
-    private String resolveEndpoint(String endpointRef) {
-        throw new UnsupportedOperationException(
-                "REST endpoint resolution not yet implemented");
+    private URI buildUri(URI base, String pathTemplate, String method,
+                         Map<String, Object> values, String locale) {
+        String path = pathTemplate;
+        for (Map.Entry<String, Object> entry : values.entrySet()) {
+            String encoded = encode(String.valueOf(entry.getValue()));
+            path = path.replace("{" + entry.getKey() + "}", encoded);
+        }
+        URI resolved = base.resolve(path.startsWith("/") ? path.substring(1) : path);
+        if (!method.equals("GET") && !method.equals("DELETE")) return resolved;
+        String query = values.entrySet().stream()
+                .filter(entry -> !pathTemplate.contains("{" + entry.getKey() + "}"))
+                .map(entry -> encode(entry.getKey()) + "=" + encode(String.valueOf(entry.getValue())))
+                .collect(java.util.stream.Collectors.joining("&"));
+        String localeQuery = "locale=" + encode(locale);
+        query = query.isBlank() ? localeQuery : query + "&" + localeQuery;
+        return URI.create(resolved + "?" + query);
     }
 
-    /**
-     * Future: Maps the protocol binding method to an HTTP verb.
-     *
-     * @param bindingMethod the method from the protocol binding
-     * @return the HTTP method string (not yet implemented)
-     */
-    @SuppressWarnings("unused")
-    private String mapHttpMethod(String bindingMethod) {
-        throw new UnsupportedOperationException(
-                "REST HTTP method mapping not yet implemented");
+    private static Map<String, Object> namedArguments(List<ArgumentBinding> bindings,
+                                                       List<Object> values) {
+        if (bindings.size() != values.size()) {
+            throw new IllegalArgumentException("REST argument count does not match binding");
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (int i = 0; i < bindings.size(); i++) {
+            result.put(bindings.get(i).name(), values.get(i));
+        }
+        return result;
     }
 
-    /**
-     * Future: Builds the HTTP request path from the endpointRef and path
-     * template, substituting path parameters from MODEL-sourced arguments.
-     *
-     * @param pathTemplate the path template from the protocol binding
-     * @param arguments the bound arguments
-     * @return the constructed path (not yet implemented)
-     */
-    @SuppressWarnings("unused")
-    private String buildHttpPath(String pathTemplate, List<Object> arguments) {
-        throw new UnsupportedOperationException(
-                "REST HTTP path building not yet implemented");
+    private static ErrorCode classifyStatus(int status) {
+        if (status == 408 || status == 504) return ErrorCode.PROVIDER_TIMEOUT;
+        if (status == 429) return ErrorCode.RATE_LIMITED;
+        if (status == 401 || status == 403) return ErrorCode.PERMISSION_DENIED;
+        if (status >= 400 && status < 500) return ErrorCode.PROVIDER_REJECTED;
+        return ErrorCode.PROTOCOL_ERROR;
     }
 
-    /**
-     * Future: Builds HTTP query parameters from MODEL-sourced arguments.
-     *
-     * @param arguments the bound arguments
-     * @return the query parameter map (not yet implemented)
-     */
-    @SuppressWarnings("unused")
-    private Map<String, String> buildQueryParams(List<Object> arguments) {
-        throw new UnsupportedOperationException(
-                "REST query parameter mapping not yet implemented");
+    private static String stableStatusMessage(int status) {
+        if (status == 408 || status == 504) return "REST provider timed out";
+        if (status == 429) return "REST provider rate limit reached";
+        if (status == 401 || status == 403) return "REST provider rejected authorization";
+        return status >= 500 ? "REST provider returned a server error"
+                : "REST provider rejected the request";
     }
 
-    /**
-     * Future: Builds HTTP headers from PRINCIPAL-sourced and SYSTEM-sourced
-     * arguments.
-     *
-     * @param arguments the bound arguments
-     * @return the header map (not yet implemented)
-     */
-    @SuppressWarnings("unused")
-    private Map<String, String> buildHeaders(List<Object> arguments) {
-        throw new UnsupportedOperationException(
-                "REST header mapping not yet implemented");
+    private static InvocationResult failure(ErrorCode code, String message,
+                                            long started, String reason) {
+        return new InvocationResult(null, "ERROR", code, message,
+                Map.of("durationMs", elapsed(started), "reason", reason));
     }
 
-    /**
-     * Future: Builds the HTTP request body from MODEL-sourced arguments.
-     *
-     * @param arguments the bound arguments
-     * @return the request body as a JSON-compatible object (not yet implemented)
-     */
-    @SuppressWarnings("unused")
-    private Object buildRequestBody(List<Object> arguments) {
-        throw new UnsupportedOperationException(
-                "REST body mapping not yet implemented");
+    private static String elapsed(long started) {
+        return String.valueOf(System.currentTimeMillis() - started);
+    }
+
+    private static String contentType(String serialization) {
+        return blank(serialization) ? "application/json" : serialization;
+    }
+
+    private static String encode(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8)
+                .replace("+", "%20");
+    }
+
+    private static boolean blank(String value) {
+        return value == null || value.isBlank();
     }
 }

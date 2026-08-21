@@ -15,7 +15,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.UUID;
 import java.time.Duration;
 import reactor.core.publisher.Mono;
 
@@ -53,15 +52,45 @@ public final class McpWebMvcTransportAdapter {
                                      TelemetryPort telemetry,
                                      int maxSessions,
                                      Duration idleTimeout) {
+        this(objectMapper, gatewayAdapter, authenticationPort, telemetry, maxSessions,
+                idleTimeout, Duration.ofSeconds(30), Duration.ofSeconds(5), "local",
+                McpRateLimiter.allowAll());
+    }
+
+    public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
+                                     McpGatewayAdapter gatewayAdapter,
+                                     AuthenticationPort authenticationPort,
+                                     TelemetryPort telemetry,
+                                     int maxSessions,
+                                     Duration idleTimeout,
+                                     Duration callTimeout) {
+        this(objectMapper, gatewayAdapter, authenticationPort, telemetry, maxSessions,
+                idleTimeout, callTimeout, Duration.ofSeconds(5), "local",
+                McpRateLimiter.allowAll());
+    }
+
+    public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
+                                     McpGatewayAdapter gatewayAdapter,
+                                     AuthenticationPort authenticationPort,
+                                     TelemetryPort telemetry,
+                                     int maxSessions,
+                                     Duration idleTimeout,
+                                     Duration callTimeout,
+                                     Duration closeTimeout,
+                                     String nodeId,
+                                     McpRateLimiter rateLimiter) {
         this.objectMapper = Objects.requireNonNull(objectMapper);
         Objects.requireNonNull(gatewayAdapter);
         this.transportProvider = new AuthenticatedWebMvcSseServerTransportProvider(
                 objectMapper, authenticationPort, telemetry,
-                "/mcp/message", "/mcp/sse", maxSessions, idleTimeout);
+                "/mcp/message", "/mcp/sse", maxSessions, idleTimeout, callTimeout,
+                closeTimeout, nodeId, rateLimiter);
         McpServer.AsyncSpecification specification = McpServer.async(transportProvider)
                 .serverInfo("ai-capability-gateway", "0.1.0")
                 .capabilities(McpSchema.ServerCapabilities.builder().tools(false).build());
-        for (McpMetaToolCatalog.McpTool tool : gatewayAdapter.toolsList()) {
+        List<McpMetaToolCatalog.McpTool> tools = gatewayAdapter.toolsList();
+        assertFixedTools(tools);
+        for (McpMetaToolCatalog.McpTool tool : tools) {
             McpSchema.Tool sdkTool = sdkTool(tool);
             specification.tool(sdkTool, (exchange, arguments) -> Mono.deferContextual(
                     context -> Mono.just(invoke(gatewayAdapter, tool.name(),
@@ -102,7 +131,8 @@ public final class McpWebMvcTransportAdapter {
                                             RequestContext context,
                                             Map<String, Object> arguments) {
         McpGatewayAdapter.McpResult result = gatewayAdapter.invoke(
-                toolName, context, UUID.randomUUID().toString(),
+                toolName, context, McpRequestKeys.requestId(context, toolName,
+                        arguments == null ? Map.of() : arguments),
                 arguments == null ? Map.of() : arguments);
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("status", result.status());
@@ -129,6 +159,15 @@ public final class McpWebMvcTransportAdapter {
                     objectMapper.writeValueAsString(tool.inputSchema()));
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("MCP tool schema serialization failed: " + tool.name(), e);
+        }
+    }
+
+    private static void assertFixedTools(List<McpMetaToolCatalog.McpTool> tools) {
+        if (tools == null || tools.size() != 2
+                || !"gateway_resolve".equals(tools.get(0).name())
+                || !"gateway_call".equals(tools.get(1).name())) {
+            throw new IllegalStateException(
+                    "MCP must expose exactly gateway_resolve and gateway_call");
         }
     }
 }

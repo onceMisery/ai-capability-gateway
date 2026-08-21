@@ -7,39 +7,43 @@ import com.ai.gateway.domain.port.TelemetryPort;
 import com.ai.gateway.domain.service.PrincipalFingerprint;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.ServletException;
 import io.modelcontextprotocol.spec.McpError;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.modelcontextprotocol.spec.McpServerSession;
 import io.modelcontextprotocol.spec.McpServerTransport;
 import io.modelcontextprotocol.spec.McpServerTransportProvider;
+import jakarta.servlet.ServletException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.servlet.function.RouterFunction;
 import org.springframework.web.servlet.function.RouterFunctions;
 import org.springframework.web.servlet.function.ServerRequest;
 import org.springframework.web.servlet.function.ServerResponse;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
-import java.time.Duration;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 基于 MCP 0.10 WebMVC SSE 的传输提供者，提供经过认证、与主体绑定的会话。
+ * 基于 MCP WebMVC SSE 的认证传输提供者。
  *
- * <p>每个 SSE 连接都需通过认证，且会话与认证主体的指纹绑定：后续消息若由不同主体携带，将被拒绝，
- * 以防止会话劫持。会话受最大并发数与空闲超时约束，并通过 Semaphore 进行容量控制。</p>
- *
- * @author cmiracle@163.com
- * @since 0.1.0
+ * <p>会话是本机资源，受生命周期状态、容量、空闲回收和单会话并发限制。
+ * MCP 入口只接受 Bearer 凭证，后续消息会重新认证并校验主体指纹。</p>
  */
 public final class AuthenticatedWebMvcSseServerTransportProvider
         implements McpServerTransportProvider {
@@ -53,26 +57,20 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
     private final String messageEndpoint;
     private final String sseEndpoint;
     private final Duration idleTimeout;
+    private final Duration callTimeout;
+    private final Duration closeTimeout;
+    private final String nodeId;
+    private final McpRateLimiter rateLimiter;
     private final RouterFunction<ServerResponse> routerFunction;
     private final ConcurrentHashMap<String, SessionBinding> sessions =
             new ConcurrentHashMap<>();
     private final Semaphore sessionSlots;
+    private final ScheduledExecutorService reaper;
+    private final Object lifecycleLock = new Object();
+    private final AtomicReference<Lifecycle> lifecycle =
+            new AtomicReference<>(Lifecycle.RUNNING);
     private volatile McpServerSession.Factory sessionFactory;
-    private volatile boolean closing;
 
-    /**
-     * 构造传输提供者并注册 SSE 与消息路由。
-     *
-     * <p>消息端点与 SSE 端点必须为绝对路径，且最大会话数与空闲超时必须为正。</p>
-     *
-     * @param objectMapper       JSON 序列化器
-     * @param authenticationPort 认证端口
-     * @param telemetry         遥测端口
-     * @param messageEndpoint   消息接收端点（绝对路径）
-     * @param sseEndpoint       SSE 连接端点（绝对路径）
-     * @param maxSessions       最大并发会话数（必须为正）
-     * @param idleTimeout       会话空闲超时（必须为正）
-     */
     public AuthenticatedWebMvcSseServerTransportProvider(
             ObjectMapper objectMapper,
             AuthenticationPort authenticationPort,
@@ -81,6 +79,37 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             String sseEndpoint,
             int maxSessions,
             Duration idleTimeout) {
+        this(objectMapper, authenticationPort, telemetry, messageEndpoint, sseEndpoint,
+                maxSessions, idleTimeout, Duration.ofSeconds(30),
+                Duration.ofSeconds(5), "local", McpRateLimiter.allowAll());
+    }
+
+    public AuthenticatedWebMvcSseServerTransportProvider(
+            ObjectMapper objectMapper,
+            AuthenticationPort authenticationPort,
+            TelemetryPort telemetry,
+            String messageEndpoint,
+            String sseEndpoint,
+            int maxSessions,
+            Duration idleTimeout,
+            Duration callTimeout) {
+        this(objectMapper, authenticationPort, telemetry, messageEndpoint, sseEndpoint,
+                maxSessions, idleTimeout, callTimeout, Duration.ofSeconds(5),
+                "local", McpRateLimiter.allowAll());
+    }
+
+    public AuthenticatedWebMvcSseServerTransportProvider(
+            ObjectMapper objectMapper,
+            AuthenticationPort authenticationPort,
+            TelemetryPort telemetry,
+            String messageEndpoint,
+            String sseEndpoint,
+            int maxSessions,
+            Duration idleTimeout,
+            Duration callTimeout,
+            Duration closeTimeout,
+            String nodeId,
+            McpRateLimiter rateLimiter) {
         this.objectMapper = Objects.requireNonNull(objectMapper);
         this.authenticationPort = Objects.requireNonNull(authenticationPort);
         this.telemetry = Objects.requireNonNull(telemetry);
@@ -89,15 +118,25 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         if (maxSessions <= 0) {
             throw new IllegalArgumentException("maxSessions must be positive");
         }
-        this.idleTimeout = Objects.requireNonNull(idleTimeout);
-        if (idleTimeout.isZero() || idleTimeout.isNegative()) {
-            throw new IllegalArgumentException("idleTimeout must be positive");
-        }
+        this.idleTimeout = requirePositive(idleTimeout, "idleTimeout");
+        this.callTimeout = requirePositive(callTimeout, "callTimeout");
+        this.closeTimeout = requirePositive(closeTimeout, "closeTimeout");
+        this.nodeId = requireNodeId(nodeId);
+        this.rateLimiter = Objects.requireNonNull(rateLimiter);
         this.sessionSlots = new Semaphore(maxSessions);
+        this.reaper = Executors.newSingleThreadScheduledExecutor(task -> {
+            Thread thread = new Thread(task, "gateway-mcp-session-reaper");
+            thread.setDaemon(true);
+            return thread;
+        });
         this.routerFunction = RouterFunctions.route()
                 .GET(this.sseEndpoint, this::handleSseConnection)
                 .POST(this.messageEndpoint, this::handleMessage)
                 .build();
+        long intervalMillis = Math.max(100L,
+                Math.min(Math.max(1L, idleTimeout.toMillis() / 2L), 60_000L));
+        this.reaper.scheduleAtFixedRate(this::evictExpiredSessions,
+                intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);
         telemetry.recordValue("gateway.mcp.sessions.capacity", maxSessions,
                 Map.of("resource", "sse"));
         recordSessionCount();
@@ -108,16 +147,10 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         this.sessionFactory = Objects.requireNonNull(sessionFactory);
     }
 
-    /**
-     * 返回用于挂载到 Spring WebMVC 的路由函数（SSE 与消息端点）。
-     */
     public RouterFunction<ServerResponse> getRouterFunction() {
         return routerFunction;
     }
 
-    /**
-     * 返回当前活跃会话数。
-     */
     public int activeSessionCount() {
         return sessions.size();
     }
@@ -132,39 +165,53 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
 
     @Override
     public Mono<Void> closeGracefully() {
-        closing = true;
-        List<McpServerSession> closingSessions = new ArrayList<>();
-        for (String sessionId : List.copyOf(sessions.keySet())) {
-            SessionBinding binding = removeSession(sessionId);
-            if (binding != null) {
-                closingSessions.add(binding.session());
+        List<SessionBinding> closingSessions = new ArrayList<>();
+        synchronized (lifecycleLock) {
+            if (!lifecycle.compareAndSet(Lifecycle.RUNNING, Lifecycle.DRAINING)) {
+                return Mono.empty();
+            }
+            reaper.shutdownNow();
+            for (Map.Entry<String, SessionBinding> entry :
+                    List.copyOf(sessions.entrySet())) {
+                SessionBinding binding = removeSession(entry.getKey(), entry.getValue());
+                if (binding != null) {
+                    closingSessions.add(binding);
+                }
             }
         }
         return Flux.fromIterable(closingSessions)
-                .flatMap(McpServerSession::closeGracefully)
+                .flatMap(this::closeBinding)
+                .doFinally(signal -> lifecycle.set(Lifecycle.CLOSED))
                 .then();
     }
 
-    /**
-     * 处理 SSE 连接：认证、容量控制后建立并绑定会话。
-     */
     private ServerResponse handleSseConnection(ServerRequest request) {
-        // 关闭中直接拒绝新连接
-        if (closing) {
+        if (!isRunning()) {
             return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
-        Principal principal = authenticate(McpRequestContextHolder.current());
+        RequestContext requestContext = McpRequestContextHolder.current();
+        if (!hasBearerAuthorization(requestContext)) {
+            return unauthorized();
+        }
+        Principal principal = authenticate(requestContext);
         if (principal == null) {
             return unauthorized();
         }
-        // 接纳新连接前先回收过期会话，释放容量
-        evictExpiredSessions();
-        if (!sessionSlots.tryAcquire()) {
+        if (!rateLimiter.tryAcquire(McpRateLimiter.SSE)) {
             telemetry.increment("gateway.mcp.sessions",
-                    Map.of("outcome", "capacity_rejected"));
-            return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS).build();
+                    Map.of("outcome", "rate_limited"));
+            return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(new McpError("MCP SSE rate limit reached"));
         }
-        String sessionId = UUID.randomUUID().toString();
+        evictExpiredSessions();
+        synchronized (lifecycleLock) {
+            if (!isRunning() || !sessionSlots.tryAcquire()) {
+                telemetry.increment("gateway.mcp.sessions",
+                        Map.of("outcome", "capacity_rejected"));
+                return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS).build();
+            }
+        }
+        String sessionId = nodeId + "." + UUID.randomUUID();
         String principalFingerprint = PrincipalFingerprint.digest(principal);
         try {
             return ServerResponse.sse(sse -> {
@@ -173,8 +220,18 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
                     McpServerSession session = Objects.requireNonNull(sessionFactory,
                             "MCP session factory is not initialized").create(transport);
                     SessionBinding binding = new SessionBinding(
-                            session, principalFingerprint, System.currentTimeMillis());
-                    sessions.put(sessionId, binding);
+                            session, principalFingerprint, System.nanoTime());
+                    synchronized (lifecycleLock) {
+                        if (!isRunning()) {
+                            session.closeGracefully().subscribe(
+                                    null, error -> telemetry.increment(
+                                            "gateway.mcp.sessions",
+                                            Map.of("outcome", "close_failed")));
+                            removeOrReleaseUnpublished(sessionId);
+                            return;
+                        }
+                        sessions.put(sessionId, binding);
+                    }
                     recordSessionCount();
                     telemetry.increment("gateway.mcp.sessions",
                             Map.of("outcome", "opened"));
@@ -193,66 +250,93 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
-    /**
-     * 处理客户端消息：定位会话、校验主体一致性后委派给 MCP 会话处理。
-     */
     private ServerResponse handleMessage(ServerRequest request) {
-        if (closing) {
+        if (!isRunning()) {
             return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
-        // 优先取查询参数 sessionId，缺失时回退到 Mcp-Session-Id 请求头
-        String sessionId = request.param("sessionId").orElse(null);
+        RequestContext requestContext = McpRequestContextHolder.current();
+        if (!hasBearerAuthorization(requestContext)) {
+            return unauthorized();
+        }
+        String sessionId = request.headers().firstHeader("Mcp-Session-Id");
         if (sessionId == null || sessionId.isBlank()) {
-            sessionId = request.headers().firstHeader("Mcp-Session-Id");
+            sessionId = request.param("sessionId").orElse(null);
         }
         if (sessionId == null || sessionId.isBlank()) {
             return ServerResponse.badRequest().body(new McpError("Session ID missing"));
         }
         SessionBinding binding = sessions.get(sessionId);
         if (binding == null) {
+            if (isForeignSession(sessionId)) {
+                telemetry.increment("gateway.mcp.sessions",
+                        Map.of("outcome", "wrong_node"));
+                return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(new McpError("MCP_SESSION_WRONG_NODE"));
+            }
             return ServerResponse.status(HttpStatus.NOT_FOUND)
                     .body(new McpError("Session not found"));
         }
         if (binding.isExpired(idleTimeout)) {
-            removeAndClose(sessionId);
-            telemetry.increment("gateway.mcp.sessions", Map.of("outcome", "expired"));
+            if (removeAndClose(sessionId, binding)) {
+                telemetry.increment("gateway.mcp.sessions",
+                        Map.of("outcome", "expired"));
+            }
             return ServerResponse.status(HttpStatus.GONE)
                     .body(new McpError("Session expired"));
         }
-        RequestContext requestContext = McpRequestContextHolder.current();
         Principal principal = authenticate(requestContext);
         if (principal == null) {
             return unauthorized();
         }
-        // 主体指纹不匹配则拒绝，防止会话被其他主体劫持
+        if (!rateLimiter.tryAcquire(McpRateLimiter.MESSAGE)) {
+            telemetry.increment("gateway.mcp.calls",
+                    Map.of("outcome", "rate_limited"));
+            return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS)
+                    .body(new McpError("MCP message rate limit reached"));
+        }
         if (!PrincipalFingerprint.matches(binding.principalFingerprint(),
                 PrincipalFingerprint.digest(principal))) {
             telemetry.increment("gateway.mcp.sessions",
                     Map.of("outcome", "principal_mismatch"));
             return ServerResponse.status(HttpStatus.FORBIDDEN).build();
         }
-
-        binding.touch();
+        if (!binding.tryAcquire()) {
+            telemetry.increment("gateway.mcp.calls",
+                    Map.of("outcome", "in_flight_rejected"));
+            return ServerResponse.status(HttpStatus.TOO_MANY_REQUESTS).build();
+        }
         try {
             String body = request.body(String.class);
             McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(
                     objectMapper, body);
-            binding.session().handle(message)
+            Mono<Void> handling = binding.session().handle(message);
+            if (handling == null) {
+                return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(new McpError("MCP message handling failed"));
+            }
+            handling
                     .contextWrite(context -> McpRequestContextHolder.bindAuthenticated(
                             context, requestContext, principal))
+                    .timeout(callTimeout)
                     .block();
+            binding.touch();
             return ServerResponse.ok().build();
-        } catch (IllegalArgumentException | java.io.IOException | ServletException e) {
+        } catch (IllegalArgumentException | IOException | ServletException e) {
             return ServerResponse.badRequest().body(new McpError("Invalid message format"));
         } catch (RuntimeException e) {
+            if (Exceptions.unwrap(e) instanceof TimeoutException) {
+                telemetry.increment("gateway.mcp.calls",
+                        Map.of("outcome", "timeout"));
+                return ServerResponse.status(HttpStatus.GATEWAY_TIMEOUT)
+                        .body(new McpError("MCP call timeout"));
+            }
             return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(new McpError("MCP message handling failed"));
+        } finally {
+            binding.release();
         }
     }
 
-    /**
-     * 执行认证；认证失败或异常时返回 {@code null}。
-     */
     private Principal authenticate(RequestContext requestContext) {
         try {
             return authenticationPort.authenticate(requestContext);
@@ -261,53 +345,68 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
-    /**
-     * 返回未认证（401）响应，并携带 Bearer 质询头。
-     */
     private ServerResponse unauthorized() {
         return ServerResponse.status(HttpStatus.UNAUTHORIZED)
                 .header("WWW-Authenticate", "Bearer")
                 .build();
     }
 
-    /**
-     * 扫描并移除所有已过期会话。
-     */
     private void evictExpiredSessions() {
         for (Map.Entry<String, SessionBinding> entry : sessions.entrySet()) {
-            if (entry.getValue().isExpired(idleTimeout)) {
-                removeAndClose(entry.getKey());
-                telemetry.increment("gateway.mcp.sessions", Map.of("outcome", "expired"));
+            SessionBinding binding = entry.getValue();
+            if (binding.isExpired(idleTimeout)
+                    && removeAndClose(entry.getKey(), binding)) {
+                telemetry.increment("gateway.mcp.sessions",
+                        Map.of("outcome", "expired"));
             }
         }
     }
 
-    /**
-     * 移除会话并尝试优雅关闭其底层 MCP 会话。
-     */
     private void removeAndClose(String sessionId) {
-        SessionBinding binding = removeSession(sessionId);
+        SessionBinding binding = sessions.get(sessionId);
         if (binding != null) {
-            binding.session().closeGracefully().subscribe();
+            removeAndClose(sessionId, binding);
         }
     }
 
-    /**
-     * 从会话表移除会话并释放一个容量槽位。
-     */
+    private boolean removeAndClose(String sessionId, SessionBinding expected) {
+        SessionBinding binding = removeSession(sessionId, expected);
+        if (binding == null) {
+            return false;
+        }
+        closeBinding(binding).subscribe();
+        return true;
+    }
+
     private SessionBinding removeSession(String sessionId) {
-        SessionBinding removed = sessions.remove(sessionId);
-        if (removed != null) {
+        SessionBinding binding = sessions.get(sessionId);
+        return binding == null ? null : removeSession(sessionId, binding);
+    }
+
+    private SessionBinding removeSession(String sessionId, SessionBinding expected) {
+        if (expected == null || !sessions.remove(sessionId, expected)) {
+            return null;
+        }
+        if (expected.claimClose()) {
             sessionSlots.release();
             recordSessionCount();
-            telemetry.increment("gateway.mcp.sessions", Map.of("outcome", "closed"));
+            telemetry.increment("gateway.mcp.sessions",
+                    Map.of("outcome", "closed"));
         }
-        return removed;
+        return expected;
     }
 
-    /**
-     * 若会话尚未发布到会话表，则仅释放容量槽位（避免重复释放）。
-     */
+    private Mono<Void> closeBinding(SessionBinding binding) {
+        if (!binding.closeClaimed()) {
+            return Mono.empty();
+        }
+        return binding.session().closeGracefully()
+                .timeout(closeTimeout)
+                .doOnError(error -> telemetry.increment("gateway.mcp.sessions",
+                        Map.of("outcome", "close_failed")))
+                .onErrorComplete();
+    }
+
     private void removeOrReleaseUnpublished(String sessionId) {
         if (removeSession(sessionId) == null) {
             sessionSlots.release();
@@ -315,17 +414,21 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
-    /**
-     * 记录当前活跃会话数到遥测。
-     */
     private void recordSessionCount() {
         telemetry.recordValue("gateway.mcp.sessions.active", sessions.size(),
                 Map.of("resource", "sse"));
     }
 
-    /**
-     * 校验端点必须为以 {@code /} 开头的绝对路径。
-     */
+    private boolean isRunning() {
+        return lifecycle.get() == Lifecycle.RUNNING;
+    }
+
+    private static boolean hasBearerAuthorization(RequestContext context) {
+        String value = context.header("Authorization");
+        return value != null && value.regionMatches(true, 0, "Bearer ", 0, 7)
+                && value.substring(7).trim().length() > 0;
+    }
+
     private static String requirePath(String value, String name) {
         if (value == null || value.isBlank() || value.charAt(0) != '/') {
             throw new IllegalArgumentException(name + " must be an absolute path");
@@ -333,19 +436,45 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         return value;
     }
 
-    /**
-     * 会话绑定：关联 MCP 会话、主体指纹与最近访问时间，用于过期与主体一致性校验。
-     */
+    private static String requireNodeId(String value) {
+        if (value == null || value.isBlank()
+                || value.length() > 64
+                || !value.matches("[A-Za-z0-9._-]+")) {
+            throw new IllegalArgumentException(
+                    "nodeId must contain only letters, digits, dot, underscore or dash");
+        }
+        return value;
+    }
+
+    private boolean isForeignSession(String sessionId) {
+        int separator = sessionId == null ? -1 : sessionId.indexOf('.');
+        return separator > 0 && !nodeId.equals(sessionId.substring(0, separator));
+    }
+
+    private static Duration requirePositive(Duration value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.isZero() || value.isNegative()) {
+            throw new IllegalArgumentException(name + " must be positive");
+        }
+        return value;
+    }
+
+    private enum Lifecycle {
+        RUNNING, DRAINING, CLOSED
+    }
+
     private static final class SessionBinding {
         private final McpServerSession session;
         private final String principalFingerprint;
-        private final AtomicLong lastAccessMillis;
+        private final AtomicLong lastAccessNanos;
+        private final Semaphore inFlight = new Semaphore(1);
+        private final AtomicBoolean closeClaimed = new AtomicBoolean();
 
         private SessionBinding(McpServerSession session, String principalFingerprint,
-                               long lastAccessMillis) {
+                               long lastAccessNanos) {
             this.session = session;
             this.principalFingerprint = principalFingerprint;
-            this.lastAccessMillis = new AtomicLong(lastAccessMillis);
+            this.lastAccessNanos = new AtomicLong(lastAccessNanos);
         }
 
         private McpServerSession session() {
@@ -357,17 +486,30 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
 
         private void touch() {
-            lastAccessMillis.set(System.currentTimeMillis());
+            lastAccessNanos.set(System.nanoTime());
         }
 
         private boolean isExpired(Duration timeout) {
-            return System.currentTimeMillis() - lastAccessMillis.get() > timeout.toMillis();
+            return System.nanoTime() - lastAccessNanos.get() > timeout.toNanos();
+        }
+
+        private boolean tryAcquire() {
+            return inFlight.tryAcquire();
+        }
+
+        private void release() {
+            inFlight.release();
+        }
+
+        private boolean claimClose() {
+            return closeClaimed.compareAndSet(false, true);
+        }
+
+        private boolean closeClaimed() {
+            return closeClaimed.get();
         }
     }
 
-    /**
-     * 基于 SSE 构建器的 MCP 传输实现，负责消息发送与连接关闭。
-     */
     private final class SessionTransport implements McpServerTransport {
         private final String sessionId;
         private final ServerResponse.SseBuilder sse;

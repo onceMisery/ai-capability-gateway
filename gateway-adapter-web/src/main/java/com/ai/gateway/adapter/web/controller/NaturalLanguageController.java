@@ -10,8 +10,6 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import jakarta.servlet.http.HttpServletRequest;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,37 +24,36 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
- * REST controller for the natural-language query API.
+ * 自然语言查询 API 的 REST 控制器。
  *
- * <p>This controller exposes two endpoints:</p>
+ * <p>该控制器暴露两个端点：</p>
  * <ul>
- * <li>{@code POST /api/v1/natural-language/queries} — accepts a natural-language
- * query and routes it through the 11-step pipeline.</li>
+ * <li>{@code POST /api/v1/natural-language/queries} — 接受自然语言查询并
+ * 将其路由到 11 步流水线。</li>
  * <li>{@code POST /api/v1/natural-language/interactions/{interactionId}/messages}
- * — continues a clarification session with additional user input
- *.</li>
+ * — 使用额外的用户输入继续澄清会话。</li>
  * </ul>
  *
- * <p>The response format follows :</p>
+ * <p>响应格式如下：</p>
  * <ul>
- * <li>{@code COMPLETED} — HTTP 200 with structured result data.</li>
- * <li>{@code CLARIFICATION_REQUIRED} — HTTP 200 with a clarification question
- * and interactionId.</li>
- * <li>{@code NO_MATCH} — HTTP 200 with a no-match indicator.</li>
- * <li>{@code ERROR} — HTTP 200 with a stable error code and message.</li>
+ * <li>{@code COMPLETED} — HTTP 200，携带结构化结果数据。</li>
+ * <li>{@code CLARIFICATION_REQUIRED} — HTTP 200，携带澄清问题与 interactionId。</li>
+ * <li>{@code NO_MATCH} — HTTP 200，携带无匹配指示。</li>
+ * <li>{@code ERROR} — HTTP 200，携带稳定的错误码与消息。</li>
  * </ul>
  *
- * <p>The controller never exposes: the original Prompt, the full candidate set,
- * the protocol binding, or any internal stack trace.</p>
+ * <p>该控制器绝不暴露：原始 Prompt、完整候选集、协议绑定或任何内部堆栈跟踪。</p>
  *
+ * @author cmiracle@163.com
  * @since 0.1.0
  */
 @RestController
 @RequestMapping("/api/v1/natural-language")
+@Slf4j
 public class NaturalLanguageController {
-
-    private static final Logger log = LoggerFactory.getLogger(NaturalLanguageController.class);
 
     private static final String AUTH_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
@@ -67,13 +64,13 @@ public class NaturalLanguageController {
     private final AuthenticationPort authenticationPort;
 
     /**
-     * Constructs a new NaturalLanguageController.
+     * 构造新的 NaturalLanguageController。
      *
-     * @param nlQueryUseCase the natural-language query use case
-     * @param clarificationUseCase the clarification continuation use case
-     * @param requestContextFactory the factory adapting servlet requests to
-     * the domain {@link RequestContext}
-     * @throws NullPointerException if any argument is null
+     * @param nlQueryUseCase 自然语言查询用例
+     * @param clarificationUseCase 澄清续聊用例
+     * @param requestContextFactory 将 Servlet 请求适配为领域 {@link RequestContext} 的工厂
+     * @param authenticationPort 用于构建 Principal 的身份认证端口
+     * @throws NullPointerException 任意参数为 null 时抛出
      */
     public NaturalLanguageController(NaturalLanguageQueryUseCase nlQueryUseCase,
                                      ClarificationUseCase clarificationUseCase,
@@ -90,14 +87,11 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Accepts a natural-language query and routes it through the complete
-     * 11-step pipeline.
+     * 接受自然语言查询并将其路由到完整的 11 步流水线。
      *
-     * @param request the query request containing requestId, text, locale, timezone
-     * @param authHeader the Authorization header (Bearer token)
-     * @param servletRequest the underlying servlet request used to build the
-     * {@link RequestContext}
-     * @return the query result in the response format
+     * @param request 含 requestId、text、locale、timezone 的查询请求
+     * @param servletRequest 用于构建 {@link RequestContext} 的底层 Servlet 请求
+     * @return 按响应格式返回的查询结果
      */
     @PostMapping("/queries")
     public ResponseEntity<Map<String, Object>> query(
@@ -117,12 +111,11 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Continues a clarification session with additional user input
+     * 使用额外的用户输入继续澄清会话。
      *
-     * @param interactionId the clarification interaction ID
-     * @param request the message request containing the user's additional text
-     * @param authHeader the Authorization header (Bearer token)
-     * @return the clarification result in the response format
+     * @param interactionId 澄清会话交互 ID
+     * @param request 含用户补充文本的消息请求
+     * @return 按响应格式返回的澄清结果
      */
     @PostMapping("/interactions/{interactionId}/messages")
     public ResponseEntity<Map<String, Object>> continueClarification(
@@ -145,13 +138,12 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Builds the HTTP response for a query result.
+     * 构建查询结果的 HTTP 响应。
      *
-     * <p>The response never exposes the Prompt, the full candidate set,
-     * the protocol binding, or internal stack traces.</p>
+     * <p>响应绝不暴露 Prompt、完整候选集、协议绑定或内部堆栈跟踪。</p>
      *
-     * @param result the query result from the use case
-     * @return the ResponseEntity with the appropriate response format
+     * @param result 用例返回的查询结果
+     * @return 携带合适响应格式的 ResponseEntity
      */
     private ResponseEntity<Map<String, Object>> buildQueryResponse(
             NaturalLanguageQueryUseCase.QueryResult result, String requestId) {
@@ -204,10 +196,10 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Builds the HTTP response for a clarification continuation result
+     * 构建澄清续聊结果的 HTTP 响应。
      *
-     * @param result the clarification result from the use case
-     * @return the ResponseEntity with the appropriate response format
+     * @param result 用例返回的澄清结果
+     * @return 携带合适响应格式的 ResponseEntity
      */
     private ResponseEntity<Map<String, Object>> buildClarificationResponse(
             ClarificationUseCase.ClarificationResult result) {
@@ -250,10 +242,10 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Maps a stable error code to the appropriate HTTP status.
+     * 将稳定的错误码映射为对应的 HTTP 状态码。
      *
-     * @param errorCode the stable error code name
-     * @return the corresponding HTTP status
+     * @param errorCode 稳定错误码名称
+     * @return 对应的 HTTP 状态码
      */
     private HttpStatus mapErrorToStatus(String errorCode) {
         if (errorCode == null) {
@@ -278,10 +270,10 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Extracts the bearer token from the Authorization header.
+     * 从 Authorization 头中提取 Bearer 令牌。
      *
-     * @param authHeader the Authorization header value
-     * @return the token string, or an empty string if not present
+     * @param authHeader Authorization 头的值
+     * @return 令牌字符串；不存在时返回空字符串
      */
     private String extractToken(String authHeader) {
         if (authHeader != null && authHeader.startsWith(BEARER_PREFIX)) {
@@ -291,42 +283,41 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Computes a SHA-256 digest of the token for secure session matching.
+     * 计算主体（subject）的 SHA-256 摘要，用于安全的会话匹配。
      *
-     * @param authHeader the Authorization header value
-     * @return the hex-encoded SHA-256 digest
+     * @param subject 主体标识（如令牌字符串）
+     * @return 十六进制编码的 SHA-256 摘要
      */
     private String computePrincipalDigest(String subject) {
         return Sha256Digest.sha256Hex(subject);
     }
 
     /**
-     * Sanitizes an error message for external exposure.
+     * 对外暴露前清理错误消息中的内部信息。
      *
-     * <p>Never exposes stack traces, internal addresses, interface class
-     * names, or sensitive parameters.</p>
+     * <p>绝不暴露堆栈跟踪、内部地址、接口类名或敏感参数。</p>
      *
-     * @param message the raw error message
-     * @return the sanitized message safe for external exposure
+     * @param message 原始错误消息
+     * @return 可安全对外暴露的清理后消息
      */
     private String sanitizeErrorMessage(String message) {
         if (message == null) {
             return "An internal error occurred";
         }
-        // Remove any potential stack trace fragments
+        // 移除任何可能的堆栈跟踪片段
         String sanitized = message.replaceAll("at\\s+\\S+\\.\\S+\\([^)]*\\)", "[internal]");
-        // Remove file paths
+        // 移除文件路径
         sanitized = sanitized.replaceAll("/\\S+\\.java:\\d+", "[internal]");
         return sanitized;
     }
 
     /**
-     * Request body for POST /queries.
+     * POST /queries 的请求体。
      *
-     * @param requestId the client-provided request identifier
-     * @param text the natural-language query text
-     * @param locale the request locale (e.g., "zh-CN")
-     * @param timezone the request timezone (e.g., "Asia/Shanghai")
+     * @param requestId 客户端提供的请求标识
+     * @param text 自然语言查询文本
+     * @param locale 请求 locale（如 "zh-CN"）
+     * @param timezone 请求时区（如 "Asia/Shanghai"）
      */
     public record QueryRequest(
             @NotBlank @Size(max = 128) String requestId,
@@ -337,9 +328,9 @@ public class NaturalLanguageController {
     }
 
     /**
-     * Request body for POST /interactions/{interactionId}/messages
+     * POST /interactions/{interactionId}/messages 的请求体。
      *
-     * @param text the user's additional input text
+     * @param text 用户的补充输入文本
      */
     public record ClarificationMessageRequest(
             @NotBlank @Size(max = 8192) String text

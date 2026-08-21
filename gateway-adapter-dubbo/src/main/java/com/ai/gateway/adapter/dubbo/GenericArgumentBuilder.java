@@ -1,7 +1,6 @@
 package com.ai.gateway.adapter.dubbo;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
@@ -31,10 +30,9 @@ import java.util.Set;
  * @author cmiracle@163.com
  * @since 0.1.0
  */
+@Slf4j
 @Component
 public class GenericArgumentBuilder {
-
-    private static final Logger log = LoggerFactory.getLogger(GenericArgumentBuilder.class);
 
     /**
      * Dubbo 泛化调用中 POJO 参数的类型元数据键。

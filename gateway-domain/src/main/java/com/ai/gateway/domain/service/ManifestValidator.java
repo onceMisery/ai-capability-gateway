@@ -708,12 +708,10 @@ public final class ManifestValidator {
                     + "a platform whitelist serialization should be declared");
         }
 
-        // Protocol must be supported
+        // Protocol must be a known adapter protocol. The concrete adapter
+        // performs protocol-specific validation during the same pipeline.
         if (binding.protocol() == null) {
             errors.add("invocation.protocol must not be null");
-        } else if (binding.protocol() != com.ai.gateway.domain.model.Protocol.DUBBO) {
-            warnings.add("invocation.protocol is " + binding.protocol()
-                    + "; only DUBBO is supported in the initial release");
         }
     }
 

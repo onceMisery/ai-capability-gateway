@@ -5,7 +5,9 @@ import com.ai.gateway.application.agent.AgentModelResultMapper;
 import com.ai.gateway.domain.model.RequestContext;
 import org.junit.jupiter.api.Test;
 
+import java.time.Instant;
 import java.util.Map;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
@@ -33,27 +35,70 @@ class McpGatewayAdapterTest {
     void writeResultDoesNotExposeConfirmationToken() {
         AgentHostConnector connector = mock(AgentHostConnector.class);
         when(connector.call(any(), anyString(), anyString(), anyString(), anyMap(),
-                anyString(), anyString())).thenReturn(new AgentHostConnector.CallResult(
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(AgentHostConnector.CallPolicy.class)))
+                .thenReturn(new AgentHostConnector.CallResult(
                         new AgentModelResultMapper.ModelResult(
                                 AgentModelResultMapper.ModelResult.Status.CONFIRMATION_REQUIRED,
                                 null, null, "confirm", "op", null),
                         null, "private-token"));
-        McpGatewayAdapter adapter = new McpGatewayAdapter(connector);
+        String token = "trusted-token";
+        McpClientTrustRegistry registry = new McpClientTrustRegistry(List.of(
+                new McpClientTrustProfile("host",
+                        McpClientTrustRegistry.sha256(token),
+                        McpClientTrustProfile.TokenAssurance.HIGH,
+                        McpClientTrustProfile.ConfirmationChannel.HOST_UI,
+                        true, Instant.parse("2026-08-21T00:00:00Z"))));
+        McpGatewayAdapter adapter = new McpGatewayAdapter(
+                connector, McpSecurityMode.TRUSTED_CONFIRMATION, registry,
+                McpRateLimiter.allowAll());
 
         McpGatewayAdapter.McpResult result = adapter.invoke("gateway_call",
-                RequestContext.empty(), "req-1", Map.of(
+                new RequestContext(Map.of("Authorization", "Bearer " + token),
+                        Map.of(), Map.of(), null), "req-1", Map.of(
                 "toolRef", "tr", "arguments", Map.of(), "locale", "zh-CN",
                 "agentTurnId", "turn-1"));
 
         assertThat(result.content().toString()).doesNotContain("private-token");
         assertThat(result.status()).isEqualTo("CONFIRMATION_REQUIRED");
+        assertThat(result.content().get("message")).isEqualTo("User confirmation required");
+        verify(connector).call(any(), anyString(), anyString(), anyString(), anyMap(),
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.eq(AgentHostConnector.CallPolicy.HOST_CONFIRMATION));
+    }
+
+    @Test
+    void trustedConfirmationModeFallsBackToReadOnlyForUnregisteredClient() {
+        AgentHostConnector connector = mock(AgentHostConnector.class);
+        when(connector.call(any(), anyString(), anyString(), anyString(), anyMap(),
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(AgentHostConnector.CallPolicy.class)))
+                .thenReturn(new AgentHostConnector.CallResult(
+                        new AgentModelResultMapper.ModelResult(
+                                AgentModelResultMapper.ModelResult.Status.ERROR, null,
+                                "MCP_WRITE_DISABLED", "ignored", null, null),
+                        null, null));
+        McpGatewayAdapter adapter = new McpGatewayAdapter(
+                connector, McpSecurityMode.TRUSTED_CONFIRMATION,
+                McpClientTrustRegistry.disabled(), McpRateLimiter.allowAll());
+
+        adapter.invoke("gateway_call",
+                new RequestContext(Map.of("Authorization", "Bearer unknown"),
+                        Map.of(), Map.of(), null), "request-1",
+                Map.of("toolRef", "ref", "arguments", Map.of(), "locale", "zh-CN"));
+
+        verify(connector).call(any(), anyString(), anyString(), anyString(), anyMap(),
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.eq(AgentHostConnector.CallPolicy.READ_ONLY));
     }
 
     @Test
     void sessionIdIsPartOfTheConnectorTurnKey() {
         AgentHostConnector connector = mock(AgentHostConnector.class);
         when(connector.call(any(), anyString(), anyString(), anyString(), anyMap(),
-                anyString(), anyString())).thenReturn(new AgentHostConnector.CallResult(
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(AgentHostConnector.CallPolicy.class)))
+                .thenReturn(new AgentHostConnector.CallResult(
                         new AgentModelResultMapper.ModelResult(
                                 AgentModelResultMapper.ModelResult.Status.ERROR, null,
                                 "TOOL_REF_NOT_IN_TURN", "rejected", null, null),
@@ -66,8 +111,67 @@ class McpGatewayAdapterTest {
                 "request-1", Map.of("agentTurnId", "turn-1", "toolRef", "ref",
                         "arguments", Map.of(), "locale", "zh-CN"));
 
-        verify(connector).call(any(), org.mockito.ArgumentMatchers.eq("session-a:turn-1"),
+        verify(connector).call(any(), org.mockito.ArgumentMatchers.eq("ignored-header:turn-1"),
                 anyString(), org.mockito.ArgumentMatchers.eq("ref"), anyMap(),
-                org.mockito.ArgumentMatchers.eq("zh-CN"), anyString());
+                org.mockito.ArgumentMatchers.eq("zh-CN"), anyString(),
+                org.mockito.ArgumentMatchers.any(AgentHostConnector.CallPolicy.class));
+    }
+
+    @Test
+    void defaultsToReadOnlyAndPassesReadOnlyPolicyToConnector() {
+        AgentHostConnector connector = mock(AgentHostConnector.class);
+        when(connector.call(any(), anyString(), anyString(), anyString(), anyMap(),
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.any(AgentHostConnector.CallPolicy.class)))
+                .thenReturn(new AgentHostConnector.CallResult(
+                new AgentModelResultMapper.ModelResult(
+                        AgentModelResultMapper.ModelResult.Status.ERROR, null,
+                        "MCP_WRITE_DISABLED", "ignored", null, null),
+                null, null));
+
+        McpGatewayAdapter adapter = new McpGatewayAdapter(connector);
+        adapter.invoke("gateway_call", RequestContext.empty(), "request-1",
+                Map.of("toolRef", "ref", "arguments", Map.of(), "locale", "zh-CN"));
+
+        verify(connector).call(any(), anyString(), anyString(), anyString(), anyMap(),
+                anyString(), anyString(),
+                org.mockito.ArgumentMatchers.eq(AgentHostConnector.CallPolicy.READ_ONLY));
+    }
+
+    @Test
+    void rejectsInvalidArgumentsInsteadOfSilentlyClamping() {
+        McpGatewayAdapter adapter = new McpGatewayAdapter(mock(AgentHostConnector.class));
+
+        McpGatewayAdapter.McpResult result = adapter.invoke(
+                "gateway_resolve", RequestContext.empty(), "request-1",
+                Map.of("query", "orders", "topK", 0));
+
+        assertThat(result.status()).isEqualTo("ERROR");
+        assertThat(result.content()).containsEntry("errorCode", "INVALID_ARGUMENTS");
+    }
+
+    @Test
+    void rejectsWrongArgumentTypesInsteadOfApplyingDefaults() {
+        McpGatewayAdapter adapter = new McpGatewayAdapter(mock(AgentHostConnector.class));
+
+        McpGatewayAdapter.McpResult result = adapter.invoke(
+                "gateway_resolve", RequestContext.empty(), "request-1",
+                Map.of("query", "orders", "topK", "5"));
+
+        assertThat(result.status()).isEqualTo("ERROR");
+        assertThat(result.content()).containsEntry("errorCode", "INVALID_ARGUMENTS");
+    }
+
+    @Test
+    void rejectsIdempotencyKeyLongerThanBackendContract() {
+        McpGatewayAdapter adapter = new McpGatewayAdapter(mock(AgentHostConnector.class));
+
+        McpGatewayAdapter.McpResult result = adapter.invoke(
+                "gateway_call", RequestContext.empty(), "request-1",
+                Map.of("toolRef", "ref", "arguments", Map.of(),
+                        "idempotencyKey", "x".repeat(129)));
+
+        assertThat(result.status()).isEqualTo("ERROR");
+        assertThat(result.content()).containsEntry("errorCode", "INVALID_ARGUMENTS");
     }
 }

@@ -1,6 +1,7 @@
 package com.ai.gateway.adapter.mcp;
 
 import com.ai.gateway.domain.model.Principal;
+import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.TelemetryPort;
 import com.ai.gateway.domain.service.PrincipalFingerprint;
@@ -48,7 +49,7 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
         AuthenticatedWebMvcSseServerTransportProvider provider = provider(
                 authentication, telemetry, 1, Duration.ofMinutes(5));
         addEstablishedSession(provider, "session-a", mock(McpServerSession.class),
-                PRINCIPAL_A, System.currentTimeMillis());
+                PRINCIPAL_A, System.nanoTime());
 
         ServerResponse response = invokeHandler(provider, "handleSseConnection",
                 mock(ServerRequest.class));
@@ -60,13 +61,32 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
     }
 
     @Test
+    void rejectsCookieAndQueryTokenEvenWhenAuthenticationAdapterWouldAcceptThem() throws Exception {
+        AuthenticationPort authentication = authenticationReturning(PRINCIPAL_A);
+        AuthenticatedWebMvcSseServerTransportProvider provider = provider(
+                authentication, mock(TelemetryPort.class), 1, Duration.ofMinutes(5));
+        try {
+            McpRequestContextHolder.set(new RequestContext(
+                    Map.of(), Map.of("Authorization", "cookie-token"),
+                    Map.of("Authorization", "query-token"), null));
+            ServerResponse response = invokeHandler(provider, "handleSseConnection",
+                    mock(ServerRequest.class));
+
+            assertThat(response.statusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+            verifyNoInteractions(authentication);
+        } finally {
+            McpRequestContextHolder.clear();
+        }
+    }
+
+    @Test
     void rejectsPrincipalMismatchBeforeSessionHandle() throws Exception {
         AuthenticatedWebMvcSseServerTransportProvider provider = provider(
                 authenticationReturning(PRINCIPAL_B), mock(TelemetryPort.class),
                 1, Duration.ofMinutes(5));
         McpServerSession session = mock(McpServerSession.class);
         addEstablishedSession(provider, "session-a", session, PRINCIPAL_A,
-                System.currentTimeMillis());
+                System.nanoTime());
         ServerRequest request = requestForSession("session-a");
 
         ServerResponse response = invokeHandler(provider, "handleMessage", request);
@@ -80,10 +100,11 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
     void expiredSessionIsRemovedClosedAndReturnsGoneWithoutSleeping() throws Exception {
         AuthenticatedWebMvcSseServerTransportProvider provider = provider(
                 authenticationReturning(PRINCIPAL_A), mock(TelemetryPort.class),
-                1, Duration.ofMillis(1));
+                1, Duration.ofSeconds(5));
         McpServerSession session = mock(McpServerSession.class);
         when(session.closeGracefully()).thenReturn(Mono.empty());
-        addEstablishedSession(provider, "expired-session", session, PRINCIPAL_A, 0L);
+        addEstablishedSession(provider, "expired-session", session, PRINCIPAL_A,
+                System.nanoTime() - Duration.ofMinutes(1).toNanos());
 
         ServerResponse response = invokeHandler(provider, "handleMessage",
                 requestForSession("expired-session"));
@@ -99,10 +120,11 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
     void acceptsSessionIdHeaderAsCompatibilityFallback() throws Exception {
         AuthenticatedWebMvcSseServerTransportProvider provider = provider(
                 authenticationReturning(PRINCIPAL_A), mock(TelemetryPort.class),
-                1, Duration.ofMillis(1));
+                1, Duration.ofSeconds(5));
         McpServerSession session = mock(McpServerSession.class);
         when(session.closeGracefully()).thenReturn(Mono.empty());
-        addEstablishedSession(provider, "header-session", session, PRINCIPAL_A, 0L);
+        addEstablishedSession(provider, "header-session", session, PRINCIPAL_A,
+                System.nanoTime() - Duration.ofMinutes(1).toNanos());
 
         ServerRequest request = mock(ServerRequest.class);
         ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
@@ -117,6 +139,18 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
     }
 
     @Test
+    void returnsStableWrongNodeErrorForForeignSessionId() throws Exception {
+        AuthenticatedWebMvcSseServerTransportProvider provider = provider(
+                authenticationReturning(PRINCIPAL_A), mock(TelemetryPort.class),
+                1, Duration.ofMinutes(5));
+        ServerRequest request = requestForSession("other-node.session-a");
+
+        ServerResponse response = invokeHandler(provider, "handleMessage", request);
+
+        assertThat(response.statusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    @Test
     void closeGracefullyClosesSessionsAndReleasesCapacity() throws Exception {
         AuthenticatedWebMvcSseServerTransportProvider provider = provider(
                 authenticationReturning(PRINCIPAL_A), mock(TelemetryPort.class),
@@ -124,7 +158,7 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
         McpServerSession session = mock(McpServerSession.class);
         when(session.closeGracefully()).thenReturn(Mono.empty());
         addEstablishedSession(provider, "session-a", session, PRINCIPAL_A,
-                System.currentTimeMillis());
+                System.nanoTime());
 
         provider.closeGracefully().block();
 
@@ -149,8 +183,20 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
 
     private static ServerRequest requestForSession(String sessionId) {
         ServerRequest request = mock(ServerRequest.class);
+        ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
         when(request.param("sessionId")).thenReturn(Optional.of(sessionId));
+        when(request.headers()).thenReturn(headers);
+        when(headers.firstHeader("Mcp-Session-Id")).thenReturn(null);
         return request;
+    }
+
+    private static ServerRequest.Headers headers(String authorization, String sessionId) {
+        ServerRequest.Headers headers = mock(ServerRequest.Headers.class);
+        when(headers.firstHeader("Authorization")).thenReturn(authorization);
+        if (sessionId != null) {
+            when(headers.firstHeader("Mcp-Session-Id")).thenReturn(sessionId);
+        }
+        return headers;
     }
 
     private static Principal principal(String subject, long orgId) {
@@ -161,16 +207,30 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
     private static ServerResponse invokeHandler(
             AuthenticatedWebMvcSseServerTransportProvider provider,
             String methodName, ServerRequest request) throws Exception {
+        RequestContext existing = McpRequestContextHolder.current();
+        boolean defaultContext = existing.headers().isEmpty()
+                && existing.cookies().isEmpty()
+                && existing.queryParams().isEmpty();
+        if (defaultContext) {
+            McpRequestContextHolder.set(new RequestContext(
+                    Map.of("Authorization", "Bearer test"), Map.of(), Map.of(), null));
+        }
         Method method = AuthenticatedWebMvcSseServerTransportProvider.class
                 .getDeclaredMethod(methodName, ServerRequest.class);
         method.setAccessible(true);
-        return (ServerResponse) method.invoke(provider, request);
+        try {
+            return (ServerResponse) method.invoke(provider, request);
+        } finally {
+            if (defaultContext) {
+                McpRequestContextHolder.clear();
+            }
+        }
     }
 
     private static void addEstablishedSession(
             AuthenticatedWebMvcSseServerTransportProvider provider,
             String sessionId, McpServerSession session, Principal principal,
-            long lastAccessMillis) throws Exception {
+            long lastAccessNanos) throws Exception {
         Semaphore slots = sessionSlots(provider);
         assertThat(slots.tryAcquire()).isTrue();
 
@@ -181,7 +241,7 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
                 McpServerSession.class, String.class, long.class);
         constructor.setAccessible(true);
         Object binding = constructor.newInstance(session,
-                PrincipalFingerprint.digest(principal), lastAccessMillis);
+                PrincipalFingerprint.digest(principal), lastAccessNanos);
 
         Field sessionsField = AuthenticatedWebMvcSseServerTransportProvider.class
                 .getDeclaredField("sessions");

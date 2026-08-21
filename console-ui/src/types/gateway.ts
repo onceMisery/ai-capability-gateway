@@ -147,6 +147,29 @@ export interface AuditQuery {
   size?: number
 }
 
+export type NaturalLanguageQueryStatus =
+  | 'COMPLETED'
+  | 'CLARIFICATION_REQUIRED'
+  | 'NO_MATCH'
+  | 'ERROR'
+  | 'INVALID'
+  | string
+
+export interface NaturalLanguageQueryResult {
+  requestId?: string
+  status: NaturalLanguageQueryStatus
+  data?: unknown
+  summary?: string
+  question?: string
+  message?: string
+  errorCode?: string
+  interactionId?: string
+  snapshotVersion?: number
+  capability?: unknown
+  execution?: unknown
+  expiresAt?: string
+}
+
 export interface CapabilityStat {
   capability_id: string
   total_calls: number

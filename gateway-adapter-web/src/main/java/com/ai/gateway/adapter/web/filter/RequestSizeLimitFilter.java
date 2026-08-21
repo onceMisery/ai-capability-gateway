@@ -14,6 +14,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
+import java.io.Serial;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -48,7 +49,7 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
     /**
      * 构造新的 RequestSizeLimitFilter。
      *
-     * @param maxRequestSize 允许的最大请求体积（单位：字节）；
+     * @param properties maxRequestSize 允许的最大请求体积（单位：字节）；
      * 若未配置或为非正数，则回退为 {@value #DEFAULT_MAX_REQUEST_SIZE}
      */
     @Autowired
@@ -114,6 +115,9 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
      * 当实际请求体超过最大体积时抛出的异常。
      */
     static class RequestTooLargeException extends RuntimeException {
+
+        @Serial
+        private static final long serialVersionUID = -8736691915149477680L;
 
         private final int actualSize;
 

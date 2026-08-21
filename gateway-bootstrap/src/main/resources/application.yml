@@ -163,6 +163,17 @@ gateway:
     catalog-io-max-payload-bytes: ${GATEWAY_AGENT_CATALOG_IO_MAX_PAYLOAD_BYTES:134217728}
     mcp-max-sessions: ${GATEWAY_AGENT_MCP_MAX_SESSIONS:1000}
     mcp-session-idle-seconds: ${GATEWAY_AGENT_MCP_SESSION_IDLE_SECONDS:1800}
+    mcp-security-mode: ${GATEWAY_AGENT_MCP_SECURITY_MODE:READ_ONLY}
+    mcp-call-timeout-ms: ${GATEWAY_AGENT_MCP_CALL_TIMEOUT_MS:30000}
+    mcp-close-timeout-ms: ${GATEWAY_AGENT_MCP_CLOSE_TIMEOUT_MS:5000}
+    mcp-node-id: ${GATEWAY_AGENT_MCP_NODE_ID:local}
+    mcp-sse-qps: ${GATEWAY_AGENT_MCP_SSE_QPS:100}
+    mcp-message-qps: ${GATEWAY_AGENT_MCP_MESSAGE_QPS:500}
+    mcp-resolve-qps: ${GATEWAY_AGENT_MCP_RESOLVE_QPS:200}
+    mcp-call-qps: ${GATEWAY_AGENT_MCP_CALL_QPS:200}
+    # 只填写已认证 Bearer Token 的 SHA-256 指纹，不填写明文 Token。
+    # 未命中该注册表的客户端始终只能按 READ_ONLY 执行。
+    mcp-trusted-clients: []
   
   # Rate limits
   rate-limits:

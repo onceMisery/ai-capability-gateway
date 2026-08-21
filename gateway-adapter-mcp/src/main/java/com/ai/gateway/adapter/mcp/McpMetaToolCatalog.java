@@ -50,8 +50,8 @@ public final class McpMetaToolCatalog {
                                         "arguments", Map.of("type", "object"),
                                         "locale", Map.of("type", "string", "maxLength", 32),
                                         "idempotencyKey", Map.of("type", "string",
-                                                "maxLength", 256)),
-                                "required", List.of("toolRef", "arguments", "locale"),
+                                                "maxLength", 128)),
+                                "required", List.of("toolRef", "arguments"),
                                 "additionalProperties", false)));
     }
 

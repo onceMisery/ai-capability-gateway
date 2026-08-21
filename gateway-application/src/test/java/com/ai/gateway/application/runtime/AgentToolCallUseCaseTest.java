@@ -74,6 +74,20 @@ class AgentToolCallUseCaseTest {
     }
 
     @Test
+    void readOnlyPolicyRejectsLowRiskWriteBeforePrepare() {
+        Fixtures fixtures = new Fixtures(RiskLevel.WRITE_LOW);
+
+        AgentToolCallUseCase.Result result = fixtures.useCase().callResolved(
+                "req-1", fixtures.principal, fixtures.snapshot(), fixtures.manifest,
+                Map.of(), "zh-CN", "agent-call-1", false);
+
+        assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.ERROR);
+        assertThat(result.errorCode()).isEqualTo("MCP_WRITE_DISABLED");
+        verify(fixtures.prepare, never()).prepareResolved(anyString(), any(), any(), any(),
+                anyMap(), anyString(), anyString());
+    }
+
+    @Test
     void rejectsHighRiskWriteBeforeEitherExecutionPath() {
         Fixtures fixtures = new Fixtures(RiskLevel.WRITE_HIGH);
 
@@ -128,6 +142,10 @@ class AgentToolCallUseCaseTest {
         private AgentToolCallUseCase useCase() {
             return new AgentToolCallUseCase(authentication, authorization, catalog,
                     structured, prepare, "production");
+        }
+
+        private CatalogSnapshot snapshot() {
+            return catalog.loadCurrentSnapshot("production");
         }
 
         private static CapabilityManifest manifest(RiskLevel risk) {

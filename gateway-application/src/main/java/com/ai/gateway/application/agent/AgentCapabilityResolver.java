@@ -109,8 +109,14 @@ public final class AgentCapabilityResolver {
         if (authentication.capacityRejected()) {
             return Resolution.error("RESOLVE_CAPACITY_EXCEEDED", 0L, 0L);
         }
-        if (authentication.failure() != null) {
-            throw propagate(authentication.failure());
+        if (authentication.status() == AuthenticationStatus.FAILED) {
+            if (authentication.failure() != null) {
+                throw propagate(authentication.failure());
+            }
+            return Resolution.error("AUTHENTICATION_FAILED", 0L, 0L);
+        }
+        if (authentication.principal() == null) {
+            return Resolution.error("AUTHENTICATION_FAILED", 0L, 0L);
         }
         return resolve(authentication.principal(), query, requestedTopK, deadlineNanos);
     }

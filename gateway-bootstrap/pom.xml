@@ -45,6 +45,14 @@
         </dependency>
         <dependency>
             <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-adapter-rest</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-adapter-grpc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
             <artifactId>gateway-adapter-auth-satoken</artifactId>
         </dependency>
         <dependency>

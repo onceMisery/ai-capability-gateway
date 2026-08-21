@@ -163,6 +163,19 @@ public final class AgentHostConnector {
             Map<String, Object> arguments,
             String locale,
             String idempotencyKey) {
+        return call(requestContext, agentTurnId, requestId, toolRef, arguments, locale,
+                idempotencyKey, CallPolicy.HOST_CONFIRMATION);
+    }
+
+    public CallResult call(
+            RequestContext requestContext,
+            String agentTurnId,
+            String requestId,
+            String toolRef,
+            Map<String, Object> arguments,
+            String locale,
+            String idempotencyKey,
+            CallPolicy policy) {
         StoredTurn turn = findTurn(requestContext, agentTurnId, toolRef);
         if (turn == null) {
             return CallResult.error("TOOL_REF_NOT_IN_TURN");
@@ -175,8 +188,11 @@ public final class AgentHostConnector {
         }
 
         Principal principal = turn.principal();
-        AgentHostToolCallUseCase.Result gatewayResult = callUseCase.call(
-                principal, requestId, toolRef, arguments, locale, idempotencyKey);
+        AgentHostToolCallUseCase.Result gatewayResult = policy.allowWritePrepare()
+                ? callUseCase.call(principal, requestId, toolRef, arguments, locale,
+                        idempotencyKey)
+                : callUseCase.call(principal, requestId, toolRef, arguments, locale,
+                        idempotencyKey, false);
         AgentModelResultMapper.ModelResult safeResult;
         try {
             safeResult = modelResultMapper.map(
@@ -359,6 +375,21 @@ public final class AgentHostConnector {
             return new CallResult(new AgentModelResultMapper.ModelResult(
                     AgentModelResultMapper.ModelResult.Status.ERROR, null,
                     errorCode, "Agent turn rejected", null, null), null, null);
+        }
+    }
+
+    public enum CallPolicy {
+        HOST_CONFIRMATION(true),
+        READ_ONLY(false);
+
+        private final boolean allowWritePrepare;
+
+        CallPolicy(boolean allowWritePrepare) {
+            this.allowWritePrepare = allowWritePrepare;
+        }
+
+        public boolean allowWritePrepare() {
+            return allowWritePrepare;
         }
     }
 
