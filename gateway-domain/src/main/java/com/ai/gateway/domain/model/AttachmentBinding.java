@@ -1,22 +1,19 @@
 package com.ai.gateway.domain.model;
 
 /**
- * A binding for a single protocol attachment (e.g., Dubbo attachment key).
+ * 单个协议附件（如 Dubbo attachment key）的绑定。
  *
- * <p>/ define that attachments must use the
- * platform whitelist of allowed keys (see {@link AttachmentWhitelist}).
- * Manifests must not define arbitrary attachment names. The source
- * must be {@link ArgumentSource#SYSTEM} for platform context values,
- * or other controlled sources for whitelisted keys like
- * {@code delegatedToken}.</p>
+ * <p>/ 规定附件必须使用平台白名单中的允许键
+ *（见 {@link AttachmentWhitelist}）。清单不得定义任意附件名。来源对于平台上下文值
+ * 必须是 {@link ArgumentSource#SYSTEM}，对于 {@code delegatedToken} 等白名单键
+ * 则使用其他受控来源。</p>
  *
- * <p>Unsigned tenant, user, or permission attachments do not participate
- * in authorization.</p>
+ * <p>未签名的租户、用户或权限附件不参与鉴权。</p>
  *
- * @param source the value source
- * @param sourcePath the JSON Pointer into the source (e.g., {@code "/traceId"})
- * @param converter the optional converter name
- * @param constantValue the JSON constant value for CONSTANT source
+ * @param source 值来源
+ * @param sourcePath 来源内部的 JSON Pointer（如 {@code "/traceId"}）
+ * @param converter 可选转换器名
+ * @param constantValue CONSTANT 来源的 JSON 常量值
  * @since 0.1.0
  */
 public record AttachmentBinding(
@@ -37,12 +34,12 @@ public record AttachmentBinding(
     }
 
     /**
-     * Compact constructor performing null checks.
+     * 紧凑构造器，执行 null 检查。
      *
-     * @param source the value source
-     * @param sourcePath the source JSON Pointer
-     * @param converter the optional converter name
-     * @param constantValue the constant value
+     * @param source 值来源
+     * @param sourcePath 来源 JSON Pointer
+     * @param converter 可选转换器名
+     * @param constantValue 常量值
      */
     public AttachmentBinding {
         java.util.Objects.requireNonNull(source, "source must not be null");

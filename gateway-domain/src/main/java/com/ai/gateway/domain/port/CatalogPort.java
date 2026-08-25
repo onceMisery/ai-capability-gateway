@@ -8,22 +8,17 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Port for loading and querying the capability catalog snapshot.
+ * 加载与查询能力目录快照的端口。
  *
- * <p>Specifies that publication must complete in a single
- * database transaction, producing a monotonically increasing
- * {@code snapshotVersion}. Each runtime instance receives the publication
- * notification, loads the snapshot from PostgreSQL, builds the retrieval
- * index, and verifies the digest. On success, the in-memory reference is
- * atomically replaced.</p>
+ * <p>规定发布必须在单一数据库事务内完成，生成单调递增的 {@code snapshotVersion}。每个
+ * 运行时实例收到发布通知后，从 PostgreSQL 加载快照、构建检索索引并校验摘要。成功后原子
+ * 替换内存引用。</p>
  *
- * <p>Each request is pinned to the snapshot version active at the start of
- * processing. Rollback copies a historical snapshot's content
- * into a new snapshot version; it does not modify history.</p>
+ * <p>每个请求都绑定到处理开始时生效的快照版本。回滚是把历史快照内容拷贝到新快照版本，
+ * 不修改历史。</p>
  *
- * <p>Adapters implementing this port typically read from PostgreSQL and
- * cache the snapshot in memory. The port is a pure abstraction with no
- * framework dependencies.</p>
+ * <p>实现此端口的适配器通常从 PostgreSQL 读取并将快照缓存在内存中。该端口是纯粹的
+ * 领域抽象，不依赖任何框架。</p>
  *
  * @see CatalogSnapshot
  * @see CapabilityManifest
@@ -32,95 +27,83 @@ import java.util.Optional;
 public interface CatalogPort {
 
     /**
-     * Serializes control-plane lifecycle changes for an environment.
-     * Persistent adapters acquire a transaction-scoped lock; test and
-     * in-memory adapters may keep the default no-op implementation.
+     * 串行化某环境的控制面生命周期变更。
+     * 持久化适配器会获取一个事务作用域的锁；测试与内存适配器可保留默认的无操作实现。
      *
-     * @param environment the environment being changed
+     * @param environment 正在变更的环境
      */
     default void lockEnvironmentForPublication(String environment) {
-        // No-op for adapters without a shared transactional store.
+        // 无共享事务存储的适配器无操作。
     }
 
     /**
-     * Reserves the next globally unique snapshot version.
+     * 保留下一个全局唯一的快照版本。
      *
-     * <p>Persistent adapters must use a database sequence or an equivalent
-     * atomic allocator. Callers must not derive a version by reading the
-     * current snapshot and adding one.</p>
+     * <p>持久化适配器必须使用数据库序列或等价的原子分配器。调用方不得通过读取当前快照
+     * 再加一的方式推导版本。</p>
      *
-     * @return a monotonically increasing snapshot version
+     * @return 单调递增的快照版本
      */
     long reserveSnapshotVersion();
 
     /**
-     * Loads the current active snapshot for the given environment.
+     * 加载给定环境的当前活动快照。
      *
-     * <p>: the snapshot marked as the current version for this
-     * environment is returned. The snapshot is immutable once published.</p>
+     * <p>规定：返回被标记为该环境当前版本的快照。快照一旦发布即不可变。</p>
      *
-     * @param environment the target environment (e.g., "production")
-     * @return the current catalog snapshot; never {@code null}
+     * @param environment 目标环境（如 "production"）
+     * @return 当前目录快照；永不为 {@code null}
      */
     CatalogSnapshot loadCurrentSnapshot(String environment);
 
     /**
-     * Loads a specific historical snapshot by its version number.
+     * 按版本号加载特定的历史快照。
      *
-     * <p>: rollback copies a historical snapshot's content into
-     * a new snapshot version; it does not modify history. This method
-     * retrieves the original historical snapshot for inspection or
-     * rollback purposes.</p>
+     * <p>规定：回滚是把历史快照内容拷贝到新快照版本，不修改历史。本方法用于检查或回滚
+     * 目的，检索原始历史快照。</p>
      *
-     * @param snapshotVersion the monotonically increasing snapshot version
-     * @return the catalog snapshot at the given version; never {@code null}
+     * @param snapshotVersion 单调递增的快照版本
+     * @return 该版本的目录快照；永不为 {@code null}
      */
     CatalogSnapshot loadSnapshot(long snapshotVersion);
 
     /**
-     * Finds a specific capability by ID and version within the current
-     * snapshot.
+     * 在当前快照中按 ID 与版本查找特定能力。
      *
-     * <p>The returned manifest is the exact published content, verifiable
-     * by its SHA-256 digest. The same {@code id + version} content cannot
-     * be overwritten.</p>
+     * <p>返回的清单是确切的发布内容，可由其 SHA-256 摘要验证。相同的 {@code id + version}
+     * 内容不可被覆盖。</p>
      *
-     * @param capabilityId the globally stable capability identifier
-     * @param version the semantic version string
-     * @return the matching capability manifest, or empty if not found
+     * @param capabilityId 全局稳定的能力标识
+     * @param version 语义化版本字符串
+     * @return 匹配的能力清单，未找到时为 empty
      */
     Optional<CapabilityManifest> findCapability(String capabilityId, String version);
 
     /**
-     * Persists a new catalog snapshot and marks it as ACTIVE.
+     * 持久化一个新的目录快照并将其标记为 ACTIVE。
      *
-     * <p>Previous ACTIVE snapshots for the same environment are marked
-     * as SUPERSEDED. This operation only changes snapshot tables; lifecycle,
-     * audit and outbox side effects are explicit operations owned by the
-     * application transaction.</p>
+     * <p>同一环境先前的 ACTIVE 快照会被标记为 SUPERSEDED。该操作只更改快照表；生命周期、
+     * 审计与 Outbox 的副作用是应用事务拥有的显式操作。</p>
      *
-     * @param snapshot the snapshot to persist
+     * @param snapshot 待持久化的快照
      */
     void saveSnapshot(CatalogSnapshot snapshot);
 
     /**
-     * Records the publication event associated with a persisted snapshot.
-     * The call is explicit so saving a snapshot has no hidden lifecycle,
-     * audit, or outbox side effects and can be composed by the application
-     * transaction owner.
+     * 记录与已持久化快照关联的发布事件。
+     * 该调用是显式的，因此保存快照不会隐含生命周期、审计或 Outbox 副作用，可由应用
+     * 事务的拥有者组合使用。
      */
     void recordSnapshotPublication(CatalogSnapshot snapshot, String eventType);
 
     /**
-     * Lists snapshot summaries for the given environment, ordered by version
-     * descending (newest first).
+     * 列出给定环境的快照摘要，按版本降序排列（最新在前）。
      *
-     * <p>Used by the admin console to display snapshot history. The returned
-     * summaries do not include the full snapshot content.</p>
+     * <p>供管理控制台展示快照历史。返回的摘要不包含完整快照内容。</p>
      *
-     * @param environment the target environment (e.g., "production")
-     * @param limit the maximum number of summaries to return
-     * @return the snapshot summaries; never {@code null}
+     * @param environment 目标环境（如 "production"）
+     * @param limit 返回摘要的最大数量
+     * @return 快照摘要；永不为 {@code null}
      */
     List<SnapshotSummary> listSnapshots(String environment, int limit);
 }

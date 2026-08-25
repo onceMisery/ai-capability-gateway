@@ -1,63 +1,55 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Lifecycle states for a Capability Manifest.
+ * 能力清单的生命周期状态。
  *
- * <p>The state machine is:</p>
+ * <p>状态机如下：</p>
  * <pre>
  * DRAFT -&gt; VALIDATED -&gt; APPROVED -&gt; PUBLISHED -&gt; SUSPENDED -&gt; RETIRED
  *                 |                              |
  *                 +--&gt; REJECTED                  +--&gt; VALIDATED
  * </pre>
- * <p>Precisely: only VALIDATED may transition to terminal REJECTED, and a
- * SUSPENDED version must be re-validated before approval and publication.</p>
+ * <p>精确规则：只有 VALIDATED 可迁移到终态 REJECTED；SUSPENDED（下线）版本在重新审批与
+ * 发布前必须先重新校验。</p>
  *
- * <p>Only {@code PUBLISHED} capabilities may enter the candidate set for
- * natural-language routing (Section 9). Write operations must be rejected
- * if the capability is {@code SUSPENDED} or {@code RETIRED} at confirm time
- *.</p>
+ * <p>只有 {@code PUBLISHED} 的能力才能进入自然语言路由的候选集（第 9 节）。若在确认
+ * 时发现能力处于 {@code SUSPENDED} 或 {@code RETIRED} 状态，必须拒绝写操作。</p>
  *
  * @since 0.1.0
  */
 public enum CapabilityLifecycle {
     /**
-     * Manifest has been imported and is editable. Not yet validated.
+     * 清单已导入且可编辑，尚未校验。
      */
     DRAFT,
 
     /**
-     * Passed all structural, semantic, security, and compatibility
-     * validation steps defined in .
+     * 已通过设计文档中定义的全部结构、语义、安全与兼容性校验步骤。
      */
     VALIDATED,
 
     /**
-     * Submitter has reviewed the confirmation summary and
-     * the batch security review has passed.
+     * 提交者已审阅确认摘要，且批量安全评审已通过。
      */
     APPROVED,
 
     /**
-     * Entered the active snapshot of the target environment. Only
-     * PUBLISHED capabilities participate in routing.
+     * 已进入目标环境的活动快照。只有 PUBLISHED 能力参与路由。
      */
     PUBLISHED,
 
     /**
-     * Temporarily stopped accepting new requests. Audit and recovery
-     * capabilities are retained. Restoration requires re-validation
-     * and a new snapshot.
+     * 暂时停止接收新请求。保留审计与恢复能力。恢复需重新校验并生成新快照。
      */
     SUSPENDED,
 
     /**
-     * Permanently removed from routing. Historical records are retained.
+     * 永久从路由中移除。保留历史记录。
      */
     RETIRED,
 
     /**
-     * Validation or approval was rejected. This version is terminal;
-     * correction requires importing a new manifest version.
+     * 校验或审批被拒绝。该版本为终态；修正需导入新的清单版本。
      */
     REJECTED
 }

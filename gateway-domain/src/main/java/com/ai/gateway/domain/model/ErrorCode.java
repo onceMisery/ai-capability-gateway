@@ -1,23 +1,19 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Stable error codes for the gateway's execution pipeline.
+ * 网关执行流水线的稳定错误码。
  *
- * <p>Defines the full error taxonomy. External error responses
- * must never contain stack traces, internal addresses, interface class names,
- * or sensitive parameters. The audit log records the stable error code
- * alongside a controlled diagnostic summary.</p>
+ * <p>定义完整的错误分类法。对外错误响应绝不能包含堆栈、内部地址、接口类名或敏感参数。
+ * 审计日志将稳定错误码与受控诊断摘要一并记录。</p>
  *
- * <p>The {@code retryable} flag provides the default retry policy:</p>
+ * <p>{@code retryable} 标志给出默认重试策略：</p>
  * <ul>
- * <li>{@code false} - The error is terminal; retrying will not help.</li>
- * <li>{@code true} - A retry may succeed, subject to the risk level,
- * idempotency policy, and the specific retry rules described below.</li>
+ * <li>{@code false} - 错误为终态，重试无济于事。</li>
+ * <li>{@code true} - 重试可能成功，但受风险等级、幂等策略及下文具体规则约束。</li>
  * </ul>
  *
- * <p>Note: some error codes have nuanced retry semantics that depend on
- * the caller type (user vs. gateway) and the operation's risk level.
- * See the individual constant documentation for details.</p>
+ * <p>注意：部分错误码的重试语义较为微妙，取决于调用方类型（用户 vs 网关）与操作的
+ * 风险等级。详见各常量的文档说明。</p>
  *
  * @see InvocationResult
  * @see AuditEvent
@@ -26,89 +22,76 @@ package com.ai.gateway.domain.model;
 public enum ErrorCode {
 
     /**
-     * The caller's identity is invalid or could not be verified.
-     * Not retryable.
+     * 调用方身份无效或无法校验。不可重试。
      */
     AUTHENTICATION_FAILED(false),
 
     /**
-     * The authenticated principal is not authorized to view or execute
-     * the requested capability. Not retryable.
+     * 已鉴权的主体无权查看或执行所请求的能力。不可重试。
      */
     PERMISSION_DENIED(false),
 
-    /** A write capability must use the Prepare/Confirm protocol. */
+    /** 写能力必须使用 Prepare/Confirm 协议。 */
     CONFIRMATION_REQUIRED(false),
 
     /**
-     * No capability matched the natural-language request after retrieval
-     * and threshold filtering. Not retryable.
+     * 检索与阈值过滤后没有任何能力匹配该自然语言请求。不可重试。
      */
     NO_CAPABILITY_MATCH(false),
 
     /**
-     * The model or gateway requires the user to provide additional
-     * information or disambiguate the request. Retried after user
-     * supplementation.
+     * 模型或网关要求用户提供补充信息或消歧请求。用户补充后可重试。
      */
     CLARIFICATION_REQUIRED(true),
 
     /**
-     * The model's structured output failed schema or business validation.
-     * The gateway may attempt one automatic repair, after which the error
-     * is terminal for that request.
+     * 模型的结构化输出未通过 Schema 或业务校验。网关可尝试一次自动修复，
+     * 之后对该请求即为终态错误。
      */
     INVALID_MODEL_OUTPUT(true),
 
     /**
-     * The bound arguments do not satisfy the capability's input contract.
-     * Retried after user correction of the parameters.
+     * 绑定参数不满足能力的入参契约。用户修正参数后可重试。
      */
     ARGUMENT_VALIDATION_FAILED(true),
 
     /**
-     * The selected capability is suspended, retired, or its version is
-     * no longer available. Not retryable.
+     * 所选能力已下线、退役，或其版本不再可用。不可重试。
      */
     CAPABILITY_UNAVAILABLE(false),
 
-    /** The configured language-model provider is unreachable or unhealthy. */
+    /** 配置的语言模型 Provider 不可达或不健康。 */
     LLM_UNAVAILABLE(true),
 
-    /** A bounded gateway resource rejected the request without queueing. */
+    /** 网关的有界资源在未排队的情况下拒绝了请求。 */
     RATE_LIMITED(true),
 
     /**
-     * The Provider timed out. Retryability depends on the risk level and
-     * idempotency policy: read-only operations may retry per policy;
-     * write operations must follow the two-phase recovery protocol
+     * Provider 超时。是否可重试取决于风险等级与幂等策略：只读操作可按策略重试；
+     * 写操作必须遵循两阶段恢复协议。
      */
     PROVIDER_TIMEOUT(true),
 
     /**
-     * The Provider returned a business-level failure (e.g., a non-success
-     * envelope code). Typically not retryable, as the business state has
-     * already changed or the condition persists.
+     * Provider 返回业务级失败（如非成功的信封码）。通常不可重试，
+     * 因为业务状态已改变或该状况持续存在。
      */
     PROVIDER_REJECTED(false),
 
     /**
-     * A protocol-level or response-contract error occurred (e.g.,
-     * unexpected response structure, missing envelope path). Read-only
-     * operations may retry per resilience policy.
+     * 发生协议级或响应契约错误（如响应结构意外、缺失信封路径）。只读操作
+     * 可按韧性策略重试。
      */
     PROTOCOL_ERROR(true),
 
     /**
-     * The response exceeded the configured maximum byte limit
-     *. Not retryable.
+     * 响应超过配置的最大字节限制。不可重试。
      */
     RESULT_TOO_LARGE(false),
 
     /**
-     * A write operation's result is uncertain: the request may have
-     * reached the Provider, but the gateway did not receive a definitive
-     * response. Only resolvable via status query or reconciliation
+     * 写操作结果不确定：请求可能已到达 Provider，但网关未收到确定性响应。
+     * 只能通过状态查询或对账解决。
      */
     EXECUTION_UNKNOWN(false);
 
@@ -119,10 +102,10 @@ public enum ErrorCode {
     }
 
     /**
-     * Returns whether this error is retryable by default.
+     * 返回该错误默认是否可重试。
      *
-     * @return {@code true} if a retry may succeed subject to risk and
-     * idempotency policy; {@code false} if the error is terminal
+     * @return 若受风险与幂等策略约束下重试可能成功则为 {@code true}；
+     * 若为终态错误则为 {@code false}
      */
     public boolean isRetryable() {
         return retryable;

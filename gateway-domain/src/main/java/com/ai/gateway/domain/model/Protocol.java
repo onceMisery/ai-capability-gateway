@@ -1,36 +1,31 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Identifies the wire protocol used to invoke a capability.
+ * 标识调用能力所使用的线缆协议。
  *
- * <p>The initial production release supports {@link #DUBBO} only.
- * {@link #REST} and {@link #GRPC} are evolution protocols (Section 14).</p>
+ * <p>初始生产版本仅支持 {@link #DUBBO}。{@link #REST} 与 {@link #GRPC} 为演进协议
+ *（第 14 节）。</p>
  *
- * <p>All protocols share the same lifecycle, confirmation, natural-language
- * semantics, input/output JSON Schema, Principal injection, authorization,
- * risk, audit, and write-operation state machine. Protocol
- * differences exist only within {@code spec.invocation} and the adapter
- * internals.</p>
+ * <p>所有协议共享相同的生命周期、确认流程、自然语言语义、入参/出参 JSON Schema、
+ * Principal 注入、鉴权、风险、审计与写操作状态机。协议差异仅存在于 {@code spec.invocation}
+ * 与适配器内部。</p>
  *
  * @see ProtocolBinding
  * @since 0.1.0
  */
 public enum Protocol {
     /**
-     * Apache Dubbo generic invocation (Section 12). The initial release
-     * protocol.
+     * Apache Dubbo 泛化调用（第 12 节）。初始版本的协议。
      */
     DUBBO,
 
     /**
-     * REST over HTTP. OpenAPI 3.1 is the primary import source
-     *. Evolution protocol.
+     * 基于 HTTP 的 REST。OpenAPI 3.1 是主要导入来源。演进协议。
      */
     REST,
 
     /**
-     * gRPC unary RPC using confirmed FileDescriptorSet.
-     * Evolution protocol.
+     * 使用已确认 FileDescriptorSet 的 gRPC 一元 RPC。演进协议。
      */
     GRPC
 }

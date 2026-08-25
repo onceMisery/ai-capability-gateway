@@ -3,34 +3,28 @@ package com.ai.gateway.domain.model;
 import java.util.regex.Pattern;
 
 /**
- * Semantic version string for a capability manifest.
+ * 能力清单的语义化版本字符串。
  *
- * <p>Specifies the versioning rules:</p>
+ * <p>规定版本号规则：</p>
  * <ul>
- * <li>Major version bump: removing public fields, tightening field
- * constraints, changing semantics or protocol parameter positions.</li>
- * <li>Minor version bump: adding optional fields or compatible output
- * fields.</li>
- * <li>Patch version bump: modifying examples or descriptions without
- * changing selection semantics.</li>
+ * <li>主版本升级：移除公开字段、收紧字段约束、变更语义或协议参数位置。</li>
+ * <li>次版本升级：新增可选字段或兼容的出参字段。</li>
+ * <li>修订版本升级：修改示例或描述而不改变选择语义。</li>
  * </ul>
  *
- * <p>Any change to the protocol Binding requires re-running compatibility
- * tests. Only one default-routable version per {@code metadata.id} may
- * exist in a given environment at a time.</p>
+ * <p>任何对协议 Binding 的变更都需重新运行兼容性测试。给定环境下，每个
+ * {@code metadata.id} 同一时刻只能存在一个默认可路由版本。</p>
  *
- * <p>This record validates the SemVer format ({@code MAJOR.MINOR.PATCH})
- * but does not enforce the bump rules — those are policy decisions made
- * during compatibility analysis.</p>
+ * <p>本 record 仅校验 SemVer 格式（{@code MAJOR.MINOR.PATCH}），并不强制升级规则
+ * —— 那些是兼容性分析期间的策略决策。</p>
  *
- * @param value the semantic version string (e.g., {@code "1.0.0"})
+ * @param value 语义化版本字符串（如 {@code "1.0.0"}）
  * @since 0.1.0
  */
 public record SemanticVersion(String value) {
 
     /**
-     * Pattern matching SemVer {@code MAJOR.MINOR.PATCH} format with
-     * optional pre-release and build metadata suffixes.
+     * 匹配 SemVer {@code MAJOR.MINOR.PATCH} 格式的正则，含可选的预发布与构建元数据后缀。
      */
     private static final Pattern SEMVER_PATTERN =
             Pattern.compile("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)"
@@ -39,12 +33,11 @@ public record SemanticVersion(String value) {
                     + "(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$");
 
     /**
-     * Compact constructor performing SemVer format validation.
+     * 紧凑构造器，执行 SemVer 格式校验。
      *
-     * @param value the semantic version string
-     * @throws NullPointerException if {@code value} is null
-     * @throws IllegalArgumentException if {@code value} does not conform
-     * to the SemVer format
+     * @param value 语义化版本字符串
+     * @throws NullPointerException 当 {@code value} 为 null 时
+     * @throws IllegalArgumentException 当 {@code value} 不符合 SemVer 格式时
      */
     public SemanticVersion {
         java.util.Objects.requireNonNull(value, "version value must not be null");

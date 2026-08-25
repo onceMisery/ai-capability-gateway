@@ -3,14 +3,14 @@ package com.ai.gateway.domain.model;
 import java.util.Map;
 
 /**
- * A rate-limit rule (flow or degrade) for Sentinel-based traffic control.
+ * 基于 Sentinel 的限流规则（流控或降级）。
  *
- * <p>Used by the admin console to view and manage Sentinel rules at runtime.
- * Rules are held in memory and reset to hardcoded baselines on restart.</p>
+ * <p>供管理控制台在运行时查看与管理 Sentinel 规则。规则保存在内存中，重启时重置为
+ * 硬编码的基线值。</p>
  *
- * @param type the rule type ("flow" or "degrade")
- * @param resource the Sentinel resource name (e.g., "gateway:capability:order.detail.query")
- * @param properties the rule-specific properties (grade, count, strategy, etc.)
+ * @param type 规则类型（"flow" 或 "degrade"）
+ * @param resource Sentinel 资源名（如 "gateway:capability:order.detail.query"）
+ * @param properties 规则特定属性（grade、count、strategy 等）
  * @since 0.1.0
  */
 public record RateLimitRule(
@@ -20,7 +20,7 @@ public record RateLimitRule(
 ) {
 
     /**
-     * Compact constructor performing null checks and defensive copying.
+     * 紧凑构造器，执行 null 检查与防御性拷贝。
      */
     public RateLimitRule {
         java.util.Objects.requireNonNull(type, "type must not be null");

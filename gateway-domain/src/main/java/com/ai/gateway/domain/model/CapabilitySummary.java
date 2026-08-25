@@ -4,24 +4,23 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * A lightweight summary of a capability manifest for list views.
+ * 用于列表视图的能力清单轻量摘要。
  *
- * <p>Aggregates manifest metadata with lifecycle state, validation status,
- * and snapshot version history. Does not include sensitive invocation
- * details.</p>
+ * <p>将清单元数据与生命周期状态、校验状态及快照版本历史聚合在一起。不包含敏感的
+ * 调用细节。</p>
  *
- * @param capabilityId the globally stable capability identifier
- * @param version the semantic version string
- * @param displayName the user-facing capability name
- * @param description the single business-action description
- * @param risk the risk level
- * @param lifecycle the current lifecycle state
- * @param tags the controlled tags
- * @param ownerTeam the responsible team name
- * @param ownerContact the responsible team contact
- * @param sha256Digest the content SHA-256 digest
- * @param updatedAt the last update timestamp
- * @param snapshotVersions the snapshot versions that include this capability
+ * @param capabilityId 全局稳定的能力标识
+ * @param version 语义化版本字符串
+ * @param displayName 面向用户的能力名称
+ * @param description 单一业务动作描述
+ * @param risk 风险等级
+ * @param lifecycle 当前生命周期状态
+ * @param tags 受控标签
+ * @param ownerTeam 责任团队名称
+ * @param ownerContact 责任团队联系方式
+ * @param sha256Digest 内容 SHA-256 摘要
+ * @param updatedAt 最后更新时间戳
+ * @param snapshotVersions 包含该能力的快照版本列表
  * @since 0.1.0
  */
 public record CapabilitySummary(
@@ -40,7 +39,7 @@ public record CapabilitySummary(
 ) {
 
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      */
     public CapabilitySummary {
         java.util.Objects.requireNonNull(capabilityId, "capabilityId must not be null");

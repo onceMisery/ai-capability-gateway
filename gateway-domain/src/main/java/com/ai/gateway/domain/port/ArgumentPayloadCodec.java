@@ -3,7 +3,7 @@ package com.ai.gateway.domain.port;
 import java.util.List;
 
 /**
- * Encodes bound invocation arguments before encryption and decodes them after decryption.
+ * 在加密前对绑定后的调用参数进行编码，并在解密后对其进行解码。
  */
 public interface ArgumentPayloadCodec {
 

@@ -5,7 +5,7 @@ import com.ai.gateway.domain.model.ConfirmationToken;
 import java.time.Instant;
 
 /**
- * Issues and verifies opaque confirmation tokens for write operations.
+ * 为写操作签发并校验不透明的确认令牌。
  */
 public interface ConfirmationTokenCodec {
 

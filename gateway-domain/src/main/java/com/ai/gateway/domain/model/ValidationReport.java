@@ -3,19 +3,16 @@ package com.ai.gateway.domain.model;
 import java.util.List;
 
 /**
- * The result of validating a ProtocolBinding or Manifest against structural,
- * semantic, security, and compatibility rules.
+ * 针对结构、语义、安全与兼容性规则校验 ProtocolBinding 或清单的结果。
  *
- * <p>Defines the adapter port's {@code validate} method as
- * returning a {@code ValidationReport}. defines the full
- * 10-step validation pipeline for Manifest import.</p>
+ * <p>适配器端口的 {@code validate} 方法返回 {@code ValidationReport}。清单导入的完整
+ * 10 步校验流水线即在此定义。</p>
  *
- * <p>A report is considered valid only if {@code errors} is empty.
- * Warnings are informational and do not block publication.</p>
+ * <p>仅当 {@code errors} 为空时，报告才视为有效。警告仅为提示性信息，不阻断发布。</p>
  *
- * @param valid whether validation passed (no errors)
- * @param errors the list of validation errors; empty if valid
- * @param warnings the list of validation warnings; non-blocking
+ * @param valid 校验是否通过（无错误）
+ * @param errors 校验错误列表；有效时为空
+ * @param warnings 校验警告列表；不阻断流程
  * @since 0.1.0
  */
 public record ValidationReport(
@@ -25,11 +22,11 @@ public record ValidationReport(
 ) {
 
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      *
-     * @param valid whether validation passed
-     * @param errors the error list
-     * @param warnings the warning list
+     * @param valid 校验是否通过
+     * @param errors 错误列表
+     * @param warnings 警告列表
      */
     public ValidationReport {
         java.util.Objects.requireNonNull(errors, "errors must not be null");
@@ -39,19 +36,19 @@ public record ValidationReport(
     }
 
     /**
-     * Returns a valid report with no errors and no warnings.
+     * 返回一份无错误、无警告的有效报告。
      *
-     * @return a valid empty report
+     * @return 有效的空报告
      */
     public static ValidationReport success() {
         return new ValidationReport(true, List.of(), List.of());
     }
 
     /**
-     * Returns an invalid report with the given errors and no warnings.
+     * 返回一份含给定错误、无警告的无效报告。
      *
-     * @param errors the validation errors
-     * @return an invalid report
+     * @param errors 校验错误
+     * @return 无效报告
      */
     public static ValidationReport failure(List<String> errors) {
         return new ValidationReport(false, errors, List.of());

@@ -1,9 +1,8 @@
 package com.ai.gateway.domain.port;
 
 /**
- * Exports transactional outbox events to an external durable sink.
- * Implementations must return only after the downstream system has accepted
- * the event; throwing leaves the event pending for retry.
+ * 将事务性 Outbox 事件导出到外部持久化接收端。
+ * 实现必须在下游系统已接受事件后才返回；抛出异常则事件保持待重试状态。
  */
 public interface OutboxExporterPort {
 

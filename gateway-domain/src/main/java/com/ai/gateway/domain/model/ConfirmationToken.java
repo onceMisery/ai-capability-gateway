@@ -3,45 +3,38 @@ package com.ai.gateway.domain.model;
 import java.time.Instant;
 
 /**
- * A short-lived, single-use confirmation token issued during the Prepare
- * phase of the write-operation two-phase protocol.
+ * 写操作两阶段协议中 Prepare 阶段签发的短时效、一次性确认令牌。
  *
- * <p>Specifies that after Prepare completes, the gateway
- * returns a confirmation token that must be:</p>
+ * <p>规定 Prepare 完成后，网关返回的确认令牌必须满足：</p>
  *
  * <ul>
- * <li><strong>Single-use</strong> - once consumed by Confirm, it cannot
- * be reused. Repeated Confirm calls return the same operation's
- * current state without creating a new operation.</li>
- * <li><strong>Short-lived</strong> - has an expiration time; if Confirm
- * is not called before {@code expiresAt}, the operation transitions
- * to {@link OperationState#EXPIRED}.</li>
- * <li><strong>Bound</strong> - binds to the {@code operationId},
- * Principal digest, organization, and the arguments digest to
- * prevent substitution attacks.</li>
- * <li><strong>Signed</strong> - carries a server signature that the
- * Confirm phase verifies before proceeding.</li>
+ * <li><strong>一次性</strong> - 被 Confirm 消费后不可复用。重复的 Confirm 调用返回同一
+ * 操作的当前状态，不会创建新操作。</li>
+ * <li><strong>短时效</strong> - 带过期时间；若 {@code expiresAt} 前未调用 Confirm，
+ * 操作迁移至 {@link OperationState#EXPIRED}。</li>
+ * <li><strong>绑定</strong> - 绑定到 {@code operationId}、Principal 摘要、组织与参数摘要，
+ * 以防替换攻击。</li>
+ * <li><strong>签名</strong> - 携带服务端签名，Confirm 阶段在继续前先验证。</li>
  * </ul>
  *
- * <p>During Confirm, the gateway must verify:</p>
+ * <p>Confirm 阶段网关必须校验：</p>
  * <ol>
- * <li>The token signature.</li>
- * <li>The token has not expired.</li>
- * <li>The token has not been used.</li>
- * <li>The current Principal matches the Prepare-phase Principal.</li>
- * <li>The operation is still in PREPARED state.</li>
- * <li>The capability has not been suspended and the Manifest digest
- * has not been revoked.</li>
+ * <li>令牌签名。</li>
+ * <li>令牌未过期。</li>
+ * <li>令牌未被使用。</li>
+ * <li>当前 Principal 与 Prepare 阶段一致。</li>
+ * <li>操作仍处于 PREPARED 状态。</li>
+ * <li>能力未被下线，清单摘要未被吊销。</li>
  * </ol>
  *
- * @param token the opaque token string
- * @param operationId the associated operation ID
- * @param principalDigest the digest of the Prepare-phase Principal
- * @param orgId the organization context
- * @param argumentsDigest the digest of the bound arguments
- * @param serverSignature the server-side signature over all bound fields
- * @param expiresAt the token expiration time
- * @param used whether the token has already been consumed
+ * @param token 不透明令牌字符串
+ * @param operationId 关联的操作 ID
+ * @param principalDigest Prepare 阶段 Principal 的摘要
+ * @param orgId 组织上下文
+ * @param argumentsDigest 所绑定参数的摘要
+ * @param serverSignature 对所有绑定字段的服务端签名
+ * @param expiresAt 令牌过期时间
+ * @param used 令牌是否已被消费
  * @since 0.1.0
  */
 public record ConfirmationToken(
@@ -56,16 +49,16 @@ public record ConfirmationToken(
 ) {
 
     /**
-     * Compact constructor performing null checks on required fields.
+     * 紧凑构造器，对必填字段执行 null 检查。
      *
-     * @param token the token string
-     * @param operationId the operation ID
-     * @param principalDigest the principal digest
-     * @param orgId the organization ID
-     * @param argumentsDigest the arguments digest
-     * @param serverSignature the server signature
-     * @param expiresAt the expiration time
-     * @param used the used flag
+     * @param token 令牌字符串
+     * @param operationId 操作 ID
+     * @param principalDigest Principal 摘要
+     * @param orgId 组织 ID
+     * @param argumentsDigest 参数摘要
+     * @param serverSignature 服务端签名
+     * @param expiresAt 过期时间
+     * @param used 已使用标志
      */
     public ConfirmationToken {
         java.util.Objects.requireNonNull(token, "token must not be null");

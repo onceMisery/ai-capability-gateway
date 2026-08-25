@@ -1,21 +1,16 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Classifies the risk level of a capability, governing the execution mode
- * and the controls that must be applied before invocation.
+ * 能力的风险等级，决定执行模式以及调用前必须施加的控制措施。
  *
  * <ul>
- * <li>{@code READ_ONLY} - Pure query; no side effects on Provider state.</li>
- * <li>{@code WRITE_LOW} - Write operation requiring the two-phase Prepare/Confirm
- * protocol defined in Section 13.</li>
- * <li>{@code WRITE_HIGH} - High-impact write; disabled by default and only
- * enabled after independent security review and dual approval.</li>
+ * <li>{@code READ_ONLY} - 纯查询，对 Provider 状态无副作用。</li>
+ * <li>{@code WRITE_LOW} - 写操作，需要第 13 节定义的两阶段 Prepare/Confirm 协议。</li>
+ * <li>{@code WRITE_HIGH} - 高影响写操作，默认禁用，须经独立安全评审与双人审批后才启用。</li>
  * </ul>
  *
- * <p>The risk level is orthogonal to authorization permissions:
- * {@code spec.authorization.permissions} determines <em>whether</em> a principal
- * may call the capability, while {@code spec.risk} determines <em>how strictly</em>
- * the invocation is governed.</p>
+ * <p>风险等级与鉴权权限是正交的两个维度：{@code spec.authorization.permissions}
+ * 决定主体<em>能否</em>调用该能力，而 {@code spec.risk} 决定调用被<em>多严格地</em>管控。</p>
  *
  * @see CapabilityManifest
  * @see ExecutionPlan
@@ -25,21 +20,17 @@ package com.ai.gateway.domain.model;
  */
 public enum RiskLevel {
     /**
-     * Read-only query. May be executed immediately after routing and
-     * parameter validation without entering the two-phase protocol.
+     * 只读查询。路由与参数校验通过后即可立即执行，无需进入两阶段协议。
      */
     READ_ONLY,
 
     /**
-     * Low-risk write operation. Requires the Prepare/Confirm protocol
-     * (Section 13) with idempotency, timeout, and uncertain-state recovery.
+     * 低风险写操作。需要第 13 节的 Prepare/Confirm 协议，具备幂等、超时与不确定状态恢复能力。
      */
     WRITE_LOW,
 
     /**
-     * High-risk write operation. Disabled in the initial release; only
-     * enabled after independent security review and dual approval mechanisms
-     * are in place.
+     * 高风险写操作。初始版本默认禁用，仅在独立安全评审与双人审批机制到位后启用。
      */
     WRITE_HIGH
 }

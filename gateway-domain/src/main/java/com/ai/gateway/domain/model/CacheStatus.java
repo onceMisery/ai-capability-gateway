@@ -1,16 +1,15 @@
 package com.ai.gateway.domain.model;
 
 /**
- * A read-only view of the cache subsystem status.
+ * 缓存子系统状态的只读视图。
  *
- * <p>Exposed through the admin console to show the current cache provider,
- * configuration, and snapshot cache state.</p>
+ * <p>通过管理控制台暴露，展示当前缓存提供方、配置与快照缓存状态。</p>
  *
- * @param provider the cache provider (stub or redis)
- * @param redisAddress the Redis address (masked in production)
- * @param localTtlSeconds the L1 (Caffeine) local cache TTL in seconds
- * @param currentSnapshotVersion the currently loaded snapshot version
- * @param lastRefreshTimestamp the last snapshot refresh timestamp (epoch millis)
+ * @param provider 缓存提供方（stub 或 redis）
+ * @param redisAddress Redis 地址（生产环境掩码）
+ * @param localTtlSeconds L1（Caffeine）本地缓存 TTL（秒）
+ * @param currentSnapshotVersion 当前已加载的快照版本
+ * @param lastRefreshTimestamp 上次快照刷新时间戳（epoch 毫秒）
  * @since 0.1.0
  */
 public record CacheStatus(
@@ -22,7 +21,7 @@ public record CacheStatus(
 ) {
 
     /**
-     * Compact constructor performing null checks.
+     * 紧凑构造器，执行 null 检查。
      */
     public CacheStatus {
         java.util.Objects.requireNonNull(provider, "provider must not be null");

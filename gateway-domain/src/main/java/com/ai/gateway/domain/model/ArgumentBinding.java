@@ -3,13 +3,12 @@ package com.ai.gateway.domain.model;
 import java.util.Map;
 
 /**
- * The binding definition for a single protocol argument at a given position.
+ * 在指定位置上的单个协议参数绑定定义。
  *
- * <p>Defines two binding modes:</p>
+ * <p>定义两种绑定模式：</p>
  *
- * <h3>Simple binding</h3>
- * <p>Uses {@code source} and {@code sourcePath} to read a value from a
- * single controlled source:</p>
+ * <h3>简单绑定</h3>
+ * <p>使用 {@code source} 与 {@code sourcePath} 从单一受控来源读取值：</p>
  * <pre>
  * - position: 0
  * name: orgId
@@ -18,11 +17,10 @@ import java.util.Map;
  * sourcePath: /orgId
  * </pre>
  *
- * <h3>Composite binding</h3>
- * <p>Uses {@code objectBindings} — a map of JSON Pointer to {@link FieldBinding}
- * — when a DTO contains both business fields and trusted fields. This is a
- * static mapping; no SpEL, scripts, or arbitrary expressions are allowed
- *.</p>
+ * <h3>复合绑定</h3>
+ * <p>当 DTO 同时包含业务字段与受信任字段时，使用 {@code objectBindings}
+ * —— 一个从 JSON Pointer 到 {@link FieldBinding} 的映射。这是一种静态映射，
+ * 不允许 SpEL、脚本或任意表达式。</p>
  * <pre>
  * - position: 1
  * name: request
@@ -36,30 +34,26 @@ import java.util.Map;
  * sourcePath: /orderNo
  * </pre>
  *
- * <p>A parameter may use simple binding <em>or</em> composite binding, but
- * not both. The binder must reject:</p>
+ * <p>一个参数可以使用简单绑定<em>或</em>复合绑定，但不能同时使用。绑定器必须拒绝：</p>
  * <ul>
- * <li>Duplicate positions, non-contiguous positions, or positions
- * inconsistent with the protocol signature.</li>
- * <li>PRINCIPAL paths that do not exist, have mismatched types, or
- * have null values.</li>
- * <li>Undeclared fields in the model output.</li>
- * <li>The same target field assigned by multiple sources.</li>
- * <li>Assignment to {@code class}, {@code @type}, or other reserved fields.</li>
- * <li>Constants incompatible with the target type.</li>
+ * <li>重复的位置、不连续的位置，或与协议签名不一致的位置。</li>
+ * <li>不存在、类型不匹配或值为 null 的 PRINCIPAL 路径。</li>
+ * <li>模型输出中未声明的字段。</li>
+ * <li>被多个来源赋值的同一目标字段。</li>
+ * <li>对 {@code class}、{@code @type} 或其他保留字段的赋值。</li>
+ * <li>与目标类型不兼容的常量。</li>
  * </ul>
  *
- * @param position the zero-based argument position in the protocol method signature
- * @param name the argument name (for documentation)
- * @param protocolType the fully-qualified Java type name as a string
- * (e.g., {@code "java.lang.Long"}); the gateway does
- * not load this class
- * @param source the value source for simple binding; null for composite binding
- * @param sourcePath the JSON Pointer into the source for simple binding
- * @param converter the optional converter name for simple binding; null if none
- * @param constantValue the constant value for CONSTANT simple binding
- * @param objectBindings the JSON Pointer to {@link FieldBinding} map for
- * composite binding; null for simple binding
+ * @param position 协议方法签名中从 0 开始的参数位置
+ * @param name 参数名（用于文档）
+ * @param protocolType 以字符串形式给出的全限定 Java 类型名
+ *（如 {@code "java.lang.Long"}）；网关不会加载该类
+ * @param source 简单绑定的值来源；复合绑定时为 null
+ * @param sourcePath 简单绑定的来源内部 JSON Pointer
+ * @param converter 简单绑定的可选转换器名；无则为 null
+ * @param constantValue CONSTANT 简单绑定的常量值
+ * @param objectBindings 复合绑定的 JSON Pointer 到 {@link FieldBinding} 映射；
+ * 简单绑定时为 null
  * @since 0.1.0
  */
 public record ArgumentBinding(
@@ -74,16 +68,16 @@ public record ArgumentBinding(
 ) {
 
     /**
-     * Compact constructor performing defensive copying and basic validation.
+     * 紧凑构造器，执行防御性拷贝与基础校验。
      *
-     * @param position the argument position
-     * @param name the argument name
-     * @param protocolType the protocol type name string
-     * @param source the value source for simple binding
-     * @param sourcePath the source path for simple binding
-     * @param converter the optional converter name
-     * @param constantValue the constant value
-     * @param objectBindings the composite binding map
+     * @param position 参数位置
+     * @param name 参数名
+     * @param protocolType 协议类型名字符串
+     * @param source 简单绑定的值来源
+     * @param sourcePath 简单绑定的来源路径
+     * @param converter 可选转换器名
+     * @param constantValue 常量值
+     * @param objectBindings 复合绑定的映射
      */
     public ArgumentBinding {
         java.util.Objects.requireNonNull(name, "name must not be null");
@@ -94,9 +88,9 @@ public record ArgumentBinding(
     }
 
     /**
-     * Returns whether this argument uses composite binding.
+     * 返回该参数是否使用复合绑定。
      *
-     * @return {@code true} if {@code objectBindings} is non-null and non-empty
+     * @return {@code objectBindings} 非 null 且非空时为 {@code true}
      */
     public boolean isComposite() {
         return objectBindings != null && !objectBindings.isEmpty();

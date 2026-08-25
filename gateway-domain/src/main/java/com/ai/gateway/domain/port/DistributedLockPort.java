@@ -3,66 +3,56 @@ package com.ai.gateway.domain.port;
 import java.util.function.Supplier;
 
 /**
- * Port for distributed mutual exclusion across gateway instances.
+ * 跨网关实例的分布式互斥端口。
  *
- * <p>Used to guarantee atomicity of operations that must not run
- * concurrently on different nodes, e.g.:</p>
+ * <p>用于保证不得在不同节点上并发执行的操作的原子性，例如：</p>
  * <ul>
- * <li>Snapshot publication (prevent concurrent publishes from producing
- * conflicting versions).</li>
- * <li>Outbox relay polling (prevent duplicate consumption across
- * instances).</li>
- * <li>Administrative operations (the same capability must not be approved
- * concurrently).</li>
+ * <li>快照发布（防止并发发布产生冲突版本）。</li>
+ * <li>Outbox 中继轮询（防止跨实例重复消费）。</li>
+ * <li>管理操作（同一能力不得被并发审批）。</li>
  * </ul>
  *
- * <p>Adapters implementing this port provide a reentrant, auto-renewing
- * distributed lock (e.g., Redisson {@code RLock} with its watchdog). The
- * port is a pure abstraction with no framework dependencies.</p>
+ * <p>实现此端口的适配器提供可重入、自动续期的分布式锁（如带看门狗的 Redisson
+ * {@code RLock}）。该端口是纯粹的领域抽象，不依赖任何框架。</p>
  *
  * @since 0.1.0
  */
 public interface DistributedLockPort {
 
     /**
-     * Attempts to acquire the named lock, waiting up to the given time.
+     * 尝试获取具名锁，最多等待指定时长。
      *
-     * <p>The lock is reentrant. If {@code leaseTimeMillis} is negative, the
-     * implementation may hold the lock until explicitly released (with
-     * automatic renewal where supported).</p>
+     * <p>该锁可重入。若 {@code leaseTimeMillis} 为负，实现可持有锁直到显式释放（在支持
+     * 的前提下自动续期）。</p>
      *
-     * @param lockKey the logical lock name
-     * @param waitTimeMillis the maximum time to wait for the lock
-     * @param leaseTimeMillis the maximum time to hold the lock; negative for
-     * auto-renewal / explicit release
-     * @return {@code true} if the lock was acquired; {@code false} if the
-     * wait time elapsed first
-     * @throws InterruptedException if the waiting thread is interrupted
+     * @param lockKey 逻辑锁名
+     * @param waitTimeMillis 等待锁的最大时长
+     * @param leaseTimeMillis 持有锁的最大时长；负值为自动续期 / 显式释放
+     * @return 若获取成功则为 {@code true}；若先超时则为 {@code false}
+     * @throws InterruptedException 当等待线程被中断时
      */
     boolean tryLock(String lockKey, long waitTimeMillis, long leaseTimeMillis)
             throws InterruptedException;
 
     /**
-     * Releases the named lock if it is held by the current thread.
+     * 若当前线程持有具名锁，则释放它。
      *
-     * <p>Releasing a lock that is not held is a no-op.</p>
+     * <p>释放未持有的锁为无操作。</p>
      *
-     * @param lockKey the logical lock name
+     * @param lockKey 逻辑锁名
      */
     void unlock(String lockKey);
 
     /**
-     * Executes an action while holding the named lock, releasing it
-     * afterwards regardless of outcome.
+     * 在持有具名锁期间执行动作，结束后无论结果如何都释放锁。
      *
-     * @param lockKey the logical lock name
-     * @param waitTimeMillis the maximum time to wait for the lock
-     * @param leaseTimeMillis the maximum time to hold the lock; negative for
-     * auto-renewal / explicit release
-     * @param action the action to run under the lock
-     * @param <T> the action result type
-     * @return the action result
-     * @throws LockAcquisitionException if the lock could not be acquired
+     * @param lockKey 逻辑锁名
+     * @param waitTimeMillis 等待锁的最大时长
+     * @param leaseTimeMillis 持有锁的最大时长；负值为自动续期 / 显式释放
+     * @param action 在锁保护下运行的动作
+     * @param <T> 动作结果类型
+     * @return 动作结果
+     * @throws LockAcquisitionException 当无法获取锁时
      */
     default <T> T withLock(String lockKey, long waitTimeMillis, long leaseTimeMillis,
                            Supplier<T> action) {
@@ -85,26 +75,26 @@ public interface DistributedLockPort {
     }
 
     /**
-     * Thrown when a distributed lock cannot be acquired.
+     * 当无法获取分布式锁时抛出。
      */
     class LockAcquisitionException extends RuntimeException {
 
         private static final long serialVersionUID = 1L;
 
         /**
-         * Constructs a new exception.
+         * 构造一个新的异常。
          *
-         * @param message the detail message
+         * @param message 详细消息
          */
         public LockAcquisitionException(String message) {
             super(message);
         }
 
         /**
-         * Constructs a new exception with a cause.
+         * 构造一个带原因的新异常。
          *
-         * @param message the detail message
-         * @param cause the underlying cause
+         * @param message 详细消息
+         * @param cause 底层原因
          */
         public LockAcquisitionException(String message, Throwable cause) {
             super(message, cause);

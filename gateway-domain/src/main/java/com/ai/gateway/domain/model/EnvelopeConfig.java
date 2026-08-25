@@ -3,26 +3,21 @@ package com.ai.gateway.domain.model;
 import java.util.List;
 
 /**
- * Configuration for envelope-mode response unwrapping.
+ * 信封模式响应解包的配置。
  *
- * <p>Specifies that the gateway cannot depend on business
- * unified-response JARs. Instead, it uses structured JSON Pointer paths
- * to determine business success and extract the data payload:</p>
+ * <p>规定网关不能依赖业务的统一响应 JAR，而是使用结构化的 JSON Pointer 路径来判定业务
+ * 成功与否并提取数据载荷：</p>
  *
  * <ul>
- * <li>{@code codePath} - JSON Pointer to the success-code field
- * (e.g., {@code "/code"}).</li>
- * <li>{@code successValues} - the set of values (preserving JSON scalar
- * types) that indicate success. Note: number {@code 0} and string
- * {@code "0"} are distinct; both must be declared if compatibility
- * is required.</li>
- * <li>{@code dataPath} - JSON Pointer to the data payload field
- * (e.g., {@code "/data"} or {@code "/value"}).</li>
- * <li>{@code messagePath} - JSON Pointer to the optional message field
- * (e.g., {@code "/message"}).</li>
+ * <li>{@code codePath} - 指向成功码字段的 JSON Pointer（如 {@code "/code"}）。</li>
+ * <li>{@code successValues} - 表示成功的值集合（保留 JSON 标量类型）。注意：数字
+ * {@code 0} 与字符串 {@code "0"} 不同，如需兼容两者都必须声明。</li>
+ * <li>{@code dataPath} - 指向数据载荷字段的 JSON Pointer（如 {@code "/data"} 或
+ * {@code "/value"}）。</li>
+ * <li>{@code messagePath} - 指向可选 message 字段的 JSON Pointer（如 {@code "/message"}）。</li>
  * </ul>
  *
- * <p>Platform standard envelope profile example:</p>
+ * <p>平台标准信封配置示例：</p>
  * <pre>
  * codePath: /code
  * successValues: ["200"]
@@ -30,14 +25,13 @@ import java.util.List;
  * messagePath: /message
  * </pre>
  *
- * <p>The adapter must recursively strip protocol-metadata keys (e.g.,
- * {@code class}) injected by Dubbo generic invocation before envelope
- * determination, projection, and public Schema validation.</p>
+ * <p>适配器必须在信封判定、投影与公开 Schema 校验之前，递归剥离 Dubbo 泛化调用注入的
+ * 协议元数据键（如 {@code class}）。</p>
  *
- * @param codePath JSON Pointer to the success-code field
- * @param successValues list of values indicating business success
- * @param dataPath JSON Pointer to the data payload
- * @param messagePath JSON Pointer to the message field; may be null
+ * @param codePath 指向成功码字段的 JSON Pointer
+ * @param successValues 表示业务成功的值列表
+ * @param dataPath 指向数据载荷的 JSON Pointer
+ * @param messagePath 指向 message 字段的 JSON Pointer；可为 null
  * @since 0.1.0
  */
 public record EnvelopeConfig(
@@ -47,12 +41,12 @@ public record EnvelopeConfig(
         String messagePath
 ) {
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      *
-     * @param codePath JSON Pointer to the success code
-     * @param successValues list of success values
-     * @param dataPath JSON Pointer to the data
-     * @param messagePath JSON Pointer to the message
+     * @param codePath 指向成功码的 JSON Pointer
+     * @param successValues 成功值列表
+     * @param dataPath 指向数据的 JSON Pointer
+     * @param messagePath 指向 message 的 JSON Pointer
      */
     public EnvelopeConfig {
         java.util.Objects.requireNonNull(codePath, "codePath must not be null");

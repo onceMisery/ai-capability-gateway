@@ -4,17 +4,16 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * A named role that groups a set of permissions for authorization decisions.
+ * 为鉴权决策分组一组权限的具名角色。
  *
- * <p>Roles are managed through the admin console and persisted in PostgreSQL.
- * Each role carries a set of permission words that determine what capabilities
- * and administrative actions the role can access.</p>
+ * <p>角色通过管理控制台管理并持久化到 PostgreSQL。每个角色携带一组权限词，决定该角色
+ * 可访问哪些能力与后台管理操作。</p>
  *
- * @param name the unique role name
- * @param description a human-readable description
- * @param permissions the permission words assigned to this role
- * @param createdAt the creation timestamp
- * @param updatedAt the last update timestamp
+ * @param name 唯一角色名
+ * @param description 可读描述
+ * @param permissions 分配给该角色的权限词
+ * @param createdAt 创建时间戳
+ * @param updatedAt 最后更新时间戳
  * @since 0.1.0
  */
 public record Role(
@@ -26,7 +25,7 @@ public record Role(
 ) {
 
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      */
     public Role {
         java.util.Objects.requireNonNull(name, "name must not be null");

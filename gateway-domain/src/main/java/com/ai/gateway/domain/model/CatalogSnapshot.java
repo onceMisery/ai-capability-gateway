@@ -3,39 +3,31 @@ package com.ai.gateway.domain.model;
 import java.util.List;
 
 /**
- * An immutable snapshot of the active capability catalog for a given
- * environment, published atomically by the control plane.
+ * 给定环境下活动能力目录的不可变快照，由控制面原子发布。
  *
- * <p>Specifies that publication must complete in a single
- * database transaction:</p>
+ * <p>规定发布必须在单一数据库事务内完成：</p>
  * <ol>
- * <li>Verify the target version is still APPROVED.</li>
- * <li>Generate a new monotonically increasing {@code snapshotVersion}.</li>
- * <li>Freeze all active capabilities and policy references for this
- * environment.</li>
- * <li>Mark the new snapshot as the current version.</li>
- * <li>Write publication audit and notification events.</li>
+ * <li>校验目标版本仍为 APPROVED。</li>
+ * <li>生成单调递增的 {@code snapshotVersion}。</li>
+ * <li>冻结该环境下全部活动能力与策略引用。</li>
+ * <li>将新快照标记为当前版本。</li>
+ * <li>写入发布审计与通知事件。</li>
  * </ol>
  *
- * <p>Instances receive the notification, load the snapshot from PostgreSQL,
- * build the retrieval index, and verify the digest. On success, the in-memory
- * reference is atomically replaced. On failure, the instance retains the old
- * snapshot and exits the ready state after exceeding the maximum lag time
- *.</p>
+ * <p>各实例收到通知后，从 PostgreSQL 加载快照、构建检索索引并校验摘要。成功则原子替换
+ * 内存引用；失败则保留旧快照，并在超过最大滞后时间后退出就绪状态。</p>
  *
- * <p>Each request is pinned to the snapshot version active at the start of
- * processing. Rollback copies a historical snapshot's content
- * into a new snapshot version; it does not modify history.</p>
+ * <p>每个请求都绑定到处理开始时生效的快照版本。回滚是把历史快照内容拷贝到新快照版本，
+ * 不修改历史。</p>
  *
- * <p>The {@code policyRef} references the authorization policy version
- * active at publication time. The {@code digest} is the content SHA-256
- * digest used by instances to verify snapshot integrity after loading.</p>
+ * <p>{@code policyRef} 引用发布时生效的鉴权策略版本。{@code digest} 是内容 SHA-256 摘要，
+ * 实例加载后用以校验快照完整性。</p>
  *
- * @param snapshotVersion the monotonically increasing snapshot version
- * @param environment the target environment (e.g., "production")
- * @param capabilities the list of published capability manifests
- * @param policyRef the authorization policy reference
- * @param digest the content SHA-256 digest
+ * @param snapshotVersion 单调递增的快照版本
+ * @param environment 目标环境（如 "production"）
+ * @param capabilities 已发布的能力清单列表
+ * @param policyRef 鉴权策略引用
+ * @param digest 内容 SHA-256 摘要
  * @since 0.1.0
  */
 public record CatalogSnapshot(
@@ -47,13 +39,13 @@ public record CatalogSnapshot(
 ) {
 
     /**
-     * Compact constructor performing defensive copying and null checks.
+     * 紧凑构造器，执行防御性拷贝与 null 检查。
      *
-     * @param snapshotVersion the snapshot version
-     * @param environment the environment
-     * @param capabilities the capability manifests
-     * @param policyRef the policy reference
-     * @param digest the digest
+     * @param snapshotVersion 快照版本
+     * @param environment 环境
+     * @param capabilities 能力清单
+     * @param policyRef 策略引用
+     * @param digest 摘要
      */
     public CatalogSnapshot {
         java.util.Objects.requireNonNull(environment, "environment must not be null");

@@ -4,44 +4,33 @@ import com.ai.gateway.domain.model.AuditEvent;
 import com.ai.gateway.domain.model.ExecutionAuditContext;
 
 /**
- * Port for persisting audit events with Fail Closed semantics.
+ * 以 Fail Closed（失效关闭）语义持久化审计事件的端口。
  *
- * <p>Specifies that all terminal states must be audited,
- * including:</p>
+ * <p>规定所有终态都必须被审计，包括：</p>
  * <ul>
- * <li>Authentication failures.</li>
- * <li>No-match and clarification events.</li>
- * <li>Permission denials.</li>
- * <li>Invalid model output.</li>
- * <li>Argument validation failures.</li>
- * <li>Call success, business failure, protocol error, and timeout.</li>
- * <li>Write-operation Prepare, Confirm, Cancel, Expire, Unknown, and
- * recovery events.</li>
- * <li>Manifest import, confirmation, publication, suspension, and
- * rollback events.</li>
+ * <li>鉴权失败。</li>
+ * <li>无匹配与澄清事件。</li>
+ * <li>权限拒绝。</li>
+ * <li>模型输出无效。</li>
+ * <li>参数校验失败。</li>
+ * <li>调用成功、业务失败、协议错误与超时。</li>
+ * <li>写操作的 Prepare、Confirm、Cancel、Expire、Unknown 与恢复事件。</li>
+ * <li>清单的导入、确认、发布、下线（suspend）与回滚事件。</li>
  * </ul>
  *
- * <p>The runtime must persist a {@code REQUEST_ACCEPTED} event after
- * minimum identity verification and before retrieval or LLM calls. If
- * persistence fails, the gateway refuses to continue processing (Fail
- * Closed). Before calling the Provider, a {@code STARTED} event must be
- * persisted; after the call, the terminal state must be persisted before
- * returning data to the client. Terminal state persistence failure must
- * not return Provider data.</p>
+ * <p>运行时必须在最小身份核验之后、检索或 LLM 调用之前持久化一条 {@code REQUEST_ACCEPTED}
+ * 事件。若持久化失败，网关拒绝继续处理（Fail Closed）。在调用 Provider 之前必须持久化
+ * {@code STARTED} 事件；调用之后必须在向客户端返回数据之前持久化终态。终态持久化失败
+ * 时不得返回 Provider 数据。</p>
  *
- * <p>The audit table uses append-only permissions and is exported via an
- * Outbox to a separate SIEM or immutable storage. Since database
- * administrators retain the ability to modify the database, the business
- * table alone cannot claim tamper-proof guarantees.</p>
+ * <p>审计表采用仅追加权限，并通过 Outbox 导出到独立的 SIEM 或不可变存储。由于数据库
+ * 管理员仍具备修改数据库的能力，仅凭业务表无法声称防篡改保证。</p>
  *
- * <p>Sensitive parameters are recorded only as redacted summaries or
- * irreversible hashes. Trace attributes record only capability ID,
- * version, snapshot, stable error codes, and durations — not sensitive
- * parameters.</p>
+ * <p>敏感参数仅以脱敏摘要或不可逆哈希记录。追踪属性只记录能力 ID、版本、快照、稳定
+ * 错误码与耗时——不包含敏感参数。</p>
  *
- * <p>Adapters implementing this port persist audit events to PostgreSQL
- * with micro-batching optimizations. The port is a pure
- * abstraction with no framework dependencies.</p>
+ * <p>实现此端口的适配器将审计事件持久化到 PostgreSQL，并采用微批优化。该端口是纯粹的
+ * 领域抽象，不依赖任何框架。</p>
  *
  * @see AuditEvent
  * @since 0.1.0
@@ -49,57 +38,48 @@ import com.ai.gateway.domain.model.ExecutionAuditContext;
 public interface AuditPort {
 
     /**
-     * Records a {@code REQUEST_ACCEPTED} audit event.
+     * 记录一条 {@code REQUEST_ACCEPTED} 审计事件。
      *
-     * <p>: after minimum identity verification, the runtime
-     * must persist this event before retrieval or LLM calls. If
-     * persistence fails, the gateway refuses to continue processing
-     * (Fail Closed).</p>
+     * <p>规定：在最小身份核验之后，运行时必须在检索或 LLM 调用之前持久化该事件。若
+     * 持久化失败，网关拒绝继续处理（Fail Closed）。</p>
      *
-     * @param requestId the unique request identifier
-     * @param subjectDigest the digest of the caller's subject identity
-     * @param orgId the organization context
+     * @param requestId 唯一请求标识
+     * @param subjectDigest 调用方主体身份的摘要
+     * @param orgId 组织上下文
      */
     void recordAccepted(String requestId, String subjectDigest, long orgId);
 
     /**
-     * Records a {@code STARTED} audit event before calling the Provider.
+     * 在调用 Provider 之前记录一条 {@code STARTED} 审计事件。
      *
-     * <p>: before calling the Provider, a {@code STARTED}
-     * event must be persisted. After the call, the terminal state must
-     * be persisted before returning data to the client. Terminal state
-     * persistence failure must not return Provider data.</p>
+     * <p>规定：在调用 Provider 之前必须持久化 {@code STARTED} 事件。调用之后必须在向
+     * 客户端返回数据之前持久化终态。终态持久化失败不得返回 Provider 数据。</p>
      *
-     * @param context 执行审计上下文，包含身份、租户、能力和固定快照
+     * @param context 执行审计上下文，包含身份、租户、能力与固定快照
      */
     void recordStarted(ExecutionAuditContext context);
 
     /**
-     * Records a terminal audit event after the Provider call completes.
+     * 在 Provider 调用完成后记录一条终态审计事件。
      *
-     * <p>: the terminal state must be persisted before
-     * returning data to the client. Sensitive parameters are recorded
-     * only as redacted summaries or irreversible hashes.</p>
+     * <p>规定：终态必须在向客户端返回数据之前持久化。敏感参数仅以脱敏摘要或不可逆
+     * 哈希记录。</p>
      *
      * @param context 执行审计上下文，必须与 STARTED 阶段使用同一份上下文
-     * @param resultCode the stable result code (e.g., an {@link com.ai.gateway.domain.model.ErrorCode} name)
-     * @param durationMs the call duration in milliseconds
-     * @param detailsJson the controlled diagnostic summary as JSON;
-     * never contains stacks, internal addresses,
-     * or sensitive params
+     * @param resultCode 稳定结果码（如某个 {@link com.ai.gateway.domain.model.ErrorCode} 名称）
+     * @param durationMs 调用耗时（毫秒）
+     * @param detailsJson 受控诊断摘要（JSON 形式）；绝不包含堆栈、内部地址或敏感参数
      */
     void recordTerminal(ExecutionAuditContext context, String resultCode,
                         long durationMs, String detailsJson);
 
     /**
-     * Records a custom audit event.
+     * 记录一条自定义审计事件。
      *
-     * <p>: used for events not covered by the convenience
-     * methods above, such as authentication failures, no-match,
-     * clarification, permission denials, manifest lifecycle changes, and
-     * write-operation state transitions.</p>
+     * <p>用于上述便捷方法未覆盖的事件，如鉴权失败、无匹配、澄清、权限拒绝、清单生命周期
+     * 变更与写操作状态迁移。</p>
      *
-     * @param event the audit event to persist; never {@code null}
+     * @param event 待持久化的审计事件；永不为 {@code null}
      */
     void recordEvent(AuditEvent event);
 }

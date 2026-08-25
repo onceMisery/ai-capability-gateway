@@ -3,45 +3,40 @@ package com.ai.gateway.domain.model;
 import java.util.List;
 
 /**
- * The system-generated confirmation summary presented to the submitter
- * during the confirmation phase of the control plane.
+ * 控制面确认阶段向提交者展示的系统生成确认摘要。
  *
- * <p>Specifies that after a Manifest passes all 10 automatic
- * validation steps, the system generates a confirmation
- * summary containing at minimum:</p>
+ * <p>规定清单通过全部 10 步自动校验后，系统生成至少包含以下内容的确认摘要：</p>
  *
  * <ul>
- * <li>Capability ID, version, and risk level.</li>
- * <li>Protocol binding summary: interface name, method, serialization.</li>
- * <li>Model-visible field list (MODEL fields in inputSchema).</li>
- * <li>Principal-injected field list (e.g., orgId).</li>
- * <li>Output projection fields and redaction rules.</li>
- * <li>Required permission strings.</li>
- * <li>Compatibility test result.</li>
- * <li>Manifest content SHA-256 digest.</li>
+ * <li>能力 ID、版本与风险等级。</li>
+ * <li>协议绑定摘要：接口名、方法、序列化方式。</li>
+ * <li>模型可见字段列表（inputSchema 中的 MODEL 字段）。</li>
+ * <li>Principal 注入字段列表（如 orgId）。</li>
+ * <li>输出投影字段与脱敏规则。</li>
+ * <li>所需权限字符串。</li>
+ * <li>兼容性测试结果。</li>
+ * <li>清单内容 SHA-256 摘要。</li>
  * </ul>
  *
- * <p>The confirmation record must bind to the Manifest digest, confirmer,
- * time, environment, and opinion (confirm or reject). When Manifest content
- * changes, old confirmations are automatically invalidated.</p>
+ * <p>确认记录必须绑定到清单摘要、确认人、时间、环境与意见（确认或拒绝）。当清单内容
+ * 变更时，旧确认自动失效。</p>
  *
- * <p>This simplified flow applies to READ_ONLY capabilities only. WRITE_LOW
- * and WRITE_HIGH require independent security review and dual approval
- *.</p>
+ * <p>此简化流程仅适用于 READ_ONLY 能力。WRITE_LOW 与 WRITE_HIGH 仍需独立安全评审与
+ * 双人审批。</p>
  *
- * @param capabilityId the capability identifier
- * @param version the semantic version
- * @param risk the risk level
- * @param interfaceName the protocol interface name
- * @param method the protocol method name
- * @param serialization the serialization method
- * @param modelVisibleFields the list of MODEL-sourced field paths
- * @param principalInjectedFields the list of PRINCIPAL-sourced field paths
- * @param outputProjections the output projection mappings
- * @param redactions the output redaction rules
- * @param requiredPermissions the required permission strings
- * @param compatibilityTestResult the compatibility test outcome summary
- * @param manifestSha256 the SHA-256 digest of the Manifest content
+ * @param capabilityId 能力标识
+ * @param version 语义化版本
+ * @param risk 风险等级
+ * @param interfaceName 协议接口名
+ * @param method 协议方法名
+ * @param serialization 序列化方式
+ * @param modelVisibleFields MODEL 来源字段路径列表
+ * @param principalInjectedFields PRINCIPAL 来源字段路径列表
+ * @param outputProjections 输出投影映射
+ * @param redactions 输出脱敏规则
+ * @param requiredPermissions 所需权限字符串
+ * @param compatibilityTestResult 兼容性测试结果摘要
+ * @param manifestSha256 清单内容的 SHA-256 摘要
  * @since 0.1.0
  */
 public record ConfirmationSummary(
@@ -61,21 +56,21 @@ public record ConfirmationSummary(
 ) {
 
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      *
-     * @param capabilityId the capability ID
-     * @param version the version
-     * @param risk the risk level
-     * @param interfaceName the interface name
-     * @param method the method name
-     * @param serialization the serialization
-     * @param modelVisibleFields the model-visible fields
-     * @param principalInjectedFields the principal-injected fields
-     * @param outputProjections the output projections
-     * @param redactions the redaction rules
-     * @param requiredPermissions the required permissions
-     * @param compatibilityTestResult the compatibility test result
-     * @param manifestSha256 the manifest SHA-256 digest
+     * @param capabilityId 能力 ID
+     * @param version 版本
+     * @param risk 风险等级
+     * @param interfaceName 接口名
+     * @param method 方法名
+     * @param serialization 序列化方式
+     * @param modelVisibleFields 模型可见字段
+     * @param principalInjectedFields Principal 注入字段
+     * @param outputProjections 输出投影
+     * @param redactions 脱敏规则
+     * @param requiredPermissions 所需权限
+     * @param compatibilityTestResult 兼容性测试结果
+     * @param manifestSha256 清单 SHA-256 摘要
      */
     public ConfirmationSummary {
         java.util.Objects.requireNonNull(capabilityId, "capabilityId must not be null");

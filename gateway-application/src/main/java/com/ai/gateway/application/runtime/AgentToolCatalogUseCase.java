@@ -57,39 +57,6 @@ public final class AgentToolCatalogUseCase {
                 DEFAULT_MAX_CANDIDATES, DEFAULT_SCHEMA_BUDGET_BYTES);
     }
 
-    /** Compatibility constructor; production wiring must use the in-memory manager. */
-    @Deprecated
-    public AgentToolCatalogUseCase(AuthenticationPort authenticationPort,
-                                   AuthorizationPort authorizationPort,
-                                   CatalogPort catalogPort,
-                                   CandidateRetriever candidateRetriever,
-                                   TextNormalizer textNormalizer,
-                                   AliasGenerator aliasGenerator,
-                                   String environment) {
-        this(authenticationPort, authorizationPort, catalogPort, candidateRetriever,
-                textNormalizer, aliasGenerator, environment,
-                DEFAULT_MAX_CANDIDATES, DEFAULT_SCHEMA_BUDGET_BYTES);
-    }
-
-    /** Compatibility constructor; production wiring must use the in-memory manager. */
-    @Deprecated
-    public AgentToolCatalogUseCase(AuthenticationPort authenticationPort,
-                                   AuthorizationPort authorizationPort,
-                                   CatalogPort catalogPort,
-                                   CandidateRetriever candidateRetriever,
-                                   TextNormalizer textNormalizer,
-                                   AliasGenerator aliasGenerator,
-                                   String environment,
-                                   int maxCandidates,
-                                   int schemaBudgetBytes) {
-        this(authenticationPort, authorizationPort,
-                () -> {
-                    var snapshot = catalogPort.loadCurrentSnapshot(environment);
-                    return snapshot == null ? null : ActiveCatalogView.from(snapshot);
-                },
-                candidateRetriever, textNormalizer, aliasGenerator, environment,
-                maxCandidates, schemaBudgetBytes);
-    }
 
     AgentToolCatalogUseCase(AuthenticationPort authenticationPort,
                             AuthorizationPort authorizationPort,
@@ -293,11 +260,10 @@ public final class AgentToolCatalogUseCase {
         return String.valueOf(value).getBytes(StandardCharsets.UTF_8).length;
     }
 
-    private static String requireText(String value, String name) {
+    private void requireText(String value, String name) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(name + " must not be blank");
         }
-        return value;
     }
 
     public record Resolution(long snapshotVersion,

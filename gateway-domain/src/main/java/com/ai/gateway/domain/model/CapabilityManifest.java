@@ -4,31 +4,23 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The complete, machine-verifiable Capability Manifest that transforms a
- * governed microservice API into a natural-language-discoverable capability.
+ * 完整的、机器可校验的能力清单，将受治理的微服务 API 转化为可通过自然语言发现的能力。
  *
- * <p>Defines the top-level structure. The Manifest uses YAML
- * or JSON format and is validated by a versioned JSON Schema.
- * Markdown is only for supplementary human-readable documentation and is
- * not an executable contract.</p>
+ * <p>定义顶层结构。清单使用 YAML 或 JSON 格式，并受带版本的 JSON Schema 校验。
+ * Markdown 仅用于补充性的可读文档，并非可执行的契约。</p>
  *
- * <p>Each Manifest has a stable {@code metadata.id}, semantic version,
- * and content SHA-256 digest. The same
- * {@code metadata.id + version} content cannot be overwritten; modifications
- * must produce a new version.</p>
+ * <p>每个清单拥有稳定的 {@code metadata.id}、语义化版本与内容 SHA-256 摘要。相同的
+ * {@code metadata.id + version} 内容不可被覆盖；修改必须产生新版本。</p>
  *
- * <p>The Manifest contains only protocol type-name strings; the gateway
- * does not load the {@code interfaceName}, {@code parameterTypes}, or any
- * business API class at compile or runtime.</p>
+ * <p>清单仅包含协议类型名字符串；网关在编译或运行期都不会加载 {@code interfaceName}、
+ * {@code parameterTypes} 或任何业务 API 类。</p>
  *
- * <p>Lifecycle state, confirmation records, publication environment, and
- * snapshot version are control-plane records and are not self-declared in
- * the Manifest.</p>
+ * <p>生命周期状态、确认记录、发布环境与快照版本属于控制面记录，不在清单中自行声明。</p>
  *
- * @param apiVersion the Manifest specification version (e.g., "gateway.ai/v1")
- * @param kind always "Capability"
- * @param metadata the capability metadata (ID, version, owner, tags)
- * @param spec the capability specification
+ * @param apiVersion 清单规范版本（如 "gateway.ai/v1"）
+ * @param kind 固定为 "Capability"
+ * @param metadata 能力元数据（ID、版本、拥有者、标签）
+ * @param spec 能力规格说明
  * @since 0.1.0
  */
 public record CapabilityManifest(
@@ -39,12 +31,12 @@ public record CapabilityManifest(
 ) {
 
     /**
-     * Compact constructor performing null checks.
+     * 紧凑构造器，执行 null 检查。
      *
-     * @param apiVersion the API version
-     * @param kind the kind
-     * @param metadata the metadata
-     * @param spec the spec
+     * @param apiVersion API 版本
+     * @param kind 类型
+     * @param metadata 元数据
+     * @param spec 规格说明
      */
     public CapabilityManifest {
         java.util.Objects.requireNonNull(apiVersion, "apiVersion must not be null");
@@ -54,18 +46,16 @@ public record CapabilityManifest(
     }
 
     /**
-     * The metadata block identifying the capability, its version, and its
-     * responsible team.
+     * 标识能力、其版本与责任团队的元数据块。
      *
-     * <p> {@code id} uses the
-     * {@code domain.resource.action} convention (e.g.,
-     * {@code order.detail.query}) and only allows lowercase letters, digits,
-     * dots, and hyphens. Once published, the ID cannot be renamed.</p>
+     * <p>{@code id} 采用 {@code domain.resource.action} 约定（如
+     * {@code order.detail.query}），仅允许小写字母、数字、点与连字符。一旦发布，
+     * ID 不可重命名。</p>
      *
-     * @param id the globally stable capability identifier
-     * @param version the SemVer version string
-     * @param owner the responsible team and contact
-     * @param tags the controlled tags (optional)
+     * @param id 全局稳定的能力标识
+     * @param version SemVer 版本字符串
+     * @param owner 责任团队与联系方式
+     * @param tags 受控标签（可选）
      */
     public record Metadata(
             String id,
@@ -73,14 +63,13 @@ public record CapabilityManifest(
             Owner owner,
             List<String> tags
     ) {
-
         /**
-         * Compact constructor performing defensive copying.
+         * 紧凑构造器，执行防御性拷贝。
          *
-         * @param id the capability ID
-         * @param version the version
-         * @param owner the owner
-         * @param tags the tags
+         * @param id 能力 ID
+         * @param version 版本
+         * @param owner 拥有者
+         * @param tags 标签
          */
         public Metadata {
             java.util.Objects.requireNonNull(id, "id must not be null");
@@ -91,10 +80,10 @@ public record CapabilityManifest(
     }
 
     /**
-     * The responsible team and contact for the capability.
+     * 能力的责任团队与联系方式。
      *
-     * @param team the team name (e.g., "order-platform")
-     * @param contact the contact email (e.g., "order-platform@example.com")
+     * @param team 团队名（如 "order-platform"）
+     * @param contact 联系邮箱（如 "order-platform@example.com"）
      */
     public record Owner(
             String team,
@@ -102,10 +91,10 @@ public record CapabilityManifest(
     ) {
 
         /**
-         * Compact constructor performing null checks.
+         * 紧凑构造器，执行 null 检查。
          *
-         * @param team the team name
-         * @param contact the contact email
+         * @param team 团队名
+         * @param contact 联系邮箱
          */
         public Owner {
             java.util.Objects.requireNonNull(team, "team must not be null");
@@ -114,35 +103,30 @@ public record CapabilityManifest(
     }
 
     /**
-     * The capability specification containing all execution-relevant
-     * configuration.
+     * 包含全部执行相关配置的能力规格说明。
      *
-     * <p>Defines the following required fields:</p>
+     * <p>定义以下必需字段：</p>
      * <ul>
-     * <li>{@code displayName} - user-understandable capability name.</li>
-     * <li>{@code description} - single business-action description.</li>
-     * <li>{@code examples} - positive, negative, and disambiguation examples.</li>
-     * <li>{@code risk} - the risk level governing execution mode.</li>
-     * <li>{@code inputSchema} - model-visible JSON Schema 2020-12.</li>
-     * <li>{@code authorization} - required permissions and principal claims
-     * (optional in the initial release).</li>
-     * <li>{@code invocation} - protocol binding and deterministic parameter
-     * mapping.</li>
-     * <li>{@code output} - response unwrapping, projection, redaction, and
-     * Schema.</li>
-     * <li>{@code resilience} - timeout, retry, concurrency, and circuit
-     * breaker.</li>
+     * <li>{@code displayName} - 面向用户的能力名称。</li>
+     * <li>{@code description} - 单一业务动作描述。</li>
+     * <li>{@code examples} - 正向、负向与消歧示例。</li>
+     * <li>{@code risk} - 决定执行模式的风险等级。</li>
+     * <li>{@code inputSchema} - 模型可见的 JSON Schema 2020-12。</li>
+     * <li>{@code authorization} - 所需权限与 Principal 声明（初始版本可选）。</li>
+     * <li>{@code invocation} - 协议绑定与确定性参数映射。</li>
+     * <li>{@code output} - 响应解包、投影、脱敏与 Schema。</li>
+     * <li>{@code resilience} - 超时、重试、并发与熔断。</li>
      * </ul>
      *
-     * @param displayName the user-facing capability name
-     * @param description the single business-action description
-     * @param examples the positive, negative, and synonym examples
-     * @param risk the risk level
-     * @param inputSchema the model-visible JSON Schema
-     * @param authorization the required permissions and principal claims
-     * @param invocation the protocol binding
-     * @param output the output contract
-     * @param resilience the resilience policy
+     * @param displayName 面向用户的能力名称
+     * @param description 单一业务动作描述
+     * @param examples 正向、负向与同义词示例
+     * @param risk 风险等级
+     * @param inputSchema 模型可见的 JSON Schema
+     * @param authorization 所需权限与 Principal 声明
+     * @param invocation 协议绑定
+     * @param output 出参契约
+     * @param resilience 韧性策略
      */
     public record Spec(
             String displayName,
@@ -157,17 +141,17 @@ public record CapabilityManifest(
     ) {
 
         /**
-         * Compact constructor performing defensive copying.
+         * 紧凑构造器，执行防御性拷贝。
          *
-         * @param displayName the display name
-         * @param description the description
-         * @param examples the examples
-         * @param risk the risk level
-         * @param inputSchema the input schema
-         * @param authorization the authorization
-         * @param invocation the invocation binding
-         * @param output the output contract
-         * @param resilience the resilience policy
+         * @param displayName 显示名称
+         * @param description 描述
+         * @param examples 示例
+         * @param risk 风险等级
+         * @param inputSchema 入参 Schema
+         * @param authorization 鉴权配置
+         * @param invocation 调用绑定
+         * @param output 出参契约
+         * @param resilience 韧性策略
          */
         public Spec {
             java.util.Objects.requireNonNull(displayName, "displayName must not be null");
@@ -183,22 +167,20 @@ public record CapabilityManifest(
     }
 
     /**
-     * Natural-language examples for retrieval and model routing.
+     * 用于检索与模型路由的自然语言示例。
      *
-     * <p>Requires at least:</p>
+     * <p>至少要求：</p>
      * <ul>
-     * <li>Three positive examples.</li>
-     * <li>Two negative examples identifying confusing alternatives.</li>
-     * <li>Key noun synonyms.</li>
+     * <li>三个正向示例。</li>
+     * <li>两个负向示例，指明容易混淆的替代项。</li>
+     * <li>关键名词同义词。</li>
      * </ul>
      *
-     * <p>Examples participate in BM25 retrieval and model
-     * routing. They are governed production configuration confirmed by the
-     * business Owner.</p>
+     * <p>示例参与 BM25 检索与模型路由。它们是由业务 Owner 确认的受治理生产配置。</p>
      *
-     * @param positive the positive examples (queries this capability handles)
-     * @param negative the negative examples (queries it does not handle)
-     * @param synonyms the key noun synonyms
+     * @param positive 正向示例（该能力处理的查询）
+     * @param negative 负向示例（其不处理的查询）
+     * @param synonyms 关键名词同义词
      */
     public record Examples(
             List<String> positive,
@@ -207,11 +189,11 @@ public record CapabilityManifest(
     ) {
 
         /**
-         * Compact constructor performing defensive copying.
+         * 紧凑构造器，执行防御性拷贝。
          *
-         * @param positive the positive examples
-         * @param negative the negative examples
-         * @param synonyms the synonyms
+         * @param positive 正向示例
+         * @param negative 负向示例
+         * @param synonyms 同义词
          */
         public Examples {
             java.util.Objects.requireNonNull(positive, "positive must not be null");
@@ -224,24 +206,22 @@ public record CapabilityManifest(
     }
 
     /**
-     * The authorization requirements for invoking the capability.
+     * 调用该能力所需的鉴权要求。
      *
-     * <p> {@code permissions} uses the
-     * {@code domain:resource:action} three-segment convention.
-     * Wildcards are prohibited.</p>
+     * <p>{@code permissions} 采用 {@code domain:resource:action} 三段式约定。
+     * 禁止通配符。</p>
      *
-     * <p>{@code principalClaims} defines required Principal claims (e.g.,
-     * {@code /orgId} must be an integer and required). The gateway validates
-     * these before parameter binding.</p>
+     * <p>{@code principalClaims} 定义必需的 Principal 声明（如 {@code /orgId} 必须为
+     * 整数且必填）。网关在参数绑定前校验这些声明。</p>
      *
-     * <p>Development stub mode may omit this block for read-only capabilities;
-     * production policy loading remains explicit and fail-closed.</p>
+     * <p>开发 stub 模式可对只读能力省略此块；生产策略加载仍须显式且失效关闭
+     *（fail-closed）。</p>
      *
-     * @param permissions the required permission strings
-     * @param principalClaims the required Principal claims keyed by JSON Pointer
-     * @param maxAuthAgeSeconds write-operation authentication freshness limit
-     * @param requiredAcr required authentication context class reference
-     * @param requiredAmr required authentication methods
+     * @param permissions 所需权限字符串
+     * @param principalClaims 以 JSON Pointer 为键的必需 Principal 声明
+     * @param maxAuthAgeSeconds 写操作鉴权新鲜度上限
+     * @param requiredAcr 必需的认证上下文类引用
+     * @param requiredAmr 必需的认证方法
      */
     public record Authorization(
             List<String> permissions,
@@ -264,13 +244,13 @@ public record CapabilityManifest(
         }
 
         /**
-         * Compact constructor performing defensive copying.
+         * 紧凑构造器，执行防御性拷贝。
          *
-         * @param permissions the permission strings
-         * @param principalClaims the principal claim requirements
-         * @param maxAuthAgeSeconds authentication freshness limit
-         * @param requiredAcr required authentication context
-         * @param requiredAmr required authentication methods
+         * @param permissions 权限字符串
+         * @param principalClaims Principal 声明要求
+         * @param maxAuthAgeSeconds 鉴权新鲜度上限
+         * @param requiredAcr 必需的认证上下文
+         * @param requiredAmr 必需的认证方法
          */
         public Authorization {
             java.util.Objects.requireNonNull(permissions, "permissions must not be null");
@@ -281,14 +261,12 @@ public record CapabilityManifest(
     }
 
     /**
-     * A requirement for a single Principal claim.
+     * 单个 Principal 声明的要求。
      *
-     * <p> defines the expected type and whether
-     * the claim is mandatory. The gateway validates Principal claims before
-     * parameter binding.</p>
+     * <p>定义期望的类型以及该声明是否必填。网关在参数绑定前校验 Principal 声明。</p>
      *
-     * @param type the expected claim type (e.g., "integer", "string")
-     * @param required whether the claim must be present and non-null
+     * @param type 期望的声明类型（如 "integer"、"string"）
+     * @param required 该声明是否必须存在且非 null
      */
     public record ClaimRequirement(
             String type,
@@ -296,10 +274,10 @@ public record CapabilityManifest(
     ) {
 
         /**
-         * Compact constructor performing null check.
+         * 紧凑构造器，执行 null 检查。
          *
-         * @param type the claim type
-         * @param required whether the claim is required
+         * @param type 声明类型
+         * @param required 声明是否必填
          */
         public ClaimRequirement {
             java.util.Objects.requireNonNull(type, "type must not be null");

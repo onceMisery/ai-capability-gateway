@@ -14,12 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Use case for continuing a clarification session in multi-turn natural-language
@@ -110,9 +105,9 @@ public final class ClarificationUseCase {
     public ClarificationResult continueClarification(String interactionId,
                                                       String text,
                                                       String principalDigest) {
-        java.util.Objects.requireNonNull(interactionId, "interactionId must not be null");
-        java.util.Objects.requireNonNull(text, "text must not be null");
-        java.util.Objects.requireNonNull(principalDigest, "principalDigest must not be null");
+        Objects.requireNonNull(interactionId, "interactionId must not be null");
+        Objects.requireNonNull(text, "text must not be null");
+        Objects.requireNonNull(principalDigest, "principalDigest must not be null");
         log.info("Continuing clarification: interactionId={}", interactionId);
 
         // Load the interaction

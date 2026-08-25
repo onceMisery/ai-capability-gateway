@@ -4,44 +4,37 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The deterministic protocol invocation binding for a capability.
+ * 能力的确定性协议调用绑定。
  *
- * <p>Defines the protocol binding as the execution configuration
- * that does <strong>not</strong> enter the model context. It contains all
- * information needed to perform a generic invocation without loading any
- * business API JAR at runtime.</p>
+ * <p>将协议绑定定义为<strong>不</strong>进入模型上下文的执行配置。它包含执行泛化调用
+ * 所需的全部信息，且运行期无需加载任何业务 API JAR。</p>
  *
- * <p>For Dubbo (Section 12), the binding includes:</p>
+ * <p>对于 Dubbo（第 12 节），绑定包含：</p>
  * <ul>
- * <li>{@code registryRef} - references an operationally pre-configured
- * registry; Manifests must not carry usernames, passwords, or
- * arbitrary registry addresses.</li>
- * <li>{@code interfaceName}, {@code group}, {@code version}, {@code method} -
- * the Dubbo service coordinates.</li>
- * <li>{@code parameterTypes} - must correspond one-to-one with
- * {@code arguments} positions and {@code protocolType} values.</li>
- * <li>{@code serialization} - must belong to the platform serialization
- * whitelist and be validated during compatibility
- * testing.</li>
- * <li>{@code arguments} - the ordered argument bindings.</li>
- * <li>{@code attachments} - the whitelisted attachment bindings
- *.</li>
+ * <li>{@code registryRef} - 引用运维预配置的注册中心；清单不得携带用户名、密码或
+ * 任意注册中心地址。</li>
+ * <li>{@code interfaceName}、{@code group}、{@code version}、{@code method} -
+ * Dubbo 服务坐标。</li>
+ * <li>{@code parameterTypes} - 必须与 {@code arguments} 位置及 {@code protocolType}
+ * 值一一对应。</li>
+ * <li>{@code serialization} - 必须属于平台序列化白名单，并在兼容性测试中校验。</li>
+ * <li>{@code arguments} - 按序的参数绑定。</li>
+ * <li>{@code attachments} - 基于白名单键的附件绑定。</li>
  * </ul>
  *
- * <p>The gateway does not load the {@code interfaceName} or
- * {@code parameterTypes} classes at compile or runtime; they exist only as
- * type-name strings for generic invocation.</p>
+ * <p>网关在编译或运行期都不会加载 {@code interfaceName} 或 {@code parameterTypes} 类；
+ * 它们仅作为类型名字符串用于泛化调用。</p>
  *
- * @param protocol the wire protocol
- * @param registryRef the operationally pre-configured registry reference
- * @param interfaceName the fully-qualified service interface name
- * @param group the service group
- * @param version the service version
- * @param method the method name to invoke
- * @param parameterTypes the list of fully-qualified parameter type names
- * @param serialization the serialization method (must be in the platform whitelist)
- * @param arguments the ordered argument bindings
- * @param attachments the attachment bindings keyed by whitelisted attachment name
+ * @param protocol 线缆协议
+ * @param registryRef 运维预配置的注册中心引用
+ * @param interfaceName 全限定服务接口名
+ * @param group 服务分组
+ * @param version 服务版本
+ * @param method 待调用的方法名
+ * @param parameterTypes 全限定参数类型名列表
+ * @param serialization 序列化方式（须位于平台白名单）
+ * @param arguments 按序的参数绑定
+ * @param attachments 以白名单附件名为键的附件绑定
  * @since 0.1.0
  */
 public record ProtocolBinding(
@@ -58,18 +51,18 @@ public record ProtocolBinding(
 ) {
 
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      *
-     * @param protocol the wire protocol
-     * @param registryRef the registry reference
-     * @param interfaceName the service interface name
-     * @param group the service group
-     * @param version the service version
-     * @param method the method name
-     * @param parameterTypes the parameter type names
-     * @param serialization the serialization method
-     * @param arguments the argument bindings
-     * @param attachments the attachment bindings
+     * @param protocol 线缆协议
+     * @param registryRef 注册中心引用
+     * @param interfaceName 服务接口名
+     * @param group 服务分组
+     * @param version 服务版本
+     * @param method 方法名
+     * @param parameterTypes 参数类型名
+     * @param serialization 序列化方式
+     * @param arguments 参数绑定
+     * @param attachments 附件绑定
      */
     public ProtocolBinding {
         java.util.Objects.requireNonNull(protocol, "protocol must not be null");

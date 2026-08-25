@@ -3,11 +3,10 @@ package com.ai.gateway.domain.model;
 import java.util.Map;
 
 /**
- * The immutable execution plan generated after model routing succeeds.
+ * 模型路由成功后生成的不可变执行计划。
  *
- * <p>Specifies that after the model selects a capability and
- * the gateway validates arguments, it generates an immutable ExecutionPlan
- * containing:</p>
+ * <p>规定模型选定能力且网关完成参数校验后，会生成一个不可变的 ExecutionPlan，
+ * 包含：</p>
  *
  * <pre>
  * executionId
@@ -18,31 +17,27 @@ import java.util.Map;
  * resolvedProtocolArguments
  * policyDecisionId
  * risk
- * timeout/retry/idempotency policy
+ * timeout/retry/idempotency 策略
  * </pre>
  *
- * <p>The execution plan must not contain any protocol configuration that
- * could be modified by the model. Read-only operations may execute
- * immediately; write operations must enter the PREPARED state of the
- * two-phase protocol (Section 13).</p>
+ * <p>执行计划不得包含任何可被模型修改的协议配置。只读操作可立即执行；写操作必须进入
+ * 两阶段协议（第 13 节）的 PREPARED 状态。</p>
  *
- * <p>The {@code validatedModelArguments} are the model-generated arguments
- * that passed Schema and business validation. The
- * {@code resolvedProtocolArguments} are the fully bound arguments with
- * PRINCIPAL, CONSTANT, and SYSTEM values injected — they exist only in
- * execution memory and must not be logged in plaintext.</p>
+ * <p>{@code validatedModelArguments} 是通过 Schema 与业务校验的模型生成参数。
+ * {@code resolvedProtocolArguments} 是已注入 PRINCIPAL、CONSTANT、SYSTEM 值的完整绑定参数
+ * —— 它们仅存在于执行内存中，不得明文记录到日志。</p>
  *
- * @param executionId the unique execution identifier
- * @param principalDigest the digest of the executing Principal
- * @param snapshotVersion the catalog snapshot version at routing time
- * @param capabilityId the capability identifier
- * @param capabilityVersion the capability semantic version
- * @param manifestDigest the SHA-256 digest of the invoked Manifest
- * @param validatedModelArguments the validated model-generated arguments
- * @param resolvedProtocolArguments the fully bound, positionally-ordered arguments
- * @param policyDecisionId the authorization policy decision ID
- * @param risk the capability risk level
- * @param resiliencePolicy the timeout, retry, and concurrency policy
+ * @param executionId 唯一执行标识
+ * @param principalDigest 执行主体 Principal 的摘要
+ * @param snapshotVersion 路由时刻的目录快照版本
+ * @param capabilityId 能力标识
+ * @param capabilityVersion 能力语义化版本
+ * @param manifestDigest 被调用清单的 SHA-256 摘要
+ * @param validatedModelArguments 已校验的模型生成参数
+ * @param resolvedProtocolArguments 完整绑定、按位置排序的参数
+ * @param policyDecisionId 鉴权策略决策 ID
+ * @param risk 能力风险等级
+ * @param resiliencePolicy 超时、重试与并发策略
  * @since 0.1.0
  */
 public record ExecutionPlan(
@@ -60,19 +55,19 @@ public record ExecutionPlan(
 ) {
 
     /**
-     * Compact constructor performing defensive copying and null checks.
+     * 紧凑构造器，执行防御性拷贝与 null 检查。
      *
-     * @param executionId the execution ID
-     * @param principalDigest the principal digest
-     * @param snapshotVersion the snapshot version
-     * @param capabilityId the capability ID
-     * @param capabilityVersion the capability version
-     * @param manifestDigest the manifest digest
-     * @param validatedModelArguments the validated model arguments
-     * @param resolvedProtocolArguments the resolved protocol arguments
-     * @param policyDecisionId the policy decision ID
-     * @param risk the risk level
-     * @param resiliencePolicy the resilience policy
+     * @param executionId 执行 ID
+     * @param principalDigest 主体摘要
+     * @param snapshotVersion 快照版本
+     * @param capabilityId 能力 ID
+     * @param capabilityVersion 能力版本
+     * @param manifestDigest 清单摘要
+     * @param validatedModelArguments 已校验的模型参数
+     * @param resolvedProtocolArguments 已解析的协议参数
+     * @param policyDecisionId 策略决策 ID
+     * @param risk 风险等级
+     * @param resiliencePolicy 韧性策略
      */
     public ExecutionPlan {
         java.util.Objects.requireNonNull(executionId, "executionId must not be null");

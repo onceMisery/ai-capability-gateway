@@ -1,11 +1,9 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Field-level redaction methods applied after projection but before
- * the public output Schema validation.
+ * 字段级脱敏方法，应用于投影之后、公开出参 Schema 校验之前。
  *
- * <p>Redaction rules are declarative and deterministic; they do not
- * involve scripts or arbitrary expressions.</p>
+ * <p>脱敏规则是声明式且确定性的，不涉及脚本或任意表达式。</p>
  *
  * @see RedactionRule
  * @see OutputContract
@@ -13,21 +11,17 @@ package com.ai.gateway.domain.model;
  */
 public enum RedactionMethod {
     /**
-     * Partially mask the field value (e.g., keep only the first and last
-     * characters). The exact masking algorithm is deterministic and
-     * implemented by the gateway.
+     * 对字段值做部分掩码（例如仅保留首尾字符）。具体掩码算法由网关以确定性方式实现。
      */
     PARTIAL_MASK,
 
     /**
-     * Replace the field value with a one-way hash. The hash algorithm
-     * is deterministic and configured by the platform, not by the Manifest.
+     * 以单向哈希替换字段值。哈希算法由平台配置并确定性执行，清单无法自定义。
      */
     HASH,
 
     /**
-     * Remove the field entirely from the output. The field will not
-     * appear in the projected result.
+     * 从输出中彻底删除该字段。该字段不会出现在投影结果中。
      */
     DELETE
 }

@@ -4,19 +4,16 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * An access-control list entry mapping a capability to the set of roles
- * allowed to invoke it.
+ * 访问控制列表条目，将一个能力映射到允许调用它的角色集合。
  *
- * <p>Used by the admin console to configure capability-level authorization.
- * Each entry is scoped to exactly one capability ID and version.</p>
+ * <p>供管理控制台配置能力级鉴权。每个条目精确作用于一个能力 ID 与版本。</p>
  *
- * @param capabilityId the capability identifier
- * @param capabilityVersion the capability version
- * @param allowedRoles the roles allowed to execute this capability
- * @param requiredPermissions the permissions declared in the Manifest's
- *                            spec.authorization.permissions
- * @param updatedAt the last update timestamp
- * @param updatedBy the identity that last updated the entry
+ * @param capabilityId 能力标识
+ * @param capabilityVersion 能力版本
+ * @param allowedRoles 允许执行该能力的角色集合
+ * @param requiredPermissions 清单 {@code spec.authorization.permissions} 中声明的权限
+ * @param updatedAt 最后更新时间戳
+ * @param updatedBy 最后更新该条目的身份
  * @since 0.1.0
  */
 public record CapabilityAclEntry(
@@ -29,7 +26,7 @@ public record CapabilityAclEntry(
 ) {
 
     /**
-     * Compact constructor performing defensive copying.
+     * 紧凑构造器，执行防御性拷贝。
      */
     public CapabilityAclEntry {
         java.util.Objects.requireNonNull(capabilityId, "capabilityId must not be null");

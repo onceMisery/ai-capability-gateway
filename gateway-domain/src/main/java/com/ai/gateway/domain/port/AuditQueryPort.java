@@ -6,14 +6,12 @@ import com.ai.gateway.domain.model.AuditQueryCriteria;
 import java.util.List;
 
 /**
- * Port for querying audit events from the read-side audit store.
+ * 从只读审计存储查询审计事件的端口。
  *
- * <p>Separates the read-side query concern from the write-side
- * {@link AuditPort}. Adapters may query the same PostgreSQL table
- * or a dedicated read replica.</p>
+ * <p>将只读查询关注点从写侧 {@link AuditPort} 中分离。适配器可查询同一个 PostgreSQL
+ * 表或专门的只读副本。</p>
  *
- * <p>Supports filtering by event type, capability ID, request ID,
- * result code, and time range, with pagination.</p>
+ * <p>支持按事件类型、能力 ID、请求 ID、结果码与时间范围过滤，并支持分页。</p>
  *
  * @see AuditEvent
  * @see AuditQueryCriteria
@@ -22,23 +20,22 @@ import java.util.List;
 public interface AuditQueryPort {
 
     /**
-     * Queries audit events matching the given criteria.
+     * 查询匹配给定条件的审计事件。
      *
-     * <p>Results are ordered by timestamp descending (newest first).
-     * Pagination is applied via the criteria's page and size fields.</p>
+     * <p>结果按时间戳降序排列（最新在前）。分页通过 criteria 的 page 与 size 字段应用。</p>
      *
-     * @param criteria the query criteria; never {@code null}
-     * @return the matching audit events; never {@code null}
+     * @param criteria 查询条件；永不为 {@code null}
+     * @return 匹配的审计事件；永不为 {@code null}
      */
     List<AuditEvent> query(AuditQueryCriteria criteria);
 
     /**
-     * Counts audit events matching the given criteria.
+     * 统计匹配给定条件的审计事件数量。
      *
-     * <p>Used for pagination total-count calculation.</p>
+     * <p>用于分页的总计数计算。</p>
      *
-     * @param criteria the query criteria; never {@code null}
-     * @return the number of matching events
+     * @param criteria 查询条件；永不为 {@code null}
+     * @return 匹配的事件数量
      */
     long count(AuditQueryCriteria criteria);
 }

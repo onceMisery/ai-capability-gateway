@@ -3,11 +3,10 @@ package com.ai.gateway.domain.port;
 import java.util.Map;
 
 /**
- * Port for issuing authentication tokens (e.g., JWT) for the admin console.
+ * 为管理控制台签发认证令牌（如 JWT）的端口。
  *
- * <p>Allows the console authentication flow to mint tokens without depending
- * on a specific token implementation (Sa-Token, etc.). The port is a pure
- * abstraction with no framework dependencies.</p>
+ * <p>让控制台的认证流程能够签发令牌，而无需依赖特定的令牌实现（Sa-Token 等）。该端口
+ * 是纯粹的领域抽象，不依赖任何框架。</p>
  *
  * @since 0.1.0
  */
@@ -22,12 +21,11 @@ public interface TokenIssuerPort {
     }
 
     /**
-     * Issues a signed token for the given subject and claims.
+     * 为给定主体与声明签发一个带签名的令牌。
      *
-     * @param subject  the subject (login id) to embed in the token
-     * @param extraData additional claims (orgId, roles, permissions, ...);
-     *                  may be {@code null}
-     * @return the signed token string
+     * @param subject  嵌入令牌中的主体（登录 ID）
+     * @param extraData 附加声明（orgId、roles、permissions 等）；可为 {@code null}
+     * @return 已签名的令牌字符串
      */
     default String issueToken(String subject, Map<String, Object> extraData) {
         return issueTokenPair(subject, extraData).accessToken();

@@ -36,7 +36,7 @@ public final class HealthReadinessUseCase {
         checks.put("requiredSecrets", secrets ? "UP" : "DOWN");
         boolean adapters = database && snapshot;
         checks.put("adapterInitialization", adapters ? "UP" : "DOWN");
-        return new Result(database && snapshot && secrets && adapters, checks);
+        return new Result(database && snapshot && secrets, checks);
     }
 
     private boolean checkDatabase() {

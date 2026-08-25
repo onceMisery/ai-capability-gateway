@@ -10,36 +10,25 @@ import com.ai.gateway.domain.model.PolicySnapshot;
 import java.util.List;
 
 /**
- * Port for visibility authorization, execution authorization, and
- * administrative-operation authorization.
+ * 可见性鉴权、执行鉴权与控制面操作鉴权的端口。
  *
- * <p>Specifies that authorization is executed in two passes for runtime
- * calls:</p>
+ * <p>规定运行时调用的鉴权分两趟执行：</p>
  * <ol>
- * <li><b>Visibility authorization</b>: determines whether a capability
- * may enter the retrieval and model candidate set. Capabilities the
- * current Principal is not authorized for are excluded — their names,
- * descriptions, and existence are not exposed.</li>
- * <li><b>Execution authorization</b>: after parameters are fully bound,
- * a second authorization check is performed, potentially combining
- * resource attributes.</li>
+ * <li><b>可见性鉴权</b>：决定某个能力能否进入检索与模型候选集。当前 Principal 未被
+ * 授权的能力会被排除——其名称、描述与存在本身都不暴露。</li>
+ * <li><b>执行鉴权</b>：在参数完全绑定后执行第二次鉴权检查，可能结合资源属性。</li>
  * </ol>
  *
- * <p>Control-plane (administrative) operations are gated separately by
- * {@link #authorizeAdmin(Principal, AdminAction)}.</p>
+ * <p>控制面（管理）操作由 {@link #authorizeAdmin(Principal, AdminAction)} 单独门控。</p>
  *
- * <p>Default deny. Policy exceptions, dependency timeouts, or missing
- * claims must not degrade to allow. The policy version must be published
- * in coordination with the catalog snapshot to ensure permissions and
- * capabilities are consistent at runtime.</p>
+ * <p>默认拒绝（default deny）。策略异常、依赖超时或声明缺失都不得降级为放行。策略版本
+ * 必须与目录快照协同发布，以确保运行期权限与能力一致。</p>
  *
- * <p>A development-only stub may allow authenticated users to call published
- * read-only capabilities. Production adapters must load an explicit policy;
- * missing or unhealthy ACL data is fail-closed.</p>
+ * <p>仅用于开发的 stub 可允许已鉴权用户调用已发布的只读能力。生产适配器必须加载显式
+ * 策略；ACL 数据缺失或不健康时失效关闭（fail-closed）。</p>
  *
- * <p>Adapters implementing this port query the authorization data source
- * (e.g., an RBAC/ABAC/ReBAC engine or a capability-role ACL table). The
- * port is a pure abstraction with no framework dependencies.</p>
+ * <p>实现此端口的适配器查询鉴权数据源（如 RBAC/ABAC/ReBAC 引擎或能力-角色 ACL 表）。
+ * 该端口是纯粹的领域抽象，不依赖任何框架。</p>
  *
  * @see Principal
  * @see CapabilityManifest
@@ -49,73 +38,64 @@ import java.util.List;
 public interface AuthorizationPort {
 
     /**
-     * Atomically resolves the principal visibility and the policy epoch that produced it.
-     * Agent request paths must pin this object instead of combining independent reads.
+     * 原子地解析主体可见性及其所对应的策略纪元（epoch）。
+     * Agent 请求路径必须固定持有该对象，而非组合多次独立读取。
      */
     default PolicySnapshot resolvePolicySnapshot(Principal principal) {
         return PolicySnapshot.from(resolveVisibility(principal));
     }
 
     /**
-     * Returns a principal-scoped visibility set bound to the current policy epoch.
-     * Implementations that do not provide a set-based index fail closed.
+     * 返回一个绑定到当前策略纪元、按主体划分的可见性集合。
+     * 未提供集合式索引的实现将失效关闭（fail closed）。
      */
     default CapabilityVisibility resolveVisibility(Principal principal) {
         return CapabilityVisibility.unavailable(currentPolicyEpoch());
     }
 
-    /** Returns the monotonic epoch of the active authorization policy. */
+    /** 返回当前生效鉴权策略的单调递增纪元（epoch）。 */
     default long currentPolicyEpoch() {
         return 0L;
     }
 
     /**
-     * Filters the candidate capability list to only those visible to the
-     * given principal (visibility authorization pass 1).
+     * 将候选能力列表过滤为仅对给定主体可见的能力（可见性鉴权第 1 趟）。
      *
-     * <p>Capabilities the Principal is not authorized for are removed.
-     * Their names, descriptions, and existence are not exposed to the
-     * retrieval engine or the LLM. If the authorization data source is
-     * unavailable, Fail Closed is adopted — no capabilities are returned.</p>
+     * <p>主体未被授权的能力会被移除，其名称、描述与存在本身都不会暴露给检索引擎或
+     * LLM。若鉴权数据源不可用，采用 Fail Closed——不返回任何能力。</p>
      *
-     * @param principal the authenticated caller identity
-     * @param candidates the full list of published capability manifests
-     * @return the filtered list of visible capabilities; never {@code null}
+     * @param principal 已鉴权的调用方身份
+     * @param candidates 已发布能力清单的完整列表
+     * @return 过滤后的可见能力列表；永不为 {@code null}
      */
     List<CapabilityManifest> filterVisibleCapabilities(
             Principal principal, List<CapabilityManifest> candidates);
 
     /**
-     * Determines whether the given principal is authorized to execute a
-     * specific capability version (execution authorization
-     * pass 2).
+     * 判断给定主体是否被授权执行某个具体的能力版本（执行鉴权第 2 趟）。
      *
-     * <p>This check is performed after parameters are fully bound and may
-     * combine resource attributes. Default deny: policy exceptions,
-     * dependency timeouts, or missing claims must not degrade to allow.</p>
+     * <p>该检查在参数完全绑定后执行，可能结合资源属性。默认拒绝：策略异常、依赖超时
+     * 或声明缺失都不得降级为放行。</p>
      *
-     * @param principal the authenticated caller identity
-     * @param capabilityId the capability identifier
-     * @param version the capability semantic version
-     * @return {@code true} if execution is authorized; {@code false} otherwise
+     * @param principal 已鉴权的调用方身份
+     * @param capabilityId 能力标识
+     * @param version 能力语义化版本
+     * @return 若允许执行则为 {@code true}，否则为 {@code false}
      */
     boolean authorizeExecution(Principal principal, String capabilityId, String version);
 
     /**
-     * Determines whether the given principal is authorized to perform a
-     * control-plane administrative action (import, approve, publish,
-     * rollback, or suspend).
+     * 判断给定主体是否被授权执行某控制面管理操作（导入、审批、发布、回滚或下线）。
      *
-     * <p>Default deny: policy exceptions, dependency timeouts, or missing
-     * claims must not degrade to allow.</p>
+     * <p>默认拒绝：策略异常、依赖超时或声明缺失都不得降级为放行。</p>
      *
-     * @param principal the authenticated caller identity
-     * @param action the administrative action being attempted
-     * @return {@code true} if the action is authorized; {@code false} otherwise
+     * @param principal 已鉴权的调用方身份
+     * @param action 正在尝试的管理操作
+     * @return 若操作被授权则为 {@code true}，否则为 {@code false}
      */
     boolean authorizeAdmin(Principal principal, AdminAction action);
 
-    /** Returns the currently active capability ACL cache status. */
+    /** 返回当前生效的能力 ACL 缓存状态。 */
     AclPolicyStatus aclPolicyStatus();
 
     /**

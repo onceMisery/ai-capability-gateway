@@ -1,41 +1,38 @@
 package com.ai.gateway.domain.model;
 
 /**
- * The set of privileged control-plane (administrative) actions that require
- * an explicit authorization decision.
+ * 需要显式授权决策的一组特权控制面（管理）操作。
  *
- * <p>These actions mutate the capability catalog or its lifecycle and are
- * therefore gated by {@link
- * com.ai.gateway.domain.port.AuthorizationPort#authorizeAdmin(Principal,
- * AdminAction)}. The enumeration is closed: new administrative actions must
- * be added here deliberately so that authorization coverage stays
- * explicit.</p>
+ * <p>这些操作会变更能力目录或其生命周期，因此受
+ * {@link com.ai.gateway.domain.port.AuthorizationPort#authorizeAdmin(Principal,
+ * AdminAction)} 门控。该枚举是封闭的：新增管理操作必须有意在此添加，从而保持授权覆盖
+ * 的明确性。</p>
  *
  * @since 0.1.0
  */
 public enum AdminAction {
 
-    /** Reads control-plane state, monitoring data, ACLs, or configuration. */
+    /** 读取控制面状态、监控数据、ACL 或配置。 */
     READ,
 
-    /** Imports a capability manifest into the catalog (10-step validation). */
+    /** 将能力清单导入目录（10 步校验）。 */
     IMPORT,
 
-    /** Approves an imported manifest, advancing its lifecycle state. */
+    /** 审批已导入的清单，推进其生命周期状态。 */
     APPROVE,
 
-    /** Publishes a catalog snapshot to an environment. */
+    /** 向某环境发布目录快照。 */
     PUBLISH,
 
-    /** Rolls back an environment to a historical snapshot version. */
+    /** 将某环境回滚到历史快照版本。 */
     ROLLBACK,
 
-    /** Suspends a capability via emergency suspension. */
+    /** 通过应急下线（suspend）暂停某能力。 */
     SUSPEND,
 
-    /** Manages ACL entries, roles, and permissions. */
+    /** 管理 ACL 条目、角色与权限。 */
     MANAGE_ACL,
 
-    /** Modifies gateway configuration or rate-limit rules. */
+    /** 修改网关配置或限流规则。 */
     CONFIGURE
 }

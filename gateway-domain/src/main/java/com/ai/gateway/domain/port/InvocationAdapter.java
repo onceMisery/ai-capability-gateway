@@ -7,35 +7,24 @@ import com.ai.gateway.domain.model.ProtocolBinding;
 import com.ai.gateway.domain.model.ValidationReport;
 
 /**
- * Unified protocol invocation adapter port.
+ * 统一的协议调用适配器端口。
  *
- * <p>Specifies that all protocols implement the same
- * application-layer port. The adapter must not perform natural-language
- * routing, user authorization, or capability state changes.</p>
+ * <p>规定所有协议都实现同一应用层端口。适配器不得执行自然语言路由、用户鉴权或能力
+ * 状态变更。</p>
  *
- * <p>The initial production release supports {@link Protocol#DUBBO Dubbo}
- * only. {@link Protocol#REST REST} and {@link Protocol#GRPC
- * gRPC} are evolution protocols (Section 14). All protocols share the same
- * lifecycle, confirmation, natural-language semantics, input/output JSON
- * Schema, Principal injection, authorization, risk, audit, and
- * write-operation state machine. Protocol differences exist
- * only within {@code spec.invocation} and the adapter internals.</p>
+ * <p>初始生产版本仅支持 {@link Protocol#DUBBO Dubbo}。{@link Protocol#REST REST} 与
+ * {@link Protocol#GRPC gRPC} 为演进协议（第 14 节）。所有协议共享相同的生命周期、确认
+ * 流程、自然语言语义、入参/出参 JSON Schema、Principal 注入、鉴权、风险、审计与写操作
+ * 状态机。协议差异仅存在于 {@code spec.invocation} 与适配器内部。</p>
  *
- * <p>The neutral request ({@link InvocationRequest}) contains the
- * capability identity, deadline budget, idempotency key, trace context,
- * and the fully-bound, positionally-ordered protocol arguments. The
- * adapter must not perform NL routing, user authorization, or capability
- * state changes.</p>
+ * <p>中性请求（{@link InvocationRequest}）包含能力标识、截止预算、幂等键、追踪上下文，
+ * 以及完整绑定、按位置排序的协议参数。适配器不得执行 NL 路由、用户鉴权或能力状态变更。</p>
  *
- * <p>The neutral result ({@link InvocationResult}) contains only
- * JSON-compatible data, a protocol status, a stable error code, an error
- * message, and call metadata. It does not contain raw protocol objects,
- * stack traces, internal addresses, interface class names, or sensitive
- * parameters.</p>
+ * <p>中性结果（{@link InvocationResult}）仅包含 JSON 兼容数据、协议状态、稳定错误码、
+ * 错误消息与调用元数据。不包含原始协议对象、堆栈、内部地址、接口类名或敏感参数。</p>
  *
- * <p>Adapters implementing this port handle the specific protocol's
- * generic invocation. The port is a pure abstraction with no framework
- * dependencies.</p>
+ * <p>实现此端口的适配器负责特定协议的泛化调用。该端口是纯粹的领域抽象，不依赖任何
+ * 框架。</p>
  *
  * @see Protocol
  * @see ProtocolBinding
@@ -47,52 +36,40 @@ import com.ai.gateway.domain.model.ValidationReport;
 public interface InvocationAdapter {
 
     /**
-     * Returns the wire protocol this adapter handles.
+     * 返回该适配器处理的线缆协议。
      *
-     * <p>: each adapter implementation serves exactly one
-     * protocol. The gateway selects the appropriate adapter based on the
-     * {@link ProtocolBinding#protocol()} declared in the capability
-     * manifest.</p>
+     * <p>规定：每个适配器实现精确服务于一种协议。网关依据能力清单中声明的
+     * {@link ProtocolBinding#protocol()} 选择合适的适配器。</p>
      *
-     * @return the wire protocol; never {@code null}
+     * @return 线缆协议；永不为 {@code null}
      */
     Protocol protocol();
 
     /**
-     * Validates the protocol binding for structural, semantic, and
-     * security compliance.
+     * 校验协议绑定的结构、语义与安全合规性。
      *
-     * <p>: the adapter validates the binding configuration
-     * before it is used for invocation. This is part of the 10-step
-     * validation pipeline.</p>
+     * <p>规定：适配器在将绑定配置用于调用之前先行校验。这是 10 步校验流水线的一部分。</p>
      *
-     * <p>For Dubbo (Section 12), validation includes verifying that
-     * {@code parameterTypes} correspond one-to-one with argument positions,
-     * the {@code serialization} belongs to the platform whitelist
-     * and {@code registryRef} references a pre-configured
-     * registry.</p>
+     * <p>对于 Dubbo（第 12 节），校验包括确认 {@code parameterTypes} 与参数位置一一对应、
+     * {@code serialization} 属于平台白名单，且 {@code registryRef} 引用一个预配置的
+     * 注册中心。</p>
      *
-     * @param binding the protocol binding to validate
-     * @return the validation report; valid only if {@code errors} is empty
+     * @param binding 待校验的协议绑定
+     * @return 校验报告；仅当 {@code errors} 为空时才有效
      */
     ValidationReport validate(ProtocolBinding binding);
 
     /**
-     * Invokes the target capability using the fully-bound request.
+     * 使用完整绑定的请求调用目标能力。
      *
-     * <p>: the neutral request contains the capability
-     * identity, deadline budget, idempotency key, trace context, and
-     * the ordered, fully-bound protocol arguments. The adapter converts
-     * the protocol result to a JSON-compatible tree.</p>
+     * <p>规定：中性请求包含能力标识、截止预算、幂等键、追踪上下文，以及按序完整绑定的
+     * 协议参数。适配器将协议结果转换为 JSON 兼容树。</p>
      *
-     * <p>Defines the result processing order after the
-     * adapter returns: the adapter converts the protocol result to JSON,
-     * then the gateway checks response size/depth/collection length,
-     * applies envelope rules, projection whitelist, field redactions, and
-     * validates the public output Schema.</p>
+     * <p>规定适配器返回后的结果处理顺序：适配器将协议结果转为 JSON，随后网关检查响应
+     * 大小/深度/集合长度，应用信封规则、投影白名单、字段脱敏，并校验公开出参 Schema。</p>
      *
-     * @param request the protocol-neutral invocation request
-     * @return the protocol-neutral invocation result; never {@code null}
+     * @param request 协议无关调用请求
+     * @return 协议无关调用结果；永不为 {@code null}
      */
     InvocationResult invoke(InvocationRequest request);
 }

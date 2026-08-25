@@ -3,28 +3,24 @@ package com.ai.gateway.domain.model;
 import java.util.Map;
 
 /**
- * Abstraction of the authentication-relevant information carried by an
- * inbound request.
+ * 入站请求所携带的、与鉴权相关信息的一种抽象。
  *
- * <p>This record decouples the Domain layer from the Servlet API: callers
- * in the web layer populate it from {@code HttpServletRequest} (headers,
- * cookies, query parameters, remote address), and {@link
- * com.ai.gateway.domain.port.AuthenticationPort} implementations resolve
- * the caller identity from it without any framework dependency.</p>
+ * <p>该 record 将 Domain 层与 Servlet API 解耦：web 层调用方从
+ * {@code HttpServletRequest}（请求头、Cookie、查询参数、远端地址）填充它，而
+ * {@link com.ai.gateway.domain.port.AuthenticationPort} 的实现无需任何框架依赖即可
+ * 从中解析调用方身份。</p>
  *
- * <p>Identity headers self-declared by the client (e.g., {@code userId},
- * {@code orgId}, {@code tenantId}) do not constitute authentication
- * results. They may be carried here for convenience, but the {@link
- * com.ai.gateway.domain.port.AuthenticationPort} must never trust them
- * directly when constructing the {@link Principal}.</p>
+ * <p>客户端自声明的身份请求头（如 {@code userId}、{@code orgId}、{@code tenantId}）
+ * 不构成鉴权结果。它们可出于便利在此携带，但 {@link
+ * com.ai.gateway.domain.port.AuthenticationPort} 在构造 {@link Principal} 时绝不直接
+ * 信任它们。</p>
  *
- * <p>All maps are defensively copied and made unmodifiable. A missing
- * value is represented by an empty map, never {@code null}.</p>
+ * <p>所有映射均被防御性拷贝并设为不可修改。缺失值用空映射表示，而非 {@code null}。</p>
  *
- * @param headers the HTTP request headers (header name → value)
- * @param cookies the HTTP request cookies (cookie name → value)
- * @param queryParams the query parameters (parameter name → value)
- * @param remoteAddr the client remote address (may be {@code null})
+ * @param headers HTTP 请求头（请求头名 → 值）
+ * @param cookies HTTP 请求 Cookie（Cookie 名 → 值）
+ * @param queryParams 查询参数（参数名 → 值）
+ * @param remoteAddr 客户端远端地址（可为 {@code null}）
  * @since 0.1.0
  */
 public record RequestContext(
@@ -35,12 +31,12 @@ public record RequestContext(
 ) {
 
     /**
-     * Compact constructor performing defensive copying of mutable maps.
+     * 紧凑构造器，对可变映射执行防御性拷贝。
      *
-     * @param headers the HTTP request headers
-     * @param cookies the HTTP request cookies
-     * @param queryParams the query parameters
-     * @param remoteAddr the client remote address
+     * @param headers HTTP 请求头
+     * @param cookies HTTP 请求 Cookie
+     * @param queryParams 查询参数
+     * @param remoteAddr 客户端远端地址
      */
     public RequestContext {
         headers = headers == null ? Map.of() : Map.copyOf(headers);
@@ -49,20 +45,19 @@ public record RequestContext(
     }
 
     /**
-     * Creates an empty request context with no headers, cookies, or query
-     * parameters.
+     * 创建一个不含请求头、Cookie 或查询参数的空请求上下文。
      *
-     * @return an empty {@link RequestContext}; never {@code null}
+     * @return 空的 {@link RequestContext}；永不为 {@code null}
      */
     public static RequestContext empty() {
         return new RequestContext(Map.of(), Map.of(), Map.of(), null);
     }
 
     /**
-     * Looks up a header value by name using case-insensitive matching.
+     * 使用大小写不敏感匹配按名查找请求头值。
      *
-     * @param name the header name
-     * @return the header value, or {@code null} if absent
+     * @param name 请求头名
+     * @return 请求头值，缺失时为 {@code null}
      */
     public String header(String name) {
         if (name == null) {

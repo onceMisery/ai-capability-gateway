@@ -1,35 +1,28 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Immutable deadline budget tracker for request execution.
+ * 请求执行的不可变截止时间预算追踪器。
  *
- * <p>Specifies that the entry-point deadline must be divided
- * among pipeline stages (authentication, retrieval, LLM routing, validation,
- * Provider call, result governance). No downstream timeout may exceed the
- * remaining time at the point of the call.</p>
+ * <p>规定入口截止时间必须在各流水线阶段（鉴权、检索、LLM 路由、校验、Provider 调用、
+ * 结果治理）间分配。任何下游超时不得超过调用时刻的剩余时间。</p>
  *
- * <p>Each stage that consumes time calls {@link #spend(long)} to produce a
- * new {@code DeadlineBudget} with the reduced remaining time. The original
- * instance is never mutated. A budget with {@code remainingMs <= 0} is
- * considered expired.</p>
+ * <p>每个消耗时间的阶段调用 {@link #spend(long)} 生成一个剩余时间减少的新
+ * {@code DeadlineBudget}。原实例永不变更。{@code remainingMs <= 0} 的预算视为已过期。</p>
  *
- * <p>Client disconnect does not equal write-operation failure; write
- * operations must be resolved via the status API.</p>
+ * <p>客户端断开不等于写操作失败；写操作必须通过状态查询 API 来确认结果。</p>
  *
- * @param totalDeadlineMs the original total deadline in milliseconds
- * @param remainingMs the remaining milliseconds before the deadline
+ * @param totalDeadlineMs 原始总截止时间（毫秒）
+ * @param remainingMs 截止前剩余毫秒数
  * @since 0.1.0
  */
 public record DeadlineBudget(long totalDeadlineMs, long remainingMs) {
 
     /**
-     * Returns a new budget with the specified milliseconds deducted from
-     * the remaining time.
+     * 返回一个新的预算，从剩余时间中扣除指定的毫秒数。
      *
-     * @param ms the milliseconds spent by the current stage; must be
-     * non-negative
-     * @return a new {@code DeadlineBudget} with reduced remaining time
-     * @throws IllegalArgumentException if {@code ms} is negative
+     * @param ms 当前阶段消耗的毫秒数，必须为非负数
+     * @return 剩余时间减少后的新 {@code DeadlineBudget}
+     * @throws IllegalArgumentException 当 {@code ms} 为负数时
      */
     public DeadlineBudget spend(long ms) {
         if (ms < 0) {
@@ -40,9 +33,9 @@ public record DeadlineBudget(long totalDeadlineMs, long remainingMs) {
     }
 
     /**
-     * Returns whether the deadline has been exhausted.
+     * 返回截止时间是否已耗尽。
      *
-     * @return {@code true} if {@code remainingMs <= 0}
+     * @return 当 {@code remainingMs <= 0} 时为 {@code true}
      */
     public boolean isExpired() {
         return remainingMs <= 0;

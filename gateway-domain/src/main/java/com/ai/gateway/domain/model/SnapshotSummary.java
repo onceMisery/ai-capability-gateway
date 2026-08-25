@@ -3,18 +3,17 @@ package com.ai.gateway.domain.model;
 import java.time.Instant;
 
 /**
- * A lightweight summary of a catalog snapshot for list views.
+ * 供列表视图使用的目录快照轻量摘要。
  *
- * <p>Used by the admin console to display snapshot history without
- * loading the full snapshot content.</p>
+ * <p>供管理控制台展示快照历史，而无需加载完整快照内容。</p>
  *
- * @param snapshotVersion the monotonically increasing snapshot version
- * @param environment the target environment (e.g., "production")
- * @param status the snapshot status (ACTIVE or SUPERSEDED)
- * @param digest the SHA-256 digest of the snapshot content
- * @param capabilityCount the number of capabilities in the snapshot
- * @param publishedAt the publication timestamp
- * @param publishedBy the identity that published the snapshot
+ * @param snapshotVersion 单调递增的快照版本
+ * @param environment 目标环境（如 "production"）
+ * @param status 快照状态（ACTIVE 或 SUPERSEDED）
+ * @param digest 快照内容的 SHA-256 摘要
+ * @param capabilityCount 快照中能力数量
+ * @param publishedAt 发布时间戳
+ * @param publishedBy 发布该快照的身份
  * @since 0.1.0
  */
 public record SnapshotSummary(
@@ -28,7 +27,7 @@ public record SnapshotSummary(
 ) {
 
     /**
-     * Compact constructor performing null checks.
+     * 紧凑构造器，执行 null 检查。
      */
     public SnapshotSummary {
         java.util.Objects.requireNonNull(environment, "environment must not be null");

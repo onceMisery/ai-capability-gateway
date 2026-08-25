@@ -1,27 +1,20 @@
 package com.ai.gateway.domain.model;
 
 /**
- * Closed whitelist of controlled type converters for argument binding.
+ * 参数绑定的受控类型转换器封闭白名单。
  *
- * <p>Defines a closed enumeration of deterministic, single-value
- * type converters. These address the common mismatch between the original
- * value types (from model output, Principal claims, or constants) and the
- * protocol parameter types (e.g., date string to epoch-millis Long, or
- * enum case normalization).</p>
+ * <p>定义一组封闭、确定性、单值的类型转换器枚举。它们用于解决原始值类型
+ *（来自模型输出、Principal 声明或常量）与协议参数类型（如日期字符串转 epoch 毫秒 Long、
+ * 或枚举大小写规范化）之间的常见不匹配。</p>
  *
- * <p>Key constraints:</p>
+ * <p>关键约束：</p>
  * <ul>
- * <li>Converters are implemented by deterministic Java code only — no
- * SpEL, script engines, or arbitrary expressions.</li>
- * <li>Each converter acts on a single source value to a single target
- * field; cross-field composition is not supported.</li>
- * <li>Conversion failures (format mismatch, overflow, illegal enum value)
- * are treated as {@code ARGUMENT_VALIDATION_FAILED}; no silent
- * fallback to the original value or null.</li>
- * <li>The Contract Validator must verify that the converter
- * name belongs to the registered whitelist at import time.</li>
- * <li>Adding or changing converters follows the platform release process
- * and is not dynamically extensible via Manifest.</li>
+ * <li>转换器仅由确定性 Java 代码实现——不允许 SpEL、脚本引擎或任意表达式。</li>
+ * <li>每个转换器作用于单一源值到单一目标字段，不支持跨字段组合。</li>
+ * <li>转换失败（格式不匹配、溢出、非法枚举值）一律视为
+ * {@code ARGUMENT_VALIDATION_FAILED}，不会静默回退到原值或 null。</li>
+ * <li>契约校验器必须在导入时验证转换器名属于已注册白名单。</li>
+ * <li>新增或修改转换器须遵循平台发布流程，不通过清单动态扩展。</li>
  * </ul>
  *
  * @see ArgumentBinding
@@ -30,21 +23,18 @@ package com.ai.gateway.domain.model;
  */
 public enum ConverterType {
     /**
-     * Converts an ISO-8601 date/time string to epoch milliseconds (Long).
-     * For example, {@code "2026-07-21T10:00:00Z"} becomes
-     * {@code 1753092000000L}.
+     * 将 ISO-8601 日期/时间字符串转换为 epoch 毫秒（Long）。
+     * 例如 {@code "2026-07-21T10:00:00Z"} 变为 {@code 1753092000000L}。
      */
     ISO_DATE_TO_EPOCH_MILLIS,
 
     /**
-     * Normalizes an enum-like string to uppercase. For example,
-     * {@code "pending"} becomes {@code "PENDING"}.
+     * 将类枚举字符串规范化为大写。例如 {@code "pending"} 变为 {@code "PENDING"}。
      */
     ENUM_UPPERCASE,
 
     /**
-     * Trims leading and trailing whitespace from a string value.
-     * For example, {@code " order123 "} becomes {@code "order123"}.
+     * 去除字符串值首尾空白。例如 {@code " order123 "} 变为 {@code "order123"}。
      */
     STRING_TRIM
 }

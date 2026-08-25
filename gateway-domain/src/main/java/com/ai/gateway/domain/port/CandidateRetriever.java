@@ -5,40 +5,29 @@ import com.ai.gateway.domain.model.CapabilityManifest;
 import java.util.List;
 
 /**
- * Port for BM25-based candidate retrieval during natural-language routing.
+ * 自然语言路由期间基于 BM25 的候选检索端口。
  *
- * <p>(Candidate Retrieval) specifies that the BM25 index
- * includes:</p>
+ * <p>（候选检索）规定 BM25 索引包含：</p>
  * <ul>
- * <li>{@code displayName} — the user-facing capability name.</li>
- * <li>Business action description.</li>
- * <li>Positive, negative, and synonym examples.</li>
- * <li>Domain and controlled tags.</li>
- * <li>Public field names and business descriptions.</li>
+ * <li>{@code displayName} — 面向用户的能力名称。</li>
+ * <li>业务动作描述。</li>
+ * <li>正向、负向与同义词示例。</li>
+ * <li>领域与受控标签。</li>
+ * <li>公开字段名与业务描述。</li>
  * </ul>
  *
- * <p>The physical index must not contain protocol addresses, internal
- * interface details, or secrets. It may contain all published capabilities
- * in the environment. Every retrieval must apply non-bypassable
- * authorization filtering within the retrieval engine so that
- * capabilities the current Principal is not authorized for do not
- * participate in scoring and Top-K truncation. If the engine cannot
- * safely filter at query time, the authorized subset must be built first
- * before retrieval — the gateway must not take a global Top-K and then
- * intersect.</p>
+ * <p>物理索引不得包含协议地址、内部接口细节或密钥。它可包含环境中所有已发布能力。每次
+ * 检索都必须在检索引擎内应用不可绕过的鉴权过滤，使当前 Principal 未被授权的能力不参与
+ * 打分与 Top-K 截断。若引擎无法在查询时安全过滤，必须先构建已授权子集再检索——网关
+ * 不得先取全局 Top-K 再做交集。</p>
  *
- * <p>Chinese retrieval must use a fixed tokenizer, dictionary, and
- * synonym version, recorded in the snapshot and evaluation report, to
- * avoid unexplainable routing differences across instances or before and
- * after publication.</p>
+ * <p>中文检索必须使用固定的分词器、词典与同义词版本，并记录在快照与评估报告中，以避免
+ * 跨实例、或发布前后出现无法解释的路由差异。</p>
  *
- * <p>The initial release uses lexical retrieval to avoid making a vector
- * database a launch prerequisite. Vector or hybrid retrieval may only be
- * introduced after offline evaluation proves significant Recall@K
- * improvement with acceptable data governance, cost, and failure modes.</p>
+ * <p>初始版本使用词法检索，以免将向量数据库作为上线先决条件。只有在离线评估证明在可接受的
+ * 数据治理、成本与失败模式下 Recall@K 有显著提升后，才引入向量或混合检索。</p>
  *
- * <p>Adapters implementing this port build and query the BM25 index.
- * The port is a pure abstraction with no framework dependencies.</p>
+ * <p>实现此端口的适配器构建并查询 BM25 索引。该端口是纯粹的领域抽象，不依赖任何框架。</p>
  *
  * @see CapabilityManifest
  * @see ScoredCapability
@@ -46,46 +35,37 @@ import java.util.List;
  */
 public interface CandidateRetriever {
 
-    /** Returns the catalog version backing the current index, or -1 when unknown. */
+    /** 返回支撑当前索引的目录版本，未知时为 -1。 */
     default long indexedCatalogVersion() {
         return -1L;
     }
 
     /**
-     * Retrieves the Top-K scored capabilities matching the normalized
-     * user text from the authorized capability set.
+     * 从已授权的能力集合中检索与归一化用户文本匹配、按分数排序的 Top-K 能力。
      *
-     * <p>: authorization filtering is non-bypassable.
-     * Capabilities the current Principal is not authorized for do not
-     * participate in scoring or Top-K truncation. The
-     * {@code authorizedCapabilities} parameter is the pre-filtered set.</p>
+     * <p>规定：鉴权过滤不可绕过。当前 Principal 未被授权的能力不参与打分或 Top-K 截断。
+     * {@code authorizedCapabilities} 参数是预先过滤后的集合。</p>
      *
-     * <p>: the gateway applies threshold checks after retrieval
-     * — minimum relevance score, minimum Top-1 vs Top-2 score gap, and
-     * maximum candidate count. The retriever only returns scored
-     * candidates; the gateway makes the final routing decision.</p>
+     * <p>规定：网关在检索后应用阈值检查——最小相关度分数、Top-1 与 Top-2 最小分差，以及
+     * 最大候选数。检索器只返回已打分候选；最终路由决策由网关做出。</p>
      *
-     * @param normalizedText the normalized user natural-language text
-     * @param authorizedCapabilities the pre-authorized capability set to
-     * search within
-     * @param topK the maximum number of candidates to return
-     * @return the list of scored capabilities, sorted by descending score;
-     * never {@code null}
+     * @param normalizedText 归一化后的用户自然语言文本
+     * @param authorizedCapabilities 在其内部搜索的预授权能力集合
+     * @param topK 返回的最大候选数
+     * @return 按分数降序排列的已打分能力列表；永不为 {@code null}
      */
     List<ScoredCapability> retrieve(String normalizedText,
                                     List<CapabilityManifest> authorizedCapabilities,
                                     int topK);
 
     /**
-     * A capability with its BM25 relevance score.
+     * 携带其 BM25 相关度分数的能力。
      *
-     * <p>: the score is the BM25 relevance score computed by
-     * the retrieval engine. specifies that the gateway must
-     * not rely on the model's self-reported confidence; instead, it uses
-     * thresholds determined from offline labeled sets.</p>
+     * <p>规定：该分数是检索引擎计算的 BM25 相关度分数。网关不得依赖模型自报的置信度，
+     * 而是使用离线标注集合确定的阈值。</p>
      *
-     * @param capability the matched capability manifest
-     * @param score the BM25 relevance score
+     * @param capability 匹配到的能力清单
+     * @param score BM25 相关度分数
      */
     record ScoredCapability(CapabilityManifest capability, double score) {
     }
