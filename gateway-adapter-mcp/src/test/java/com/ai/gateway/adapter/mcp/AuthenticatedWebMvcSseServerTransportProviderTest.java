@@ -43,6 +43,26 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
     private static final Principal PRINCIPAL_B = principal("user-b", 1L);
 
     @Test
+    void noAuthStrategyAcceptsRequestWithoutAuthorizationHeader() throws Exception {
+        AuthenticatedWebMvcSseServerTransportProvider provider =
+                new AuthenticatedWebMvcSseServerTransportProvider(
+                        new ObjectMapper(), McpRequestAuthenticator.noAuth(PRINCIPAL_A),
+                        mock(TelemetryPort.class), "/mcp/message", "/mcp/sse", 1,
+                        Duration.ofMinutes(5), Duration.ofSeconds(30),
+                        Duration.ofSeconds(5), "local", McpRateLimiter.allowAll());
+        McpRequestContextHolder.set(new RequestContext(
+                Map.of("X-Test", "no-auth"), Map.of(), Map.of(), null));
+        try {
+            ServerResponse response = invokeHandler(provider, "handleSseConnection",
+                    mock(ServerRequest.class));
+
+            assertThat(response.statusCode()).isEqualTo(HttpStatus.OK);
+        } finally {
+            McpRequestContextHolder.clear();
+        }
+    }
+
+    @Test
     void rejectsSseConnectionWhenSessionCapacityIsFull() throws Exception {
         AuthenticationPort authentication = authenticationReturning(PRINCIPAL_A);
         TelemetryPort telemetry = mock(TelemetryPort.class);

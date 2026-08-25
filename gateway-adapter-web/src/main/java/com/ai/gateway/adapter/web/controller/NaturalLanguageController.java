@@ -302,7 +302,7 @@ public class NaturalLanguageController {
      */
     private String sanitizeErrorMessage(String message) {
         if (message == null) {
-            return "An internal error occurred";
+            return "服务处理失败，请稍后重试。";
         }
         // 移除任何可能的堆栈跟踪片段
         String sanitized = message.replaceAll("at\\s+\\S+\\.\\S+\\([^)]*\\)", "[internal]");

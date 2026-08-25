@@ -25,12 +25,12 @@ public final class ManifestValidationUseCase {
         CapabilityManifest manifest = manifestRepository.findByIdAndVersion(capabilityId, version)
                 .orElse(null);
         if (manifest == null) {
-            return new Result(Status.NOT_FOUND, null, "Manifest not found");
+            return new Result(Status.NOT_FOUND, null, "未找到指定的能力清单。");
         }
         ValidationReport report = manifestValidator.validate(manifest);
         manifestRepository.recordValidation(capabilityId, version, report);
         return new Result(report.valid() ? Status.VALIDATED : Status.INVALID, report,
-                report.valid() ? null : "Manifest validation failed");
+                report.valid() ? null : "能力清单校验失败。");
     }
 
     public enum Status { VALIDATED, INVALID, NOT_FOUND }

@@ -10,6 +10,7 @@ import com.ai.gateway.application.controlplane.ManifestImportUseCase;
 import com.ai.gateway.application.controlplane.ManifestValidationUseCase;
 import com.ai.gateway.application.controlplane.CatalogSnapshotQueryUseCase;
 import com.ai.gateway.domain.model.CapabilityManifest;
+import com.ai.gateway.domain.model.CatalogEnvironment;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.AuthenticationPort;
@@ -124,6 +125,7 @@ public class AdminController {
             return ResponseEntity.ok(body);
         } else {
             body.put("status", "REJECTED");
+            body.put("errorCode", "MANIFEST_IMPORT_REJECTED");
             body.put("error", sanitizeErrorMessage(result.error()));
             body.put("validationReport", buildValidationReportBody(result.report()));
             return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(body);
@@ -160,7 +162,7 @@ public class AdminController {
         if (result.status() == ManifestValidationUseCase.Status.NOT_FOUND) {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", "NOT_FOUND");
-            body.put("message", "Manifest not found");
+            body.put("message", "未找到指定的能力清单。");
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(body);
         }
 
@@ -225,8 +227,7 @@ public class AdminController {
 
         SecurityHelper.requireAdmin(authenticationPort, authorizationPort, AdminAction.PUBLISH);
 
-        String environment = request.environment() != null ? request.environment() : "production";
-        log.info("Catalog publish requested: environment={}", environment);
+        log.info("Catalog publish requested: single catalog");
 
         List<CatalogPublishUseCase.SelectedCapability> selected =
                 request.capabilities() == null ? List.of() : request.capabilities().stream()
@@ -235,7 +236,7 @@ public class AdminController {
                         .toList();
 
         CatalogPublishUseCase.PublishResult result =
-                catalogPublishUseCase.publish(environment, selected);
+                catalogPublishUseCase.publish(CatalogEnvironment.DEFAULT, selected);
 
         Map<String, Object> body = new LinkedHashMap<>();
 
@@ -253,7 +254,7 @@ public class AdminController {
     /**
      * 将目录回滚至历史快照版本。
      *
-     * @param request 含目标版本与环境信息的回滚请求
+     * @param request 含目标版本的回滚请求
      * @return 含新快照版本的回滚结果
      */
     @PostMapping("/releases:rollback")
@@ -262,12 +263,12 @@ public class AdminController {
 
         SecurityHelper.requireAdmin(authenticationPort, authorizationPort, AdminAction.ROLLBACK);
 
-        String environment = request.environment() != null ? request.environment() : "production";
-        log.info("Catalog rollback requested: targetVersion={}, environment={}",
-                request.targetSnapshotVersion(), environment);
+        log.info("Catalog rollback requested: targetVersion={}",
+                request.targetSnapshotVersion());
 
         CatalogRollbackUseCase.RollbackResult result =
-                catalogRollbackUseCase.rollback(request.targetSnapshotVersion(), environment);
+                catalogRollbackUseCase.rollback(
+                        request.targetSnapshotVersion(), CatalogEnvironment.DEFAULT);
 
         Map<String, Object> body = new LinkedHashMap<>();
 
@@ -371,7 +372,6 @@ public class AdminController {
         }
 
         body.put("snapshotVersion", snapshot.snapshotVersion());
-        body.put("environment", snapshot.environment());
         body.put("policyRef", snapshot.policyRef());
         body.put("digest", snapshot.digest());
         body.put("capabilityCount", snapshot.capabilities().size());
@@ -410,7 +410,7 @@ public class AdminController {
      */
     private String sanitizeErrorMessage(String message) {
         if (message == null) {
-            return "An internal error occurred";
+            return "服务处理失败，请稍后重试。";
         }
         String sanitized = message.replaceAll("at\\s+\\S+\\.\\S+\\([^)]*\\)", "[internal]");
         sanitized = sanitized.replaceAll("/\\S+\\.java:\\d+", "[internal]");
@@ -435,12 +435,9 @@ public class AdminController {
     /**
      * POST /releases:publish 的请求体。
      *
-     * @param environment 目标环境
      * @param capabilities 待发布的能力列表；若为空则发布全部 APPROVED 能力
      */
     public record PublishRequest(
-            @Size(max = 64)
-            String environment,
             @Valid
             List<SelectedCapabilityRequest> capabilities
     ) {
@@ -466,13 +463,10 @@ public class AdminController {
      * POST /releases:rollback 的请求体。
      *
      * @param targetSnapshotVersion 回滚目标历史快照版本
-     * @param environment 目标环境
      */
     public record RollbackRequest(
             @Min(1)
-            long targetSnapshotVersion,
-            @Size(max = 64)
-            String environment
+            long targetSnapshotVersion
     ) {
     }
 

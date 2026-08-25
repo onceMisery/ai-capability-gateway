@@ -229,7 +229,7 @@ async function loadOverview() {
   const now = Date.now()
   const tasks = [
     gatewayApi.capabilities(),
-    gatewayApi.snapshots('production'),
+    gatewayApi.snapshots(),
     gatewayApi.readiness(),
     canReadMonitor.value ? gatewayApi.capabilityStats(now - 24 * 60 * 60 * 1000, now) : Promise.resolve([]),
     canReadAudit.value ? gatewayApi.audits({ page: 1, size: 30, from: now - 24 * 60 * 60 * 1000, to: now }) : Promise.resolve({ items: [], total: 0 })
@@ -312,17 +312,17 @@ function openAudit(row: AuditEvent) {
 
 .queue-status--info {
   color: var(--gateway-primary);
-  background: #e8e8e8;
+  background: var(--gateway-primary-soft);
 }
 
 .queue-status--warning {
   color: var(--gateway-warning);
-  background: #f0f0f0;
+  background: var(--gateway-warning-soft);
 }
 
 .queue-status--danger {
   color: var(--gateway-danger);
-  background: #f7f7f7;
+  background: var(--gateway-danger-soft);
 }
 
 .queue-copy strong,

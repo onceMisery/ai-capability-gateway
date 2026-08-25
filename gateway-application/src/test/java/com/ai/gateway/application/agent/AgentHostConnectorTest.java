@@ -168,6 +168,22 @@ class AgentHostConnectorTest {
     }
 
     @Test
+    void reusesIdenticalPreResolveWithinTheSameTurn() {
+        Fixtures fixtures = new Fixtures();
+
+        AgentHostConnector.ResolveResult first = fixtures.connector.preResolve(
+                RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
+        AgentHostConnector.ResolveResult second = fixtures.connector.resolve(
+                RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
+
+        assertThat(second).isEqualTo(first);
+        verify(fixtures.resolver, times(1)).resolve(
+                fixtures.principal, "query order", 5, Long.MAX_VALUE);
+        verify(fixtures.telemetry).increment("gateway.agent.resolve.memo",
+                Map.of("outcome", "hit"));
+    }
+
+    @Test
     void rejectsSameSubjectTurnWhenOrganizationContextChanges() {
         Fixtures fixtures = new Fixtures();
         Principal anotherOrganization = new Principal(

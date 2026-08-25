@@ -7,16 +7,12 @@
       </div>
       <div class="page-actions">
         <el-button :icon="Refresh" :loading="loading" @click="loadData">刷新</el-button>
-        <el-button v-if="auth.isAdmin" type="primary" :icon="Promotion" :loading="publishing" @click="openPublishModal">发布快照</el-button>
+        <el-button v-if="auth.isAdmin" type="primary" :icon="Promotion" :loading="publishing || publishLoading" @click="openPublishModal">发布快照</el-button>
       </div>
     </header>
 
     <section class="toolbar snapshot-toolbar">
-      <div>
-        <span class="field-label">目标环境</span>
-        <el-segmented v-model="environment" :options="environmentOptions" @change="loadData" />
-      </div>
-      <span class="muted">活动快照会作为自然语言路由和结构化调用的目录基线。</span>
+      <span class="muted">活动快照会作为自然语言路由和结构化调用的唯一目录基线。</span>
     </section>
 
     <section class="surface">
@@ -25,7 +21,6 @@
           <el-table-column label="快照" width="150">
             <template #default="{ row }"><button class="snapshot-link mono" type="button" @click="openDetail(row)">v{{ row.snapshotVersion }}</button></template>
           </el-table-column>
-          <el-table-column prop="environment" label="环境" width="130" />
           <el-table-column label="状态" width="130">
             <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'" effect="light">{{ row.status === 'ACTIVE' ? '活动中' : '已替代' }}</el-tag></template>
           </el-table-column>
@@ -41,7 +36,7 @@
           </el-table-column>
         </el-table>
         <div v-else-if="!loading" class="empty-state">
-          <div><strong>暂无{{ environment }}快照</strong><span>先完成能力审批，再发布第一个目录版本。</span></div>
+          <div><strong>暂无目录快照</strong><span>先完成能力审批，再发布第一个目录版本。</span></div>
         </div>
       </div>
     </section>
@@ -52,7 +47,6 @@
       width="min(720px, 92vw)"
       align-center
       destroy-on-close
-      @open="onPublishModalOpen"
     >
       <div v-loading="publishLoading" class="publish-modal-body">
         <el-alert
@@ -63,14 +57,6 @@
           :closable="false"
           class="publish-error"
         />
-
-        <div class="publish-section">
-          <h4 class="publish-section-title">目标环境</h4>
-          <el-radio-group v-model="publishEnvironment">
-            <el-radio-button label="production">生产</el-radio-button>
-            <el-radio-button label="staging">预发</el-radio-button>
-          </el-radio-group>
-        </div>
 
         <div class="publish-section">
           <div class="publish-section-header">
@@ -114,7 +100,7 @@
         <div v-if="selectedCapabilityDetails.length" class="publish-section preview-section">
           <h4 class="publish-section-title">发布内容预览</h4>
           <p class="preview-summary">
-            即将向 <strong>{{ publishEnvironmentLabel }}</strong> 环境发布
+            即将发布到唯一能力目录
             <strong class="data-number">{{ selectedCapabilityDetails.length }}</strong> 项能力：
           </p>
           <div class="preview-list">
@@ -145,7 +131,7 @@
       <div v-if="detailLoading" v-loading="true" class="detail-loading" />
       <template v-else-if="selectedSnapshot">
         <div class="snapshot-heading">
-          <div><span class="eyebrow">{{ selectedSnapshot.environment }}</span><h3 class="mono">v{{ selectedSnapshot.snapshotVersion }}</h3><span class="muted">{{ formatDateTime(selectedSnapshotSummary?.publishedAt) }}</span></div>
+          <div><span class="eyebrow">唯一目录</span><h3 class="mono">v{{ selectedSnapshot.snapshotVersion }}</h3><span class="muted">{{ formatDateTime(selectedSnapshotSummary?.publishedAt) }}</span></div>
           <el-tag :type="selectedSnapshot.status === 'ACTIVE' ? 'success' : 'info'" effect="light">{{ selectedSnapshot.status === 'ACTIVE' ? '活动中' : '已替代' }}</el-tag>
         </div>
         <el-descriptions :column="1" border>
@@ -185,12 +171,6 @@ const loading = ref(false)
 const publishing = ref(false)
 const rollbackVersion = ref<number>()
 const snapshots = ref<SnapshotSummary[]>([])
-const environment = ref('production')
-const environmentOptions = [
-  { label: '生产', value: 'production' },
-  { label: '预发', value: 'staging' }
-]
-
 const detailOpen = ref(false)
 const detailLoading = ref(false)
 const detailError = ref('')
@@ -201,16 +181,11 @@ const selectedSnapshotSummary = ref<SnapshotSummary>()
 const publishOpen = ref(false)
 const publishLoading = ref(false)
 const publishError = ref('')
-const publishEnvironment = ref('production')
 const publishForm = ref({
   capabilities: [] as string[]
 })
 const approvedCapabilities = ref<CapabilitySummary[]>([])
 const capabilityMap = ref<Map<string, CapabilitySummary>>(new Map())
-
-const publishEnvironmentLabel = computed(() =>
-  environmentOptions.find(o => o.value === publishEnvironment.value)?.label || publishEnvironment.value
-)
 
 const selectedCapabilityDetails = computed(() =>
   publishForm.value.capabilities
@@ -226,7 +201,7 @@ onMounted(loadData)
 
 async function loadData() {
   loading.value = true
-  try { snapshots.value = await gatewayApi.snapshots(environment.value) }
+  try { snapshots.value = await gatewayApi.snapshots() }
   catch (error) { ElMessage.error(apiErrorMessage(error)) }
   finally { loading.value = false }
 }
@@ -245,34 +220,32 @@ async function loadCapabilityMap() {
   }
 }
 
-function openPublishModal() {
-  publishEnvironment.value = environment.value
+async function openPublishModal() {
   publishForm.value.capabilities = []
   publishError.value = ''
-  publishOpen.value = true
-}
-
-async function onPublishModalOpen() {
   publishLoading.value = true
-  publishError.value = ''
-  publishForm.value.capabilities = []
   try {
-    const list = await gatewayApi.capabilities()
-    const map = new Map<string, CapabilitySummary>()
-    for (const cap of list) {
-      map.set(`${cap.capabilityId}@${cap.version}`, cap)
-    }
-    capabilityMap.value = map
-    approvedCapabilities.value = list
-      .filter(cap => cap.lifecycle === 'APPROVED')
-      .sort((a, b) => (a.displayName || a.capabilityId).localeCompare(b.displayName || b.capabilityId))
+    await loadPublishOptions()
   }
   catch (error) {
     publishError.value = apiErrorMessage(error)
   }
   finally {
     publishLoading.value = false
+    publishOpen.value = true
   }
+}
+
+async function loadPublishOptions() {
+  const list = await gatewayApi.capabilities()
+  const map = new Map<string, CapabilitySummary>()
+  for (const cap of list) {
+    map.set(`${cap.capabilityId}@${cap.version}`, cap)
+  }
+  capabilityMap.value = map
+  approvedCapabilities.value = list
+    .filter(cap => cap.lifecycle === 'APPROVED')
+    .sort((a, b) => (a.displayName || a.capabilityId).localeCompare(b.displayName || b.capabilityId))
 }
 
 function selectAll() {
@@ -318,7 +291,7 @@ async function confirmPublish() {
 
   try {
     await ElMessageBox.confirm(
-      `确认向 ${publishEnvironmentLabel.value} 环境发布 ${count} 项能力？这会改变运行面可见的能力版本。`,
+      `确认发布 ${count} 项能力？这会改变运行面可见的能力版本。`,
       '发布确认',
       { type: 'warning', confirmButtonText: '确认发布', cancelButtonText: '取消' }
     )
@@ -334,22 +307,20 @@ async function confirmPublish() {
     }
   })
   try {
-    await gatewayApi.publish(publishEnvironment.value, capabilities)
+    await gatewayApi.publish(capabilities)
     ElMessage.success('新快照已发布')
     publishOpen.value = false
-    if (environment.value === publishEnvironment.value) {
-      await loadData()
-    }
+    await loadData()
   }
   catch (error) { ElMessage.error(apiErrorMessage(error)) }
   finally { publishing.value = false }
 }
 
 async function rollbackSnapshot(row: SnapshotSummary) {
-  try { await ElMessageBox.confirm(`确认将 ${environment.value} 回滚到 v${row.snapshotVersion}？回滚会生成新的活动快照版本。`, '确认回滚', { type: 'warning', confirmButtonText: '确认回滚', cancelButtonText: '取消' }) }
+  try { await ElMessageBox.confirm(`确认将目录回滚到 v${row.snapshotVersion}？回滚会生成新的活动快照版本。`, '确认回滚', { type: 'warning', confirmButtonText: '确认回滚', cancelButtonText: '取消' }) }
   catch { return }
   rollbackVersion.value = row.snapshotVersion
-  try { await gatewayApi.rollback(row.snapshotVersion, environment.value); ElMessage.success('回滚已完成'); await loadData() }
+  try { await gatewayApi.rollback(row.snapshotVersion); ElMessage.success('回滚已完成'); await loadData() }
   catch (error) { ElMessage.error(apiErrorMessage(error)) }
   finally { rollbackVersion.value = undefined }
 }

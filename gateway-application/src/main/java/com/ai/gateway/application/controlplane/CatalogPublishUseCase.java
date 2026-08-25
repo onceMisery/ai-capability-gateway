@@ -141,17 +141,32 @@ public final class CatalogPublishUseCase {
         PublishResult result = transactionPort.inTransaction(() -> {
             catalogPort.lockEnvironmentForPublication(environment);
 
-            List<CapabilityManifest> approvedManifests = manifestRepository.findAllWithDetails()
+            CatalogSnapshot currentSnapshot = catalogPort.loadCurrentSnapshot(environment);
+            List<String> currentCapabilityKeys = currentSnapshot == null
+                    ? List.of()
+                    : currentSnapshot.capabilities().stream()
+                    .map(manifest -> manifest.metadata().id() + "\u0000"
+                            + manifest.metadata().version())
+                    .toList();
+            List<ManifestRepository.ManifestDetail> publishableDetails =
+                    manifestRepository.findAllWithDetails()
                     .stream()
-                    .filter(detail -> detail.lifecycle() == CapabilityLifecycle.APPROVED)
+                    .filter(detail -> detail.lifecycle() == CapabilityLifecycle.APPROVED
+                            || detail.lifecycle() == CapabilityLifecycle.PUBLISHED)
+                    .filter(detail -> !currentCapabilityKeys.contains(
+                            detail.manifest().metadata().id() + "\u0000"
+                                    + detail.manifest().metadata().version()))
+                    .toList();
+            List<CapabilityManifest> publishableManifests = publishableDetails.stream()
                     .map(ManifestRepository.ManifestDetail::manifest)
                     .collect(Collectors.toList());
             List<CapabilityManifest> manifestsToPublish = selectedCapabilities.isEmpty()
-                    ? approvedManifests
-                    : approvedManifests.stream()
+                    ? publishableManifests
+                    : publishableDetails.stream()
                     .filter(m -> selectedCapabilities.stream().anyMatch(
-                            s -> s.capabilityId().equals(m.metadata().id())
-                                    && s.version().equals(m.metadata().version())))
+                            s -> s.capabilityId().equals(m.manifest().metadata().id())
+                                    && s.version().equals(m.manifest().metadata().version())))
+                    .map(ManifestRepository.ManifestDetail::manifest)
                     .collect(Collectors.toList());
 
             if (manifestsToPublish.isEmpty()) {
@@ -170,9 +185,12 @@ public final class CatalogPublishUseCase {
                                     + String.join(", ", rejectedAgentCapabilities));
                 }
             }
-            for (CapabilityManifest manifest : manifestsToPublish) {
-                lifecycleStateMachine.validateTransition(
-                        CapabilityLifecycle.APPROVED, CapabilityLifecycle.PUBLISHED);
+            for (ManifestRepository.ManifestDetail detail : publishableDetails) {
+                if (manifestsToPublish.contains(detail.manifest())
+                        && detail.lifecycle() == CapabilityLifecycle.APPROVED) {
+                    lifecycleStateMachine.validateTransition(
+                            CapabilityLifecycle.APPROVED, CapabilityLifecycle.PUBLISHED);
+                }
             }
 
             long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
@@ -183,10 +201,14 @@ public final class CatalogPublishUseCase {
                     newSnapshotVersion, environment, manifestsToPublish, policyRef, digest);
 
             catalogPort.saveSnapshot(newSnapshot);
-            for (CapabilityManifest manifest : manifestsToPublish) {
-                manifestRepository.updateLifecycle(
-                        manifest.metadata().id(), manifest.metadata().version(),
-                        CapabilityLifecycle.PUBLISHED);
+            for (ManifestRepository.ManifestDetail detail : publishableDetails) {
+                if (manifestsToPublish.contains(detail.manifest())
+                        && detail.lifecycle() == CapabilityLifecycle.APPROVED) {
+                    CapabilityManifest manifest = detail.manifest();
+                    manifestRepository.updateLifecycle(
+                            manifest.metadata().id(), manifest.metadata().version(),
+                            CapabilityLifecycle.PUBLISHED);
+                }
             }
             catalogPort.recordSnapshotPublication(newSnapshot, "MANIFEST_PUBLISHED");
             return new PublishResult(true, newSnapshotVersion, null);

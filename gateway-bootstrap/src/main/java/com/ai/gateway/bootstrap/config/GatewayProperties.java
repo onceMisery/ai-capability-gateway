@@ -107,6 +107,8 @@ public class GatewayProperties {
         private long mcpSessionIdleSeconds = 1_800L;
         private String mcpSecurityMode = "READ_ONLY";
         private long mcpCallTimeoutMs = 30_000L;
+        private int mcpCallMaxConcurrent = 64;
+        private int mcpCallMaxQueue = 128;
         private long mcpCloseTimeoutMs = 5_000L;
         private String mcpNodeId = "local";
         private double mcpSseQps = 100d;

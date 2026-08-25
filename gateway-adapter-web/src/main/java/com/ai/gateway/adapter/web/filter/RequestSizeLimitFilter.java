@@ -108,7 +108,7 @@ public class RequestSizeLimitFilter implements jakarta.servlet.Filter {
                 "status", "ERROR",
                 "error", java.util.Map.of(
                         "errorCode", "RESULT_TOO_LARGE",
-                        "message", "Request payload exceeds maximum allowed size")));
+                        "message", "请求内容超过系统允许的大小上限，请缩小文件或请求体后重试")));
     }
 
     /**

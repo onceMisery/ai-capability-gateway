@@ -176,6 +176,7 @@ function logout() {
   border-radius: 12px;
   color: #fff;
   background: var(--gateway-gradient-brand);
+  border: 1px solid rgba(147, 197, 253, 0.3);
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
   flex-shrink: 0;
 }
@@ -223,7 +224,7 @@ function logout() {
   background: var(--gateway-gradient-brand);
   color: #fff;
   font-weight: 650;
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 24px rgba(var(--gateway-primary-rgb), 0.26);
 }
 .sidebar.collapsed .el-menu-item {
   margin: 5px auto;
@@ -300,6 +301,15 @@ function logout() {
   gap: 10px;
 }
 
+.topbar__right :deep(.el-button--text) {
+  color: var(--gateway-primary);
+}
+
+.topbar__right :deep(.el-button--text:hover) {
+  color: var(--gateway-primary-hover);
+  background: var(--gateway-primary-soft);
+}
+
 .icon-btn {
   display: none;
   align-items: center;
@@ -341,6 +351,7 @@ function logout() {
   height: 34px;
   border-radius: 50%;
   background: var(--gateway-gradient-brand);
+  box-shadow: 0 4px 10px rgba(var(--gateway-primary-rgb), 0.24);
   color: #fff;
   font-weight: 700;
   font-size: 14px;
@@ -387,7 +398,7 @@ function logout() {
     width: 256px;
     transform: translateX(-100%);
     transition: transform var(--gateway-transition);
-    box-shadow: var(--gateway-shadow-lg);
+    box-shadow: 12px 0 32px rgba(15, 23, 42, 0.24);
   }
   .layout.is-mobile-open .sidebar {
     transform: translateX(0);

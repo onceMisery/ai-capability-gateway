@@ -42,7 +42,27 @@ class ManifestImportUseCaseTest {
                 mock(CompatibilityTestPort.class)).importManifest(incoming);
 
         assertThat(result.success()).isFalse();
-        assertThat(result.error()).contains("suspend it before importing another version");
+        assertThat(result.error()).contains("请先停用现有版本");
+        verifyNoInteractions(validator);
+    }
+
+    @Test
+    void rejectsDuplicateVersionWithClearChineseMessage() {
+        ManifestRepository repository = mock(ManifestRepository.class);
+        ManifestValidator validator = mock(ManifestValidator.class);
+        CapabilityManifest incoming = mock(CapabilityManifest.class, RETURNS_DEEP_STUBS);
+        when(incoming.metadata().id()).thenReturn("order.detail.query");
+        when(incoming.metadata().version()).thenReturn("1.0.0");
+        when(repository.findByIdAndVersion("order.detail.query", "1.0.0"))
+                .thenReturn(Optional.of(incoming));
+
+        ManifestImportUseCase.ImportResult result = new ManifestImportUseCase(
+                repository, validator, mock(SchemaValidator.class),
+                mock(CompatibilityTestPort.class)).importManifest(incoming);
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).isEqualTo(
+                "能力「order.detail.query」的版本「1.0.0」已存在，不能重复导入；如需修改内容，请递增版本号。");
         verifyNoInteractions(validator);
     }
 
@@ -69,6 +89,6 @@ class ManifestImportUseCaseTest {
                 mock(CompatibilityTestPort.class)).importManifest(incoming);
 
         assertThat(result.success()).isFalse();
-        assertThat(result.error()).contains("Validation failed");
+        assertThat(result.error()).contains("清单校验失败");
     }
 }

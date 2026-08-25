@@ -144,8 +144,20 @@
     <el-dialog v-model="importOpen" title="导入 Capability Manifest" width="min(720px, calc(100vw - 24px))" destroy-on-close>
       <el-form label-position="top">
         <el-form-item label="Manifest JSON" required>
-          <el-input v-model="importText" type="textarea" :rows="14" spellcheck="false" placeholder="粘贴 JSON 格式的 Capability Manifest" />
-          <div class="form-helper">后端当前接受 JSON；导入后仍需校验、审批并发布到快照。</div>
+          <div class="import-source">
+            <input
+              ref="importFileInput"
+              class="sr-only"
+              type="file"
+              accept=".json,application/json"
+              @change="handleFileChange"
+            />
+            <el-button type="primary" plain :icon="Upload" @click="openFilePicker">选择 Manifest 文件</el-button>
+            <span v-if="importFileName" class="import-file-name" :title="importFileName">{{ importFileName }}</span>
+            <span v-else class="form-helper">支持 .json 文件，也可以直接粘贴内容。</span>
+          </div>
+          <el-input v-model="importText" type="textarea" :rows="14" spellcheck="false" placeholder="粘贴 JSON 格式的 Capability Manifest，或先选择文件" />
+          <div class="form-helper">文件内容会先载入编辑区，提交前可检查或修改；导入后仍需校验、审批并发布到快照。</div>
         </el-form-item>
       </el-form>
       <div v-if="importParseError" class="inline-error" role="alert"><el-icon><Warning /></el-icon>{{ importParseError }}</div>
@@ -199,6 +211,8 @@ const selectedSummary = ref<CapabilitySummary>()
 const importOpen = ref(false)
 const importLoading = ref(false)
 const importText = ref('')
+const importFileInput = ref<HTMLInputElement>()
+const importFileName = ref('')
 const importParseError = ref('')
 const importResult = ref<ManifestMutationResult>()
 const validationOpen = ref(false)
@@ -349,15 +363,43 @@ async function resume(row: CapabilitySummary) {
 
 function openImport() {
   importText.value = ''
+  importFileName.value = ''
+  if (importFileInput.value) importFileInput.value.value = ''
   importParseError.value = ''
   importResult.value = undefined
   importOpen.value = true
+}
+
+function openFilePicker() {
+  importFileInput.value?.click()
+}
+
+async function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  importParseError.value = ''
+  importResult.value = undefined
+  importFileName.value = file.name
+  try {
+    const content = await file.text()
+    if (!content.trim()) throw new Error('文件内容为空')
+    importText.value = content
+  } catch (error) {
+    importText.value = ''
+    importFileName.value = ''
+    importParseError.value = `文件读取失败：${error instanceof Error ? error.message : '无法读取文件内容'}`
+  } finally {
+    input.value = ''
+  }
 }
 
 async function submitImport() {
   importParseError.value = ''
   let manifest: CapabilityManifest
   try {
+    if (!importText.value.trim()) throw new Error('请先选择 Manifest 文件或粘贴 JSON 内容')
     const parsed: unknown = JSON.parse(importText.value)
     if (!parsed || typeof parsed !== 'object' || !('metadata' in parsed) || !('spec' in parsed)) throw new Error('缺少 metadata 或 spec')
     manifest = parsed as CapabilityManifest
@@ -497,6 +539,35 @@ async function submitImport() {
   margin-top: 6px;
   color: var(--gateway-text-muted);
   font-size: 12px;
+}
+
+.import-source {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.import-file-name {
+  min-width: 0;
+  max-width: min(100%, 360px);
+  overflow: hidden;
+  color: var(--gateway-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .result-list {

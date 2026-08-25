@@ -72,13 +72,13 @@ public class AdminAuthenticationFilter extends OncePerRequestFilter {
             principal = authenticationPort.authenticate(requestContextFactory.from(request));
         } catch (Exception e) {
             writeError(response, HttpServletResponse.SC_UNAUTHORIZED,
-                    "AUTHENTICATION_FAILED", "invalid or missing token");
+                    "AUTHENTICATION_FAILED", "登录凭证无效或缺失，请重新登录。");
             return;
         }
         AdminAction action = actionFor(request);
         if (!authorizationPort.authorizeAdmin(principal, action)) {
             writeError(response, HttpServletResponse.SC_FORBIDDEN,
-                    "PERMISSION_DENIED", "admin permission required");
+                    "PERMISSION_DENIED", "当前账号没有执行此管理操作的权限。");
             return;
         }
         request.setAttribute(PRINCIPAL_ATTRIBUTE, principal);

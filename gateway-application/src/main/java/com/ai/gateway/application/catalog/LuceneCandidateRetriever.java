@@ -256,6 +256,16 @@ public final class LuceneCandidateRetriever
         return indexedSnapshotVersion;
     }
 
+    /** Exercises the real query path before a newly built view becomes ready. */
+    boolean warmUp(ActiveCatalogView view) {
+        Objects.requireNonNull(view, "view must not be null");
+        if (view.indexHandle() == null || view.capabilities().isEmpty()) {
+            return false;
+        }
+        String probe = view.capabilities().get(0).spec().displayName();
+        return !retrieve(probe, view, view.capabilities(), 1).isEmpty();
+    }
+
     @Override
     public List<ScoredCapability> retrieve(String normalizedText,
                                             List<CapabilityManifest> authorizedCapabilities,

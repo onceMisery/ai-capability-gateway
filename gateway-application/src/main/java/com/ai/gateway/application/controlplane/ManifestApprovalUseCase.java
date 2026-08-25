@@ -93,7 +93,8 @@ public final class ManifestApprovalUseCase {
 
         Optional<CapabilityManifest> manifestOpt = manifestRepository.findByIdAndVersion(id, version);
         if (manifestOpt.isEmpty()) {
-            return new ApprovalResult(false, null, "Manifest not found: id=" + id + ", version=" + version);
+            return new ApprovalResult(false, null,
+                    "未找到能力清单：能力「" + id + "」，版本「" + version + "」。");
         }
 
         CapabilityManifest manifest = manifestOpt.get();
@@ -148,7 +149,8 @@ public final class ManifestApprovalUseCase {
 
         Optional<CapabilityManifest> manifestOpt = manifestRepository.findByIdAndVersion(id, version);
         if (manifestOpt.isEmpty()) {
-            return new ApprovalResult(false, null, "Manifest not found: id=" + id + ", version=" + version);
+            return new ApprovalResult(false, null,
+                    "未找到能力清单：能力「" + id + "」，版本「" + version + "」。");
         }
 
         // Enforce the state machine: only VALIDATED may transition to

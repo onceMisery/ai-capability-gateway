@@ -18,6 +18,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.verify;
 
 /**
  * {@link SaTokenAuthorizationAdapter} 的单元测试。
@@ -214,5 +215,25 @@ class SaTokenAuthorizationAdapterTest {
         assertThat(adapter.visibilityCacheSize()).isZero();
         assertThat(adapter.visibilityCacheBytes()).isZero();
         assertThat(adapter.visibilityCacheEvictionCount()).isEqualTo(1L);
+    }
+
+    @Test
+    void recordsPolicyRefreshInvalidationSeparatelyFromCapacityEviction() {
+        TelemetryPort telemetry = mock(TelemetryPort.class);
+        SaTokenAuthorizationAdapter adapter = new SaTokenAuthorizationAdapter(
+                false, null, 10, telemetry);
+        adapter.grant("order.detail.query", "1.0.0",
+                Set.of("analyst"), Set.of());
+        adapter.resolvePolicySnapshot(principal(
+                "a1", List.of("analyst"), List.of()));
+
+        adapter.grant("order.list.query", "1.0.0",
+                Set.of("analyst"), Set.of());
+
+        verify(telemetry).increment("gateway.authorization.visibility_cache",
+                java.util.Map.of("outcome", "policy_refresh_evicted"));
+        verify(telemetry).recordValue(
+                "gateway.authorization.visibility_cache.evictions", 1L,
+                java.util.Map.of("outcome", "policy_refresh"));
     }
 }

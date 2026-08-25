@@ -59,7 +59,7 @@ public class GlobalExceptionHandler {
         log.warn("Illegal argument: {}", ex.getMessage());
         return ApiResponse.error(
                 ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
-                "Invalid request parameters",
+                "请求参数无效，请检查后重试。",
                 HttpStatus.BAD_REQUEST);
     }
 
@@ -69,7 +69,7 @@ public class GlobalExceptionHandler {
         log.error("Null pointer exception", ex);
         return ApiResponse.error(
                 ErrorCode.PROTOCOL_ERROR.name(),
-                "An internal error occurred",
+                "服务处理失败，请稍后重试。",
                 HttpStatus.BAD_GATEWAY);
     }
 
@@ -79,7 +79,7 @@ public class GlobalExceptionHandler {
         log.warn("Malformed request body: {}", ex.getMessage());
         return ApiResponse.error(
                 ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
-                "Malformed request body",
+                "请求内容格式错误，请检查 JSON 或表单内容。",
                 HttpStatus.BAD_REQUEST);
     }
 
@@ -89,7 +89,7 @@ public class GlobalExceptionHandler {
         log.warn("Validation failed: {}", ex.getMessage());
         return ApiResponse.error(
                 ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
-                "Request validation failed",
+                "请求参数校验失败，请检查必填字段和字段格式。",
                 HttpStatus.BAD_REQUEST);
     }
 
@@ -99,7 +99,7 @@ public class GlobalExceptionHandler {
         log.warn("Type mismatch: {}", ex.getMessage());
         return ApiResponse.error(
                 ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
-                "Invalid parameter type",
+                "请求参数类型错误，请检查字段格式。",
                 HttpStatus.BAD_REQUEST);
     }
 
@@ -109,10 +109,10 @@ public class GlobalExceptionHandler {
         String message = ex.getMessage();
         if (message != null && message.startsWith("AUTHENTICATION_FAILED")) {
             log.warn("Authentication failed: {}", message);
-            return ApiResponse.unauthorized("Authentication required");
+            return ApiResponse.unauthorized("登录状态无效或已过期，请重新登录。");
         }
         log.warn("Permission denied: {}", message);
-        return ApiResponse.forbidden("Admin permission required");
+        return ApiResponse.forbidden("当前账号没有执行此管理操作的权限。");
     }
 
     @ExceptionHandler(UnsupportedOperationException.class)
@@ -121,7 +121,7 @@ public class GlobalExceptionHandler {
         log.warn("Unsupported operation: {}", ex.getMessage());
         return ApiResponse.error(
                 ErrorCode.CAPABILITY_UNAVAILABLE.name(),
-                "The requested protocol or capability is not yet available",
+                "请求的协议或能力当前不可用，请稍后重试。",
                 HttpStatus.SERVICE_UNAVAILABLE);
     }
 
@@ -131,7 +131,7 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception", ex);
         return ApiResponse.error(
                 ErrorCode.PROTOCOL_ERROR.name(),
-                "An internal error occurred",
+                "服务处理失败，请稍后重试。",
                 HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
@@ -178,7 +178,7 @@ public class GlobalExceptionHandler {
      */
     private String sanitizeMessage(String message) {
         if (message == null) {
-            return "An internal error occurred";
+            return "服务处理失败，请稍后重试。";
         }
         String sanitized = message.replaceAll("at\\s+\\S+\\.\\S+\\([^)]*\\)", "[internal]");
         sanitized = sanitized.replaceAll("/\\S+\\.java:\\d+", "[internal]");

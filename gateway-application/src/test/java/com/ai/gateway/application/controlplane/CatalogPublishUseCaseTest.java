@@ -153,6 +153,60 @@ class CatalogPublishUseCaseTest {
                 org.mockito.ArgumentMatchers.any());
     }
 
+    @Test
+    void republishesPublishedCapabilityToAnotherEnvironmentWithoutLifecycleTransition() {
+        ManifestRepository repository = mock(ManifestRepository.class);
+        CatalogPort catalog = mock(CatalogPort.class);
+        SnapshotNotifier notifier = mock(SnapshotNotifier.class);
+        CapabilityManifest published = manifest("order.query", "1.0.0");
+        ManifestRepository.ManifestDetail publishedDetail =
+                detail(published, CapabilityLifecycle.PUBLISHED);
+        when(repository.findAllWithDetails()).thenReturn(List.of(
+                publishedDetail));
+        CatalogSnapshot emptyTestSnapshot =
+                new CatalogSnapshot(0L, "test", List.of(), "policy-v0", "digest");
+        when(catalog.loadCurrentSnapshot("test")).thenReturn(emptyTestSnapshot);
+        when(catalog.reserveSnapshotVersion()).thenReturn(44L);
+
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction());
+
+        CatalogPublishUseCase.PublishResult result = useCase.publish("test", List.of(
+                new CatalogPublishUseCase.SelectedCapability("order.query", "1.0.0")));
+
+        assertThat(result.success()).isTrue();
+        ArgumentCaptor<CatalogSnapshot> snapshot = ArgumentCaptor.forClass(CatalogSnapshot.class);
+        verify(catalog).saveSnapshot(snapshot.capture());
+        assertThat(snapshot.getValue().environment()).isEqualTo("test");
+        assertThat(snapshot.getValue().capabilities()).containsExactly(published);
+        verify(repository, never()).updateLifecycle(
+                "order.query", "1.0.0", CapabilityLifecycle.PUBLISHED);
+    }
+
+    @Test
+    void doesNotCreateDuplicateSnapshotForCapabilityAlreadyActiveInTargetEnvironment() {
+        ManifestRepository repository = mock(ManifestRepository.class);
+        CatalogPort catalog = mock(CatalogPort.class);
+        SnapshotNotifier notifier = mock(SnapshotNotifier.class);
+        CapabilityManifest published = manifest("order.query", "1.0.0");
+        ManifestRepository.ManifestDetail publishedDetail =
+                detail(published, CapabilityLifecycle.PUBLISHED);
+        when(repository.findAllWithDetails()).thenReturn(List.of(
+                publishedDetail));
+        CatalogSnapshot activeTestSnapshot =
+                new CatalogSnapshot(45L, "test", List.of(published), "policy-v45", "digest");
+        when(catalog.loadCurrentSnapshot("test")).thenReturn(activeTestSnapshot);
+
+        CatalogPublishUseCase useCase = new CatalogPublishUseCase(
+                repository, catalog, notifier, new LifecycleStateMachine(), noopTransaction());
+
+        CatalogPublishUseCase.PublishResult result = useCase.publish("test");
+
+        assertThat(result.success()).isFalse();
+        assertThat(result.error()).isEqualTo("No approved manifests to publish");
+        verify(catalog, never()).saveSnapshot(org.mockito.ArgumentMatchers.any());
+    }
+
     private static ManifestRepository.ManifestDetail detail(
             CapabilityManifest manifest, CapabilityLifecycle lifecycle) {
         return new ManifestRepository.ManifestDetail(

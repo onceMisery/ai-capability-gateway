@@ -149,38 +149,115 @@ const resultCodes = computed(() => [...new Set(timeSeries.value.map((point) => p
 const timeBuckets = computed(() => [...new Set(timeSeries.value.map((point) => Number(point.time)))].sort((a, b) => a - b))
 const chartSummary = computed(() => `所选范围共 ${formatNumber(totalCalls.value)} 条能力审计事件，成功事件 ${formatNumber(successCalls.value)} 条，失败事件 ${formatNumber(failureCalls.value)} 条。`)
 
-const seriesColors = ['#1a1a1a', '#4d4d4d', '#737373', '#999999', '#b3b3b3', '#cccccc']
-const chartOption = computed(() => ({
-  animationDuration: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 220,
-  aria: { enabled: true, description: chartSummary.value },
-  color: seriesColors,
-  tooltip: { trigger: 'axis' },
-  legend: { top: 4, left: 8, type: 'scroll' },
-  grid: { left: 52, right: 24, top: 52, bottom: 42 },
-  xAxis: {
-    type: 'category',
-    data: timeBuckets.value.map((time) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit' }).format(new Date(time))),
-    axisLabel: { color: '#6f6f6f', hideOverlap: true },
-    axisLine: { lineStyle: { color: '#cfcfcf' } }
-  },
-  yAxis: {
-    type: 'value',
-    minInterval: 1,
-    name: '次数',
-    nameTextStyle: { color: '#8a8a8a' },
-    axisLabel: { color: '#6f6f6f' },
-    splitLine: { lineStyle: { color: '#e6e6e6' } }
-  },
-  series: resultCodes.value.map((code) => ({
-    name: code,
-    type: 'line',
-    smooth: false,
-    symbolSize: 7,
-    showSymbol: timeBuckets.value.length < 48,
-    data: timeBuckets.value.map((time) => Number(timeSeries.value.find((point) => Number(point.time) === time && point.resultCode === code)?.count || 0)),
-    emphasis: { focus: 'series' }
-  }))
-}))
+const resultCodeLabels: Record<string, string> = {
+  SUCCESS: '成功',
+  COMPLETED: '已完成',
+  AUTHENTICATION_FAILED: '认证失败',
+  PERMISSION_DENIED: '权限不足',
+  ARGUMENT_VALIDATION_FAILED: '参数校验失败',
+  CAPABILITY_UNAVAILABLE: '能力不可用',
+  PROVIDER_TIMEOUT: 'Provider 超时',
+  PROVIDER_REJECTED: 'Provider 拒绝',
+  PROTOCOL_ERROR: '协议错误',
+  RATE_LIMITED: '触发限流',
+  EXECUTION_UNKNOWN: '执行结果未知'
+}
+
+function readToken(name: string, fallback: string) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+}
+
+function resultCodeLabel(code: string) {
+  return resultCodeLabels[code] || code
+}
+
+function resultCodeColor(code: string) {
+  if (['SUCCESS', 'COMPLETED'].includes(code)) return readToken('--gateway-success', '#15803d')
+  if (['AUTHENTICATION_FAILED', 'PERMISSION_DENIED'].includes(code)) return readToken('--gateway-primary', '#2563eb')
+  if (['PROVIDER_TIMEOUT', 'RATE_LIMITED'].includes(code)) return readToken('--gateway-warning', '#b45309')
+  if (['PROTOCOL_ERROR', 'PROVIDER_REJECTED', 'EXECUTION_UNKNOWN'].includes(code)) return readToken('--gateway-danger', '#dc2626')
+  return readToken('--gateway-info', '#475569')
+}
+
+const chartOption = computed(() => {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  const axisText = readToken('--gateway-text-muted', '#64748b')
+  const border = readToken('--gateway-border', '#e5e5e5')
+  const primary = readToken('--gateway-primary', '#2563eb')
+  return {
+    animationDuration: reducedMotion ? 0 : 280,
+    aria: { enabled: true, description: chartSummary.value },
+    color: resultCodes.value.map(resultCodeColor),
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'line',
+        lineStyle: { color: primary, width: 1, opacity: 0.45 }
+      },
+      backgroundColor: '#111827',
+      borderColor: 'rgba(148, 163, 184, 0.28)',
+      borderWidth: 1,
+      padding: [10, 12],
+      textStyle: { color: '#f8fafc', fontSize: 12 },
+      formatter: (params: Array<{ seriesName: string; value: number; axisValue: string }>) => {
+        const title = params[0]?.axisValue || ''
+        const rows = params
+          .filter((item) => Number(item.value) > 0)
+          .map((item) => `<div style="display:flex;justify-content:space-between;gap:28px;margin-top:6px"><span>${resultCodeLabel(item.seriesName)}</span><strong>${formatNumber(Number(item.value))}</strong></div>`)
+        return `<div style="min-width:150px"><strong>${title}</strong>${rows.join('') || '<div style="margin-top:6px;color:#94a3b8">暂无事件</div>'}</div>`
+      }
+    },
+    legend: {
+      top: 12,
+      left: 14,
+      right: 14,
+      type: 'scroll',
+      icon: 'roundRect',
+      itemWidth: 18,
+      itemHeight: 4,
+      itemGap: 18,
+      textStyle: { color: axisText, fontSize: 12 },
+      formatter: (name: string) => resultCodeLabel(name)
+    },
+    grid: { left: 54, right: 22, top: 58, bottom: 44, containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: timeBuckets.value.map((time) => new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit' }).format(new Date(time))),
+      axisLabel: { color: axisText, hideOverlap: true, margin: 12 },
+      axisLine: { lineStyle: { color: border } },
+      axisTick: { show: false }
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      name: '事件数',
+      nameTextStyle: { color: axisText, padding: [0, 0, 8, 0] },
+      axisLabel: { color: axisText, margin: 12 },
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: border, type: 'dashed', opacity: 0.75 } }
+    },
+    series: resultCodes.value.map((code) => ({
+      name: code,
+      type: 'line',
+      smooth: 0.28,
+      connectNulls: true,
+      symbol: 'circle',
+      symbolSize: timeBuckets.value.length < 48 ? 6 : 0,
+      showSymbol: timeBuckets.value.length < 48,
+      lineStyle: { width: 2.5, color: resultCodeColor(code) },
+      itemStyle: { color: resultCodeColor(code), borderColor: '#ffffff', borderWidth: 2 },
+      areaStyle: { color: resultCodeColor(code), opacity: 0.08 },
+      emphasis: {
+        focus: 'series',
+        lineStyle: { width: 3 },
+        itemStyle: { borderWidth: 3 }
+      },
+      data: timeBuckets.value.map((time) => Number(timeSeries.value.find((point) => Number(point.time) === time && point.resultCode === code)?.count || 0))
+    }))
+  }
+})
 
 onMounted(loadStats)
 
@@ -264,8 +341,10 @@ function openCapabilityAudit(row: CapabilityStat) {
 .chart-wrap {
   position: relative;
   width: 100%;
-  height: 360px;
-  padding: 8px 8px 0;
+  height: 376px;
+  padding: 8px 14px 6px;
+  background: var(--gateway-surface-subtle);
+  border-top: 1px solid var(--gateway-border);
 }
 
 .trend-chart {

@@ -15,6 +15,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeoutException;
 import java.time.Duration;
 import reactor.core.publisher.Mono;
 
@@ -54,7 +56,7 @@ public final class McpWebMvcTransportAdapter {
                                      Duration idleTimeout) {
         this(objectMapper, gatewayAdapter, authenticationPort, telemetry, maxSessions,
                 idleTimeout, Duration.ofSeconds(30), Duration.ofSeconds(5), "local",
-                McpRateLimiter.allowAll());
+                McpRateLimiter.allowAll(), McpCallExecutor.direct());
     }
 
     public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
@@ -66,7 +68,7 @@ public final class McpWebMvcTransportAdapter {
                                      Duration callTimeout) {
         this(objectMapper, gatewayAdapter, authenticationPort, telemetry, maxSessions,
                 idleTimeout, callTimeout, Duration.ofSeconds(5), "local",
-                McpRateLimiter.allowAll());
+                McpRateLimiter.allowAll(), McpCallExecutor.direct());
     }
 
     public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
@@ -79,10 +81,44 @@ public final class McpWebMvcTransportAdapter {
                                      Duration closeTimeout,
                                      String nodeId,
                                      McpRateLimiter rateLimiter) {
+        this(objectMapper, gatewayAdapter, authenticationPort, telemetry, maxSessions,
+                idleTimeout, callTimeout, closeTimeout, nodeId, rateLimiter,
+                McpCallExecutor.direct());
+    }
+
+    public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
+                                     McpGatewayAdapter gatewayAdapter,
+                                     AuthenticationPort authenticationPort,
+                                     TelemetryPort telemetry,
+                                     int maxSessions,
+                                     Duration idleTimeout,
+                                     Duration callTimeout,
+                                     Duration closeTimeout,
+                                     String nodeId,
+                                     McpRateLimiter rateLimiter,
+                                     McpCallExecutor callExecutor) {
+        this(objectMapper, gatewayAdapter,
+                McpRequestAuthenticator.bearer(authenticationPort), telemetry,
+                maxSessions, idleTimeout, callTimeout, closeTimeout, nodeId,
+                rateLimiter, callExecutor);
+    }
+
+    public McpWebMvcTransportAdapter(ObjectMapper objectMapper,
+                                     McpGatewayAdapter gatewayAdapter,
+                                     McpRequestAuthenticator requestAuthenticator,
+                                     TelemetryPort telemetry,
+                                     int maxSessions,
+                                     Duration idleTimeout,
+                                     Duration callTimeout,
+                                     Duration closeTimeout,
+                                     String nodeId,
+                                     McpRateLimiter rateLimiter,
+                                     McpCallExecutor callExecutor) {
         this.objectMapper = Objects.requireNonNull(objectMapper);
         Objects.requireNonNull(gatewayAdapter);
+        Objects.requireNonNull(callExecutor);
         this.transportProvider = new AuthenticatedWebMvcSseServerTransportProvider(
-                objectMapper, authenticationPort, telemetry,
+                objectMapper, requestAuthenticator, telemetry,
                 "/mcp/message", "/mcp/sse", maxSessions, idleTimeout, callTimeout,
                 closeTimeout, nodeId, rateLimiter);
         McpServer.AsyncSpecification specification = McpServer.async(transportProvider)
@@ -93,10 +129,24 @@ public final class McpWebMvcTransportAdapter {
         for (McpMetaToolCatalog.McpTool tool : tools) {
             McpSchema.Tool sdkTool = sdkTool(tool);
             specification.tool(sdkTool, (exchange, arguments) -> Mono.deferContextual(
-                    context -> Mono.just(invoke(gatewayAdapter, tool.name(),
-                            McpRequestContextHolder.current(context), arguments))));
+                    context -> callExecutor.execute(
+                                    () -> invoke(gatewayAdapter, tool.name(),
+                                            McpRequestContextHolder.forAgentHost(context), arguments),
+                                    McpRequestContextHolder.deadlineNanos(context))
+                            .onErrorResume(TimeoutException.class,
+                                    ignored -> Mono.just(errorResult("MCP_CALL_TIMEOUT")))
+                            .onErrorResume(RejectedExecutionException.class,
+                                    ignored -> Mono.just(errorResult("MCP_CALL_CAPACITY_EXCEEDED")))));
         }
         this.server = specification.build();
+    }
+
+    private McpSchema.CallToolResult errorResult(String errorCode) {
+        return McpSchema.CallToolResult.builder()
+                .addTextContent("{\"status\":\"ERROR\",\"errorCode\":\""
+                        + errorCode + "\"}")
+                .isError(true)
+                .build();
     }
 
     /**

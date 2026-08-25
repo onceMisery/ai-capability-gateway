@@ -130,7 +130,7 @@ async function loadRules() {
   margin-bottom: 16px;
   padding: 10px 12px;
   color: var(--gateway-danger);
-  background: #f7f7f7;
+  background: var(--gateway-danger-soft);
   border: 1px solid var(--gateway-border-strong);
   border-radius: 6px;
 }

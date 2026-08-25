@@ -164,6 +164,7 @@ gateway:
     mcp-max-sessions: ${GATEWAY_AGENT_MCP_MAX_SESSIONS:1000}
     mcp-session-idle-seconds: ${GATEWAY_AGENT_MCP_SESSION_IDLE_SECONDS:1800}
     mcp-security-mode: ${GATEWAY_AGENT_MCP_SECURITY_MODE:READ_ONLY}
+    # NO_AUTH 仅允许 gateway.environment=development，用于本地开发。
     mcp-call-timeout-ms: ${GATEWAY_AGENT_MCP_CALL_TIMEOUT_MS:30000}
     mcp-close-timeout-ms: ${GATEWAY_AGENT_MCP_CLOSE_TIMEOUT_MS:5000}
     mcp-node-id: ${GATEWAY_AGENT_MCP_NODE_ID:local}

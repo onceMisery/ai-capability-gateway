@@ -48,7 +48,7 @@ class McpGatewayAdapterTest {
                         McpClientTrustRegistry.sha256(token),
                         McpClientTrustProfile.TokenAssurance.HIGH,
                         McpClientTrustProfile.ConfirmationChannel.HOST_UI,
-                        true, Instant.parse("2026-08-21T00:00:00Z"))));
+                        true, Instant.now().plusSeconds(3_600L))));
         McpGatewayAdapter adapter = new McpGatewayAdapter(
                 connector, McpSecurityMode.TRUSTED_CONFIRMATION, registry,
                 McpRateLimiter.allowAll());

@@ -101,7 +101,7 @@
           <div v-else-if="result.status === 'NO_MATCH'" class="empty-result">
             <el-icon><Search /></el-icon>
             <strong>没有匹配到可用能力</strong>
-            <span>请换一种表达，或确认目标能力已经发布到当前环境。</span>
+            <span>请换一种表达，或确认目标能力已经发布到当前目录。</span>
           </div>
 
           <div v-else-if="result.status === 'ERROR' || result.status === 'INVALID'" class="error-result" role="alert">

@@ -116,13 +116,24 @@ public final class AgentHostConnector {
                 return ResolveResult.error("AUTHENTICATION_FAILED");
             }
             Principal principal = authentication.principal();
+            String principalDigest = principalDigest(principal);
+            String resolveFingerprint = resolveFingerprint(requestId, query, topK);
+            AgentTurnStore.ResolvedTurn memo = turnStore.findResolved(
+                    principalDigest, agentTurnId, resolveFingerprint).orElse(null);
+            if (memo != null) {
+                telemetry.increment("gateway.agent.resolve.memo",
+                        Map.of("outcome", "hit"));
+                return new ResolveResult(memo.resolution(), memo.state());
+            }
+            telemetry.increment("gateway.agent.resolve.memo", Map.of("outcome", "miss"));
             AgentCapabilityResolver.Resolution resolution = resolver.resolve(
                     principal, query, topK, deadlineNanos);
             if (resolution.status() == AgentCapabilityResolver.Status.RESOLVED
                     && !resolution.candidates().isEmpty()) {
                 AgentTurnState state = AgentTurnState.from(agentTurnId, requestId, resolution);
                 try {
-                    turnStore.put(principalDigest(principal), state);
+                    turnStore.putResolved(principalDigest, state,
+                            resolveFingerprint, resolution);
                 } catch (IllegalStateException e) {
                     telemetry.increment("gateway.agent.resolve.turn_store",
                             Map.of("outcome", "capacity_rejected"));
@@ -132,6 +143,13 @@ public final class AgentHostConnector {
             }
             return new ResolveResult(resolution, null);
         }
+    }
+
+    /** Host hint path; repeated execution is coalesced by the same turn memo. */
+    public ResolveResult preResolve(
+            RequestContext requestContext, String agentTurnId, String requestId,
+            String query, int topK) {
+        return resolve(requestContext, agentTurnId, requestId, query, topK);
     }
 
     public SchemaResult schema(
@@ -337,6 +355,10 @@ public final class AgentHostConnector {
 
     private static String argumentsDigest(Map<String, Object> arguments) {
         return Sha256Digest.sha256Hex(String.valueOf(arguments));
+    }
+
+    private static String resolveFingerprint(String requestId, String query, int topK) {
+        return Sha256Digest.sha256Hex(requestId + "\n" + query + "\n" + topK);
     }
 
     private static void requireText(String value, String name) {

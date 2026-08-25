@@ -129,7 +129,7 @@ public final class ApiResponse {
      */
     private static String sanitizeMessage(String message) {
         if (message == null) {
-            return "An internal error occurred";
+            return "服务处理失败，请稍后重试。";
         }
         String sanitized = message.replaceAll("at\\s+\\S+\\.\\S+\\([^)]*\\)", "[internal]");
         sanitized = sanitized.replaceAll("/\\S+\\.java:\\d+", "[internal]");

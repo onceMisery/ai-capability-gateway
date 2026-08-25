@@ -108,7 +108,7 @@ public final class CapabilitySuspendUseCase {
                 catalogPort.lockEnvironmentForPublication(environment);
                 CatalogSnapshot currentSnapshot = catalogPort.loadCurrentSnapshot(environment);
                 if (currentSnapshot == null) {
-                    return new SuspendResult(false, 0, "No active snapshot found");
+                    return new SuspendResult(false, 0, "当前没有可操作的活动快照。");
                 }
 
                 String suspendedVersion = null;
@@ -122,7 +122,7 @@ public final class CapabilitySuspendUseCase {
                 }
                 if (suspendedVersion == null) {
                     return new SuspendResult(false, 0,
-                            "Capability " + capabilityId + " not found in current snapshot");
+                            "当前活动快照中未找到能力「" + capabilityId + "」。");
                 }
 
                 lifecycleStateMachine.validateTransition(

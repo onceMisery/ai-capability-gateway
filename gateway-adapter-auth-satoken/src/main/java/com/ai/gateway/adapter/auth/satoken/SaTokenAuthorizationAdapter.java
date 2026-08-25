@@ -64,6 +64,7 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
     private final Queue<VisibilityCacheKey> visibilityInsertionOrder =
             new ConcurrentLinkedQueue<>();
     private final AtomicLong visibilityCacheEvictions = new AtomicLong();
+    private final AtomicLong policyRefreshEvictions = new AtomicLong();
     private final AtomicLong visibilityCacheBytes = new AtomicLong();
 
     /**
@@ -125,6 +126,7 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
         recordValue("gateway.authorization.visibility_cache.bytes.capacity",
                 maxVisibilityCacheBytes);
         recordCacheSize();
+        recordEvictionTotals();
         loadAcl();
     }
 
@@ -340,15 +342,31 @@ public class SaTokenAuthorizationAdapter implements AuthorizationPort {
                 visibilityCacheBytes.addAndGet(-removed.weightBytes());
                 visibilityCacheEvictions.incrementAndGet();
                 incrementCache("evicted");
+                recordEvictionTotals();
             }
         }
     }
 
     private void clearVisibilityCache() {
+        int invalidated = visibilityCache.size();
         visibilityCache.clear();
         visibilityInsertionOrder.clear();
         visibilityCacheBytes.set(0L);
+        if (invalidated > 0) {
+            policyRefreshEvictions.addAndGet(invalidated);
+            incrementCache("policy_refresh_evicted");
+            recordEvictionTotals();
+        }
         recordCacheSize();
+    }
+
+    private void recordEvictionTotals() {
+        if (telemetry != null) {
+            telemetry.recordValue("gateway.authorization.visibility_cache.evictions",
+                    visibilityCacheEvictions.get(), Map.of("outcome", "capacity"));
+            telemetry.recordValue("gateway.authorization.visibility_cache.evictions",
+                    policyRefreshEvictions.get(), Map.of("outcome", "policy_refresh"));
+        }
     }
 
     private void incrementCache(String outcome) {

@@ -5,6 +5,7 @@ import com.ai.gateway.adapter.grpc.GrpcInvocationAdapter;
 import com.ai.gateway.adapter.grpc.GrpcMethodRegistry;
 import com.ai.gateway.adapter.grpc.GrpcUnaryClient;
 import com.ai.gateway.adapter.grpc.ManagedChannelGrpcUnaryClient;
+import com.ai.gateway.adapter.grpc.CachingGrpcChannelResolver;
 import com.ai.gateway.adapter.rest.JdkRestHttpClient;
 import com.ai.gateway.adapter.rest.RestEndpointResolver;
 import com.ai.gateway.adapter.rest.RestHttpClient;
@@ -54,17 +55,26 @@ public class RestGrpcAdaptersConfiguration {
                 properties.getProtocol().getGrpcDescriptorSets());
     }
 
-    @Bean
-    public GrpcUnaryClient grpcUnaryClient(GatewayProperties properties) {
+    @Bean(destroyMethod = "close")
+    public CachingGrpcChannelResolver grpcChannelResolver(GatewayProperties properties) {
         var endpoints = properties.getProtocol().getGrpcEndpoints();
-        return new ManagedChannelGrpcUnaryClient(ref -> {
-            String target = requiredEndpoint(endpoints, ref, "gRPC");
-            URI uri = URI.create(target.contains("://") ? target : "dns:///" + target);
-            NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
-                    uri.getHost(), uri.getPort() > 0 ? uri.getPort() : 443);
-            return uri.getScheme().equalsIgnoreCase("https")
-                    ? builder.useTransportSecurity().build() : builder.usePlaintext().build();
+        return new CachingGrpcChannelResolver(endpoints, target -> {
+            if (target.startsWith("http://") || target.startsWith("https://")) {
+                URI uri = URI.create(target);
+                NettyChannelBuilder builder = NettyChannelBuilder.forAddress(
+                        uri.getHost(), uri.getPort() > 0 ? uri.getPort() : 443);
+                return target.startsWith("https://")
+                        ? builder.useTransportSecurity().build()
+                        : builder.usePlaintext().build();
+            }
+            String grpcTarget = target.contains("://") ? target : "dns:///" + target;
+            return NettyChannelBuilder.forTarget(grpcTarget).usePlaintext().build();
         });
+    }
+
+    @Bean
+    public GrpcUnaryClient grpcUnaryClient(CachingGrpcChannelResolver channelResolver) {
+        return new ManagedChannelGrpcUnaryClient(channelResolver);
     }
 
     @Bean

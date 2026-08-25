@@ -16,7 +16,9 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.Executor;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -86,6 +88,30 @@ class InMemoryCatalogManagerCapacityTest {
     }
 
     @Test
+    void rejectsCatalogActivationWhenIndexWarmupFails() {
+        CatalogPort catalog = mock(CatalogPort.class);
+        TelemetryPort telemetry = mock(TelemetryPort.class);
+        CatalogSnapshot snapshot = snapshot(5L,
+                ActiveCatalogViewTest.manifest("orders.warmup"));
+        when(catalog.loadCurrentSnapshot("production")).thenReturn(snapshot);
+        LuceneCandidateRetriever retriever = spy(new LuceneCandidateRetriever());
+        doReturn(List.of()).when(retriever).retrieve(
+                org.mockito.ArgumentMatchers.anyString(),
+                org.mockito.ArgumentMatchers.any(ActiveCatalogView.class),
+                org.mockito.ArgumentMatchers.anyList(),
+                org.mockito.ArgumentMatchers.eq(1));
+        InMemoryCatalogManager manager = new InMemoryCatalogManager(
+                catalog, new CapabilityPublicProjectionService(), retriever,
+                telemetry, 10, Long.MAX_VALUE);
+
+        assertThat(manager.loadAndActivate("production")).isFalse();
+        assertThat(manager.getCurrentSnapshotVersion()).isZero();
+        assertThat(retriever.getIndexedSnapshotVersion()).isEqualTo(-1L);
+        verify(telemetry).increment("gateway.catalog.refresh",
+                Map.of("outcome", "index_warmup_failed"));
+    }
+
+    @Test
     void rejectsThirdGenerationUntilRetiredViewLeaseDrains() {
         CatalogPort catalog = mock(CatalogPort.class);
         CatalogSnapshot first = snapshot(1L,
@@ -126,7 +152,7 @@ class InMemoryCatalogManagerCapacityTest {
                 ActiveCatalogViewTest.manifest("orders.older"));
         when(catalog.loadCurrentSnapshot("production"))
                 .thenReturn(first, same, older);
-        LuceneCandidateRetriever retriever = new LuceneCandidateRetriever();
+        LuceneCandidateRetriever retriever = spy(new LuceneCandidateRetriever());
         InMemoryCatalogManager manager = new InMemoryCatalogManager(
                 catalog, new CapabilityPublicProjectionService(), retriever,
                 telemetry, 10, Long.MAX_VALUE);
@@ -143,6 +169,8 @@ class InMemoryCatalogManagerCapacityTest {
         assertThat(manager.loadAndActivate("production")).isFalse();
         assertThat(manager.getCurrentSnapshotVersion()).isEqualTo(2L);
         assertThat(retriever.getIndexedSnapshotVersion()).isEqualTo(2L);
+        verify(retriever, org.mockito.Mockito.times(1))
+                .buildIndex(org.mockito.ArgumentMatchers.any(CatalogSnapshot.class));
         verify(telemetry, org.mockito.Mockito.atLeast(2)).increment(
                 "gateway.catalog.refresh", Map.of("outcome", "version_not_newer"));
     }

@@ -69,19 +69,15 @@ export const gatewayApi = {
   suspendCapability: (id: string, reason: string) =>
     post<ManifestMutationResult>(`/admin/v1/capabilities/${encodeURIComponent(id)}:suspend`, { reason }),
 
-  snapshots: (environment: string, limit = 50) =>
-    get<SnapshotSummary[]>('/admin/v1/releases', { params: { environment, limit } }),
+  snapshots: (limit = 50) =>
+    get<SnapshotSummary[]>('/admin/v1/releases', { params: { limit } }),
   snapshot: (version: number) => get<SnapshotDetail>(`/admin/v1/releases/${version}`),
-  publish: (
-    environment: string,
-    capabilities?: Array<{ capabilityId: string; version: string }>
-  ) =>
+  publish: (capabilities?: Array<{ capabilityId: string; version: string }>) =>
     post<ManifestMutationResult>('/admin/v1/releases:publish', {
-      environment,
       capabilities
     }),
-  rollback: (targetSnapshotVersion: number, environment: string) =>
-    post<ManifestMutationResult>('/admin/v1/releases:rollback', { targetSnapshotVersion, environment }),
+  rollback: (targetSnapshotVersion: number) =>
+    post<ManifestMutationResult>('/admin/v1/releases:rollback', { targetSnapshotVersion }),
 
   audits: (query: AuditQuery) => get<AuditPage>('/admin/v1/audits', { params: query }),
   capabilityStats: (from: number, to: number) =>

@@ -44,6 +44,10 @@ public class JdbcCatalogPort implements CatalogPort {
             "SELECT snapshot_version, environment, digest FROM catalog_snapshot " +
             "WHERE environment = ? AND status = 'ACTIVE' ORDER BY snapshot_version DESC LIMIT 1";
 
+    private static final String SQL_FIND_ANY_ACTIVE_SNAPSHOT =
+            "SELECT snapshot_version, environment, digest FROM catalog_snapshot " +
+            "WHERE status = 'ACTIVE' ORDER BY snapshot_version DESC LIMIT 1";
+
     private static final String SQL_FIND_SNAPSHOT_BY_VERSION =
             "SELECT snapshot_version, environment, digest FROM catalog_snapshot " +
             "WHERE snapshot_version = ?";
@@ -110,6 +114,14 @@ public class JdbcCatalogPort implements CatalogPort {
                     configureRead(statement);
                     statement.setString(1, environment);
                 }, snapshotRowMapper());
+        if (snapshots.isEmpty()) {
+            // 兼容单目录改造前的历史快照：旧快照可能仍带有 production/staging/
+            // development 等环境值，但其内容和摘要仍然有效。
+            snapshots = jdbcTemplate.query(SQL_FIND_ANY_ACTIVE_SNAPSHOT,
+                    statement -> {
+                        configureRead(statement);
+                    }, snapshotRowMapper());
+        }
         if (snapshots.isEmpty()) {
             return new CatalogSnapshot(0L, environment, List.of(), null, "");
         }
@@ -244,9 +256,10 @@ public class JdbcCatalogPort implements CatalogPort {
         lockEnvironmentForPublication(snapshot.environment());
 
         // 将之前的 ACTIVE 快照标记为 SUPERSEDED
+        // 能力目录只有一个逻辑环境。发布新快照时，将历史环境留下的活动快照
+        // 一并替代，避免单目录切换后出现多个活动基线。
         jdbcTemplate.update(
-                "UPDATE catalog_snapshot SET status = 'SUPERSEDED' WHERE environment = ? AND status = 'ACTIVE'",
-                snapshot.environment());
+                "UPDATE catalog_snapshot SET status = 'SUPERSEDED' WHERE status = 'ACTIVE'");
 
         // 插入新快照
         jdbcTemplate.update(
@@ -307,7 +320,6 @@ public class JdbcCatalogPort implements CatalogPort {
                 "COUNT(csi.capability_id) AS capability_count " +
                 "FROM catalog_snapshot cs " +
                 "LEFT JOIN catalog_snapshot_item csi ON cs.snapshot_version = csi.snapshot_version " +
-                "WHERE cs.environment = ? " +
                 "GROUP BY cs.snapshot_version, cs.environment, cs.status, cs.digest, " +
                 "cs.published_at, cs.published_by " +
                 "ORDER BY cs.snapshot_version DESC LIMIT ?";
@@ -323,6 +335,6 @@ public class JdbcCatalogPort implements CatalogPort {
                     publishedAt != null ? publishedAt.toInstant() : java.time.Instant.now(),
                     rs.getString("published_by")
             );
-        }, environment, limit);
+        }, limit);
     }
 }

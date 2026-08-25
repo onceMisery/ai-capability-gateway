@@ -5,37 +5,37 @@
 
 /* ---------- 设计令牌 ---------- */
 :root {
-  /* 主色：黑白灰 渐变家族 */
-  --gateway-primary: #1a1a1a;
-  --gateway-primary-rgb: 26, 26, 26;
-  --gateway-primary-hover: #000000;
-  --gateway-primary-active: #000000;
-  --gateway-primary-soft: #f0f0f0;
-  --gateway-gradient-brand: linear-gradient(135deg, #333333 0%, #111111 100%);
-  --gateway-gradient-brand-soft: linear-gradient(135deg, rgba(0, 0, 0, 0.08) 0%, rgba(0, 0, 0, 0.12) 100%);
+  /* 主色：黑色基底 + 蓝色高对比交互 */
+  --gateway-primary: #2563eb;
+  --gateway-primary-rgb: 37, 99, 235;
+  --gateway-primary-hover: #1d4ed8;
+  --gateway-primary-active: #1e40af;
+  --gateway-primary-soft: #eff6ff;
+  --gateway-gradient-brand: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  --gateway-gradient-brand-soft: linear-gradient(135deg, rgba(37, 99, 235, 0.08) 0%, rgba(37, 99, 235, 0.14) 100%);
 
-  /* 语义色（黑白灰阶） */
-  --gateway-success: #333333;
-  --gateway-success-soft: #e8e8e8;
-  --gateway-warning: #5f5f5f;
-  --gateway-warning-soft: #f0f0f0;
-  --gateway-danger: #111111;
-  --gateway-danger-soft: #f7f7f7;
-  --gateway-info: #999999;
-  --gateway-info-soft: #f5f5f5;
+  /* 语义色：状态必须能快速区分 */
+  --gateway-success: #15803d;
+  --gateway-success-soft: #f0fdf4;
+  --gateway-warning: #b45309;
+  --gateway-warning-soft: #fffbeb;
+  --gateway-danger: #dc2626;
+  --gateway-danger-soft: #fef2f2;
+  --gateway-info: #475569;
+  --gateway-info-soft: #f1f5f9;
 
   /* 中性色 */
   --gateway-text: #1f1f1f;
   --gateway-text-secondary: #4d4d4d;
-  --gateway-text-muted: #8a8a8a;
+  --gateway-text-muted: #64748b;
 
   --gateway-border: #e5e5e5;
-  --gateway-border-strong: #cfcfcf;
+  --gateway-border-strong: #cbd5e1;
 
   --gateway-bg: #f5f5f5;
   --gateway-surface: #ffffff;
-  --gateway-surface-subtle: #f7f7f7;
-  --gateway-surface-hover: #fafafa;
+  --gateway-surface-subtle: #f8fafc;
+  --gateway-surface-hover: #f1f5f9;
 
   /* 圆角 */
   --gateway-radius-sm: 8px;
@@ -55,11 +55,11 @@
 
   /* 阴影 /  elevation */
   --gateway-shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --gateway-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06), 0 6px 16px rgba(0, 0, 0, 0.05);
-  --gateway-shadow-md: 0 4px 14px rgba(0, 0, 0, 0.07), 0 12px 30px rgba(0, 0, 0, 0.06);
-  --gateway-shadow-lg: 0 10px 28px rgba(0, 0, 0, 0.10), 0 24px 60px rgba(0, 0, 0, 0.10);
-  --gateway-shadow-primary: 0 8px 20px rgba(0, 0, 0, 0.28);
-  --gateway-ring: 0 0 0 3px rgba(0, 0, 0, 0.12);
+  --gateway-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 6px 16px rgba(15, 23, 42, 0.05);
+  --gateway-shadow-md: 0 4px 14px rgba(15, 23, 42, 0.08), 0 12px 30px rgba(15, 23, 42, 0.07);
+  --gateway-shadow-lg: 0 10px 28px rgba(15, 23, 42, 0.12), 0 24px 60px rgba(15, 23, 42, 0.12);
+  --gateway-shadow-primary: 0 8px 20px rgba(var(--gateway-primary-rgb), 0.28);
+  --gateway-ring: 0 0 0 3px rgba(var(--gateway-primary-rgb), 0.18);
 
   /* 过渡 */
   --gateway-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
@@ -82,8 +82,8 @@ body {
   font-family: var(--gateway-font);
   color: var(--gateway-text);
   background-color: var(--gateway-bg);
-  background-image: radial-gradient(1200px 600px at 100% -10%, rgba(0, 0, 0, 0.05), transparent 60%),
-    radial-gradient(900px 500px at -10% 110%, rgba(0, 0, 0, 0.04), transparent 55%);
+  background-image: radial-gradient(1200px 600px at 100% -10%, rgba(37, 99, 235, 0.05), transparent 60%),
+    radial-gradient(900px 500px at -10% 110%, rgba(15, 23, 42, 0.04), transparent 55%);
   background-attachment: fixed;
   font-size: 14px;
   line-height: 1.6;
@@ -102,6 +102,9 @@ a {
   color: var(--gateway-primary);
   text-decoration: none;
   transition: color var(--gateway-transition);
+}
+a:hover {
+  color: var(--gateway-primary-hover);
 }
 
 /* 滚动条 */
@@ -441,42 +444,42 @@ a {
    ============================================================ */
 :root {
   --el-color-primary: var(--gateway-primary);
-  --el-color-primary-light-3: var(--gateway-primary-hover);
-  --el-color-primary-light-5: #999999;
-  --el-color-primary-light-7: #c9c9c9;
-  --el-color-primary-light-8: #e0e0e0;
+  --el-color-primary-light-3: #60a5fa;
+  --el-color-primary-light-5: #93c5fd;
+  --el-color-primary-light-7: #bfdbfe;
+  --el-color-primary-light-8: #dbeafe;
   --el-color-primary-light-9: var(--gateway-primary-soft);
   --el-color-primary-dark-2: var(--gateway-primary-active);
 
   --el-color-success: var(--gateway-success);
-  --el-color-success-light-3: #555555;
-  --el-color-success-light-5: #666666;
-  --el-color-success-light-7: #bdbdbd;
-  --el-color-success-light-8: #d9d9d9;
-  --el-color-success-light-9: #ececec;
+  --el-color-success-light-3: #22c55e;
+  --el-color-success-light-5: #4ade80;
+  --el-color-success-light-7: #bbf7d0;
+  --el-color-success-light-8: #dcfce7;
+  --el-color-success-light-9: var(--gateway-success-soft);
   --el-color-warning: var(--gateway-warning);
-  --el-color-warning-light-3: #737373;
-  --el-color-warning-light-5: #8a8a8a;
-  --el-color-warning-light-7: #cccccc;
-  --el-color-warning-light-8: #e0e0e0;
-  --el-color-warning-light-9: #f0f0f0;
+  --el-color-warning-light-3: #d97706;
+  --el-color-warning-light-5: #f59e0b;
+  --el-color-warning-light-7: #fde68a;
+  --el-color-warning-light-8: #fef3c7;
+  --el-color-warning-light-9: var(--gateway-warning-soft);
   --el-color-danger: var(--gateway-danger);
-  --el-color-danger-light-3: #2e2e2e;
-  --el-color-danger-light-5: #4d4d4d;
-  --el-color-danger-light-7: #b3b3b3;
-  --el-color-danger-light-8: #d4d4d4;
-  --el-color-danger-light-9: #e8e8e8;
+  --el-color-danger-light-3: #ef4444;
+  --el-color-danger-light-5: #f87171;
+  --el-color-danger-light-7: #fecaca;
+  --el-color-danger-light-8: #fee2e2;
+  --el-color-danger-light-9: var(--gateway-danger-soft);
   --el-color-error: var(--gateway-danger);
-  --el-color-error-light-3: #2e2e2e;
-  --el-color-error-light-5: #4d4d4d;
-  --el-color-error-light-7: #b3b3b3;
-  --el-color-error-light-8: #d4d4d4;
-  --el-color-error-light-9: #e8e8e8;
+  --el-color-error-light-3: #ef4444;
+  --el-color-error-light-5: #f87171;
+  --el-color-error-light-7: #fecaca;
+  --el-color-error-light-8: #fee2e2;
+  --el-color-error-light-9: var(--gateway-danger-soft);
   --el-color-info: var(--gateway-info);
-  --el-color-info-light-5: #b5b5b5;
-  --el-color-info-light-7: #d9d9d9;
-  --el-color-info-light-8: #e8e8e8;
-  --el-color-info-light-9: #f5f5f5;
+  --el-color-info-light-5: #94a3b8;
+  --el-color-info-light-7: #cbd5e1;
+  --el-color-info-light-8: #e2e8f0;
+  --el-color-info-light-9: var(--gateway-info-soft);
 
   --el-text-color-primary: var(--gateway-text);
   --el-text-color-regular: var(--gateway-text-secondary);
@@ -514,11 +517,11 @@ a {
 .el-button--primary {
   background: var(--gateway-gradient-brand);
   border: none;
-  box-shadow: 0 4px 12px rgba(var(--gateway-primary-rgb), 0.28);
+  box-shadow: var(--gateway-shadow-primary);
 }
 .el-button--primary:hover {
   filter: brightness(1.06);
-  box-shadow: 0 8px 20px rgba(var(--gateway-primary-rgb), 0.38);
+  box-shadow: 0 10px 24px rgba(var(--gateway-primary-rgb), 0.34);
   transform: translateY(-1px);
 }
 .el-button--primary:active {
@@ -659,7 +662,7 @@ a {
   padding-right: 16px;
 }
 .el-table--striped .el-table__row--striped td.el-table__cell {
-  background: rgba(0, 0, 0, 0.025);
+  background: rgba(15, 23, 42, 0.025);
 }
 
 /* 分页 */

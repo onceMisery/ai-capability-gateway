@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * 基于 MCP WebMVC SSE 的认证传输提供者。
  *
  * <p>会话是本机资源，受生命周期状态、容量、空闲回收和单会话并发限制。
- * MCP 入口只接受 Bearer 凭证，后续消息会重新认证并校验主体指纹。</p>
+ * MCP 入口通过注入的认证策略获取主体，后续消息会重新解析并校验主体指纹。</p>
  */
 public final class AuthenticatedWebMvcSseServerTransportProvider
         implements McpServerTransportProvider {
@@ -52,7 +52,7 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
     private static final String ENDPOINT_EVENT_TYPE = "endpoint";
 
     private final ObjectMapper objectMapper;
-    private final AuthenticationPort authenticationPort;
+    private final McpRequestAuthenticator requestAuthenticator;
     private final TelemetryPort telemetry;
     private final String messageEndpoint;
     private final String sseEndpoint;
@@ -110,8 +110,25 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             Duration closeTimeout,
             String nodeId,
             McpRateLimiter rateLimiter) {
+        this(objectMapper, McpRequestAuthenticator.bearer(authenticationPort), telemetry,
+                messageEndpoint, sseEndpoint, maxSessions, idleTimeout, callTimeout,
+                closeTimeout, nodeId, rateLimiter);
+    }
+
+    public AuthenticatedWebMvcSseServerTransportProvider(
+            ObjectMapper objectMapper,
+            McpRequestAuthenticator requestAuthenticator,
+            TelemetryPort telemetry,
+            String messageEndpoint,
+            String sseEndpoint,
+            int maxSessions,
+            Duration idleTimeout,
+            Duration callTimeout,
+            Duration closeTimeout,
+            String nodeId,
+            McpRateLimiter rateLimiter) {
         this.objectMapper = Objects.requireNonNull(objectMapper);
-        this.authenticationPort = Objects.requireNonNull(authenticationPort);
+        this.requestAuthenticator = Objects.requireNonNull(requestAuthenticator);
         this.telemetry = Objects.requireNonNull(telemetry);
         this.messageEndpoint = requirePath(messageEndpoint, "messageEndpoint");
         this.sseEndpoint = requirePath(sseEndpoint, "sseEndpoint");
@@ -190,9 +207,6 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         RequestContext requestContext = McpRequestContextHolder.current();
-        if (!hasBearerAuthorization(requestContext)) {
-            return unauthorized();
-        }
         Principal principal = authenticate(requestContext);
         if (principal == null) {
             return unauthorized();
@@ -255,9 +269,6 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             return ServerResponse.status(HttpStatus.SERVICE_UNAVAILABLE).build();
         }
         RequestContext requestContext = McpRequestContextHolder.current();
-        if (!hasBearerAuthorization(requestContext)) {
-            return unauthorized();
-        }
         String sessionId = request.headers().firstHeader("Mcp-Session-Id");
         if (sessionId == null || sessionId.isBlank()) {
             sessionId = request.param("sessionId").orElse(null);
@@ -316,7 +327,8 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             }
             handling
                     .contextWrite(context -> McpRequestContextHolder.bindAuthenticated(
-                            context, requestContext, principal))
+                            context, requestContext, principal,
+                            deadlineAfter(callTimeout)))
                     .timeout(callTimeout)
                     .block();
             binding.touch();
@@ -337,9 +349,15 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         }
     }
 
+    private static long deadlineAfter(Duration timeout) {
+        long now = System.nanoTime();
+        long deadline = now + timeout.toNanos();
+        return deadline < now ? Long.MAX_VALUE : deadline;
+    }
+
     private Principal authenticate(RequestContext requestContext) {
         try {
-            return authenticationPort.authenticate(requestContext);
+            return requestAuthenticator.authenticate(requestContext);
         } catch (RuntimeException e) {
             return null;
         }
@@ -421,12 +439,6 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
 
     private boolean isRunning() {
         return lifecycle.get() == Lifecycle.RUNNING;
-    }
-
-    private static boolean hasBearerAuthorization(RequestContext context) {
-        String value = context.header("Authorization");
-        return value != null && value.regionMatches(true, 0, "Bearer ", 0, 7)
-                && value.substring(7).trim().length() > 0;
     }
 
     private static String requirePath(String value, String name) {

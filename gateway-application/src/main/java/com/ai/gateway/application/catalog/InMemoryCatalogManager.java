@@ -282,12 +282,12 @@ public final class InMemoryCatalogManager {
             log.warn("No snapshot returned for environment: {}", environment);
             return false;
         }
-        if (!environment.equals(newSnapshot.environment()) || newSnapshot.snapshotVersion() <= 0
+        if (newSnapshot.snapshotVersion() <= 0
                 || newSnapshot.capabilities().isEmpty()) {
             outcome = "snapshot_invalid";
             incrementRefresh(outcome);
             recordRefreshDuration(started, outcome);
-            log.warn("Snapshot is not ready for activation: expectedEnvironment={}, actualEnvironment={}, version={}, capabilities={}",
+            log.warn("Snapshot is not ready for activation: requestedCatalog={}, snapshotEnvironment={}, version={}, capabilities={}",
                     environment, newSnapshot.environment(), newSnapshot.snapshotVersion(),
                     newSnapshot.capabilities().size());
             return false;
@@ -298,6 +298,17 @@ public final class InMemoryCatalogManager {
             recordRefreshDuration(started, outcome);
             log.warn("Catalog activation rejected: capabilities={} exceeds limit={}",
                     newSnapshot.capabilities().size(), maxCapabilities);
+            return false;
+        }
+
+        ActiveCatalogView currentView = activeView.get();
+        if (currentView != null
+                && newSnapshot.snapshotVersion() <= currentView.catalogVersion()) {
+            outcome = "version_not_newer";
+            incrementRefresh(outcome);
+            recordRefreshDuration(started, outcome);
+            log.info("Catalog activation ignored before index build: incoming version {} is not newer than active version {}",
+                    newSnapshot.snapshotVersion(), currentView.catalogVersion());
             return false;
         }
 
@@ -345,11 +356,19 @@ public final class InMemoryCatalogManager {
             }
             newView = ActiveCatalogView.from(
                     newSnapshot, projectionService, newIndex, telemetry, leaseHoldTimeoutMs);
+            if (candidateRetriever != null && newIndex != null
+                    && !candidateRetriever.warmUp(newView)) {
+                newView.retire();
+                outcome = "index_warmup_failed";
+                incrementRefresh(outcome);
+                recordRefreshDuration(started, outcome);
+                log.warn("Catalog activation rejected: index warmup returned no result for version {}",
+                        newSnapshot.snapshotVersion());
+                return false;
+            }
             if (buildBudgetExceeded(started, newSnapshot,
                     newIndex == null ? 0L : newIndex.sizeBytes())) {
-                if (newIndex != null) {
-                    newIndex.close();
-                }
+                newView.retire();
                 return false;
             }
         } catch (RuntimeException e) {
@@ -375,7 +394,7 @@ public final class InMemoryCatalogManager {
             return false;
         }
 
-        ActiveCatalogView currentView = activeView.get();
+        currentView = activeView.get();
         if (currentView != null
                 && newSnapshot.snapshotVersion() <= currentView.catalogVersion()) {
             newView.retire();

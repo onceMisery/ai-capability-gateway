@@ -41,12 +41,12 @@ public final class CapabilityResumeUseCase {
                 .findFirst()
                 .orElse(null);
         if (detail == null) {
-            return new ResumeResult(Status.NOT_FOUND, "Manifest not found");
+            return new ResumeResult(Status.NOT_FOUND, "未找到指定的能力清单。");
         }
         if (detail.lifecycle() != CapabilityLifecycle.SUSPENDED) {
             return new ResumeResult(Status.REJECTED,
-                    "Only SUSPENDED capabilities can be enabled; current lifecycle is "
-                            + detail.lifecycle());
+                    "只有处于「SUSPENDED」状态的能力才能恢复，当前状态为「"
+                            + detail.lifecycle() + "」。");
         }
         boolean anotherActiveVersion = manifestRepository.findAllWithDetails().stream()
                 .filter(candidate -> candidate.manifest().metadata().id().equals(capabilityId))
@@ -56,8 +56,8 @@ public final class CapabilityResumeUseCase {
                         && candidate.lifecycle() != CapabilityLifecycle.REJECTED);
         if (anotherActiveVersion) {
             return new ResumeResult(Status.REJECTED,
-                    "Capability '" + capabilityId
-                            + "' already has another active manifest; suspend it before enabling this version");
+                    "能力「" + capabilityId
+                            + "」已有其他活动版本，请先停用其他版本后再恢复当前版本。");
         }
 
         try {

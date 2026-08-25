@@ -2,6 +2,7 @@ package com.ai.gateway.bootstrap.config;
 
 import com.ai.gateway.domain.port.CatalogPort;
 import com.ai.gateway.domain.port.SecretManager;
+import com.ai.gateway.domain.model.CatalogEnvironment;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -142,16 +143,16 @@ public class GatewayHealthIndicator implements HealthIndicator {
      */
     private boolean checkSnapshot(Map<String, Object> details) {
         try {
-            var snapshot = catalogPort.loadCurrentSnapshot(environment);
+            var snapshot = catalogPort.loadCurrentSnapshot(CatalogEnvironment.DEFAULT);
             var activated = catalogManager == null ? snapshot : catalogManager.getCurrentSnapshot();
             if (snapshot != null && snapshot.snapshotVersion() > 0
-                    && activated != null && activated.snapshotVersion() == snapshot.snapshotVersion()
-                    && environment.equals(activated.environment())) {
+                    && activated != null && activated.snapshotVersion() == snapshot.snapshotVersion()) {
                 details.put("snapshot", "UP (version=" + snapshot.snapshotVersion() + ")");
                 return true;
             } else {
                 details.put("snapshot", "DOWN (no active snapshot)");
-                log.warn("Health check: no active catalog snapshot for environment {}", environment);
+                log.warn("Health check: no active catalog snapshot for logical catalog {}",
+                        CatalogEnvironment.DEFAULT);
                 return false;
             }
         } catch (Exception e) {

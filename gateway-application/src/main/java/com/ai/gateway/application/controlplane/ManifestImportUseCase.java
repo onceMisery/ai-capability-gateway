@@ -111,7 +111,7 @@ public final class ManifestImportUseCase {
                     manifest.metadata().id(), manifest.metadata().version(),
                     report.errors().size());
             return new ImportResult(false, report, null,
-                    "Validation failed: " + String.join("; ", report.errors()));
+                    "清单校验失败：" + String.join("；", report.errors()));
         }
 
         // Generate the content SHA-256 digest
@@ -120,7 +120,7 @@ public final class ManifestImportUseCase {
             log.error("Failed to generate content digest for manifest id={}, version={}",
                     manifest.metadata().id(), manifest.metadata().version());
             return new ImportResult(false, report, null,
-                    "Failed to generate content SHA-256 digest");
+                    "生成清单内容摘要失败，请检查清单内容后重试。");
         }
 
         // Check for duplicate id+version
@@ -128,9 +128,7 @@ public final class ManifestImportUseCase {
             log.warn("Manifest with id={} and version={} already exists; cannot overwrite",
                     capabilityId, capabilityVersion);
             return new ImportResult(false, report, digest,
-                    "A manifest with id '" + capabilityId
-                            + "' and version '" + capabilityVersion
-                            + "' already exists; modifications must produce a new version");
+                    duplicateVersionMessage(capabilityId, capabilityVersion));
         }
 
         // Persist the manifest with DRAFT status and its content digest
@@ -144,8 +142,7 @@ public final class ManifestImportUseCase {
 
     private String duplicateError(String capabilityId, String version) {
         if (manifestRepository.findByIdAndVersion(capabilityId, version).isPresent()) {
-            return "A manifest with id '" + capabilityId + "' and version '" + version
-                    + "' already exists; modifications must produce a new version";
+            return duplicateVersionMessage(capabilityId, version);
         }
         return manifestRepository.findAllWithDetails().stream()
                 .filter(detail -> detail.manifest().metadata().id().equals(capabilityId))
@@ -153,10 +150,14 @@ public final class ManifestImportUseCase {
                         && detail.lifecycle() != CapabilityLifecycle.RETIRED
                         && detail.lifecycle() != CapabilityLifecycle.REJECTED)
                 .findFirst()
-                .map(detail -> "Capability '" + capabilityId + "' already has an active manifest "
-                        + "in lifecycle " + detail.lifecycle()
-                        + "; suspend it before importing another version")
+                .map(detail -> "能力「" + capabilityId + "」已有处于「"
+                        + detail.lifecycle() + "」状态的版本，请先停用现有版本后再导入新版本。")
                 .orElse(null);
+    }
+
+    private String duplicateVersionMessage(String capabilityId, String version) {
+        return "能力「" + capabilityId + "」的版本「" + version
+                + "」已存在，不能重复导入；如需修改内容，请递增版本号。";
     }
 
     /**

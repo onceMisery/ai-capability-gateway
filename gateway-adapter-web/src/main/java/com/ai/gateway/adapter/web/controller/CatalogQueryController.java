@@ -3,6 +3,7 @@ package com.ai.gateway.adapter.web.controller;
 import com.ai.gateway.application.console.CapabilityQueryUseCase;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CapabilitySummary;
+import com.ai.gateway.domain.model.CatalogEnvironment;
 import com.ai.gateway.domain.model.SnapshotSummary;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -71,16 +72,12 @@ public class CatalogQueryController {
         return ResponseEntity.ok(manifest);
     }
 
-    /**
-     * GET /admin/v1/releases
-     *
-     * <p>返回指定环境的快照摘要列表。</p>
-     */
+    /** GET /admin/v1/releases — 返回唯一能力目录的快照摘要列表。 */
     @GetMapping("/releases")
     public ResponseEntity<List<SnapshotSummary>> listSnapshots(
-            @RequestParam(defaultValue = "production") String environment,
             @RequestParam(defaultValue = "50") int limit) {
-        List<SnapshotSummary> snapshots = capabilityQueryUseCase.listSnapshots(environment, limit);
+        List<SnapshotSummary> snapshots =
+                capabilityQueryUseCase.listSnapshots(CatalogEnvironment.DEFAULT, limit);
         return ResponseEntity.ok(snapshots);
     }
 }

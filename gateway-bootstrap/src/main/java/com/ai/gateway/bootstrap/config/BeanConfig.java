@@ -34,6 +34,7 @@ import com.ai.gateway.application.controlplane.CapabilitySuspendUseCase;
 import com.ai.gateway.application.controlplane.CapabilityResumeUseCase;
 import com.ai.gateway.application.controlplane.CatalogPublishUseCase;
 import com.ai.gateway.application.controlplane.CatalogRollbackUseCase;
+import com.ai.gateway.domain.model.CatalogEnvironment;
 import com.ai.gateway.application.controlplane.ManifestApprovalUseCase;
 import com.ai.gateway.application.controlplane.ManifestImportUseCase;
 import com.ai.gateway.application.controlplane.ManifestValidationUseCase;
@@ -206,7 +207,7 @@ public class BeanConfig {
                 compatibilityTestPort,
                 catalogPort,
                 envelopeProfileRegistry,
-                gatewayProperties.getEnvironment());
+                CatalogEnvironment.DEFAULT);
     }
 
     /**
@@ -263,7 +264,7 @@ public class BeanConfig {
             dubboReferenceManager.registerRegistryAddress("nacos-main", dubboRegistryAddress);
 
             log.info("Loading catalog snapshot on startup...");
-            boolean loaded = catalogManager.loadAndActivate(gatewayProperties.getEnvironment());
+            boolean loaded = catalogManager.loadAndActivate(CatalogEnvironment.DEFAULT);
             if (loaded) {
                 log.info("Catalog snapshot loaded successfully on startup: version={}",
                         catalogManager.getCurrentSnapshotVersion());
@@ -566,7 +567,7 @@ public class BeanConfig {
             GatewayProperties gatewayProperties,
             TransactionPort transactionPort) {
         return new CapabilitySuspendUseCase(manifestRepository, catalogPort, snapshotNotifier,
-                gatewayProperties.getEnvironment(), lifecycleStateMachine, transactionPort);
+                CatalogEnvironment.DEFAULT, lifecycleStateMachine, transactionPort);
     }
 
     // ======================================================================
@@ -611,7 +612,7 @@ public class BeanConfig {
                 thresholdEvaluator,
                 textNormalizer,
                 interactionRepository,
-                gatewayProperties.getEnvironment(),
+                CatalogEnvironment.DEFAULT,
                 selectDecisionProcessor);
     }
 
@@ -653,7 +654,7 @@ public class BeanConfig {
             PayloadLimits payloadLimits) {
         return new StructuredInvocationUseCase(authenticationPort, authorizationPort,
                 catalogPort, schemaValidator, typeConverterRegistry, auditPort,
-                deterministicExecutionUseCase, gatewayProperties.getEnvironment(),
+                deterministicExecutionUseCase, CatalogEnvironment.DEFAULT,
                 payloadLimits);
     }
 
@@ -668,7 +669,7 @@ public class BeanConfig {
             GatewayProperties gatewayProperties) {
         return new AgentToolCatalogUseCase(authenticationPort, authorizationPort,
                 catalogManager, candidateRetriever, new TextNormalizer(), aliasGenerator,
-                gatewayProperties.getEnvironment());
+                CatalogEnvironment.DEFAULT);
     }
 
     /** 统一的 Agent 读取/准备分发器。 */
@@ -682,7 +683,7 @@ public class BeanConfig {
             GatewayProperties gatewayProperties) {
         return new AgentToolCallUseCase(authenticationPort, authorizationPort, catalogPort,
                 structuredInvocationUseCase, operationPrepareUseCase,
-                gatewayProperties.getEnvironment());
+                CatalogEnvironment.DEFAULT);
     }
 
     @Bean
@@ -815,6 +816,7 @@ public class BeanConfig {
             McpRateLimiter mcpRateLimiter) {
         McpSecurityMode mode = McpSecurityMode.parse(
                 gatewayProperties.getAgent().getMcpSecurityMode());
+        assertMcpSecurityModeAllowed(mode, gatewayProperties.getEnvironment());
         if (mode == McpSecurityMode.DISABLED) {
             throw new IllegalStateException("MCP is disabled by configuration");
         }
@@ -836,6 +838,33 @@ public class BeanConfig {
         return McpRateLimiter.from(rateLimiterManager);
     }
 
+    @Bean(name = "mcpCallExecutorService", destroyMethod = "shutdown")
+    public ExecutorService mcpCallExecutorService(GatewayProperties gatewayProperties) {
+        GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        if (agent.getMcpCallMaxConcurrent() <= 0 || agent.getMcpCallMaxQueue() <= 0) {
+            throw new IllegalArgumentException(
+                    "mcpCallMaxConcurrent and mcpCallMaxQueue must be positive");
+        }
+        return new ThreadPoolExecutor(
+                agent.getMcpCallMaxConcurrent(), agent.getMcpCallMaxConcurrent(),
+                0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(agent.getMcpCallMaxQueue()),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "gateway-mcp-call");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
+    }
+
+    @Bean
+    public com.ai.gateway.adapter.mcp.McpCallExecutor mcpCallExecutor(
+            @org.springframework.beans.factory.annotation.Qualifier("mcpCallExecutorService")
+            ExecutorService executor,
+            TelemetryPort telemetryPort) {
+        return new com.ai.gateway.adapter.mcp.BoundedMcpCallExecutor(executor, telemetryPort);
+    }
+
     @Bean
     public McpWebMvcTransportAdapter mcpWebMvcTransportAdapter(
             ObjectMapper objectMapper,
@@ -843,15 +872,40 @@ public class BeanConfig {
             AuthenticationPort authenticationPort,
             TelemetryPort telemetryPort,
             McpRateLimiter mcpRateLimiter,
+            com.ai.gateway.adapter.mcp.McpCallExecutor mcpCallExecutor,
             GatewayProperties gatewayProperties) {
         GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        McpSecurityMode securityMode = McpSecurityMode.parse(agent.getMcpSecurityMode());
+        assertMcpSecurityModeAllowed(securityMode, gatewayProperties.getEnvironment());
+        com.ai.gateway.adapter.mcp.McpRequestAuthenticator requestAuthenticator =
+                mcpRequestAuthenticator(securityMode, authenticationPort);
         return new McpWebMvcTransportAdapter(
-                objectMapper, gatewayAdapter, authenticationPort, telemetryPort,
+                objectMapper, gatewayAdapter, requestAuthenticator, telemetryPort,
                 agent.getMcpMaxSessions(),
                 java.time.Duration.ofSeconds(agent.getMcpSessionIdleSeconds()),
                 java.time.Duration.ofMillis(agent.getMcpCallTimeoutMs()),
                 java.time.Duration.ofMillis(agent.getMcpCloseTimeoutMs()),
-                agent.getMcpNodeId(), mcpRateLimiter);
+                agent.getMcpNodeId(), mcpRateLimiter, mcpCallExecutor);
+    }
+
+    private static com.ai.gateway.adapter.mcp.McpRequestAuthenticator mcpRequestAuthenticator(
+            McpSecurityMode securityMode, AuthenticationPort authenticationPort) {
+        if (securityMode != McpSecurityMode.NO_AUTH) {
+            return com.ai.gateway.adapter.mcp.McpRequestAuthenticator.bearer(authenticationPort);
+        }
+        Principal developmentPrincipal = new Principal(
+                "local-mcp-development", 0L, java.util.List.of("developer"),
+                java.util.List.of("*"), Instant.now(), "LOCAL_NO_AUTH");
+        return com.ai.gateway.adapter.mcp.McpRequestAuthenticator.noAuth(developmentPrincipal);
+    }
+
+    static void assertMcpSecurityModeAllowed(McpSecurityMode securityMode,
+                                             String environment) {
+        if (securityMode == McpSecurityMode.NO_AUTH
+                && !"development".equalsIgnoreCase(environment)) {
+            throw new IllegalStateException(
+                    "MCP NO_AUTH is only allowed when gateway.environment=development");
+        }
     }
 
     @Bean
@@ -914,7 +968,7 @@ public class BeanConfig {
             com.ai.gateway.domain.port.SecretManager secretManager,
             GatewayProperties gatewayProperties) {
         return new HealthReadinessUseCase(manifestRepository, catalogPort, secretManager,
-                gatewayProperties.getEnvironment());
+                CatalogEnvironment.DEFAULT);
     }
 
     /**
@@ -931,7 +985,7 @@ public class BeanConfig {
             GatewayProperties gatewayProperties) {
         return new ClarificationUseCase(interactionRepository, candidateRetriever, llmRouterPort,
                 aliasGenerator, thresholdEvaluator, catalogPort,
-                gatewayProperties.getEnvironment());
+                CatalogEnvironment.DEFAULT);
     }
 
     // ======================================================================
@@ -967,7 +1021,7 @@ public class BeanConfig {
                 confirmationTokenCodec,
                 argumentPayloadCodec,
                 payloadLimits,
-                gatewayProperties.getEnvironment());
+                CatalogEnvironment.DEFAULT);
     }
 
     /**
@@ -1078,7 +1132,7 @@ public class BeanConfig {
             InMemoryCatalogManager catalogManager,
             GatewayProperties gatewayProperties) {
         GatewayConfig config = new GatewayConfig(
-                gatewayProperties.getEnvironment(),
+                CatalogEnvironment.DEFAULT,
                 gatewayProperties.getAuth().getProvider(),
                 gatewayProperties.getCache().getProvider(),
                 gatewayProperties.getRatelimit().getProvider(),

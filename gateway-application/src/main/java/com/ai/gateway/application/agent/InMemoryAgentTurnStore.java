@@ -15,6 +15,7 @@ public final class InMemoryAgentTurnStore implements AgentTurnStore {
     private final int maxEntries;
     private final TelemetryPort telemetry;
     private final Map<TurnKey, StoredTurn> turns = new ConcurrentHashMap<>();
+    private final Map<TurnKey, ResolvedTurn> resolvedTurns = new ConcurrentHashMap<>();
     private final AtomicLong expiredEvictions = new AtomicLong();
     private final AtomicLong capacityRejections = new AtomicLong();
 
@@ -48,6 +49,31 @@ public final class InMemoryAgentTurnStore implements AgentTurnStore {
     }
 
     @Override
+    public synchronized void putResolved(
+            String principalDigest, AgentTurnState state, String resolveFingerprint,
+            AgentCapabilityResolver.Resolution resolution) {
+        put(principalDigest, state);
+        TurnKey key = new TurnKey(principalDigest, state.agentTurnId());
+        resolvedTurns.put(key, new ResolvedTurn(
+                principalDigest, state, resolveFingerprint, resolution));
+    }
+
+    @Override
+    public Optional<ResolvedTurn> findResolved(
+            String principalDigest, String agentTurnId, String resolveFingerprint) {
+        Optional<StoredTurn> current = find(principalDigest, agentTurnId);
+        if (current.isEmpty()) {
+            return Optional.empty();
+        }
+        ResolvedTurn resolved = resolvedTurns.get(new TurnKey(principalDigest, agentTurnId));
+        if (resolved == null || !Objects.equals(
+                resolved.resolveFingerprint(), resolveFingerprint)) {
+            return Optional.empty();
+        }
+        return Optional.of(resolved);
+    }
+
+    @Override
     public Optional<StoredTurn> find(String principalDigest, String agentTurnId) {
         if (principalDigest == null || agentTurnId == null) {
             return Optional.empty();
@@ -59,6 +85,7 @@ public final class InMemoryAgentTurnStore implements AgentTurnStore {
         }
         if (stored.state().expiresAt().isBefore(Instant.now())) {
             if (turns.remove(key, stored)) {
+                resolvedTurns.remove(key);
                 recordExpiredEviction();
                 recordSize();
             }
@@ -81,6 +108,7 @@ public final class InMemoryAgentTurnStore implements AgentTurnStore {
                     || (state.selectedToolRef() != null
                     && !state.selectedToolRef().equals(toolRef))) {
                 if (state.expiresAt().isBefore(Instant.now())) {
+                    resolvedTurns.remove(key);
                     recordExpiredEviction();
                     return null;
                 }
@@ -101,6 +129,9 @@ public final class InMemoryAgentTurnStore implements AgentTurnStore {
         Objects.requireNonNull(state, "state must not be null");
         turns.computeIfPresent(new TurnKey(principalDigest, state.agentTurnId()),
                 (key, current) -> new StoredTurn(principalDigest, state));
+        resolvedTurns.computeIfPresent(new TurnKey(principalDigest, state.agentTurnId()),
+                (key, current) -> new ResolvedTurn(principalDigest, state,
+                        current.resolveFingerprint(), current.resolution()));
     }
 
     public int size() {
@@ -120,6 +151,7 @@ public final class InMemoryAgentTurnStore implements AgentTurnStore {
         turns.entrySet().removeIf(entry -> {
             boolean expired = entry.getValue().state().expiresAt().isBefore(now);
             if (expired) {
+                resolvedTurns.remove(entry.getKey());
                 recordExpiredEviction();
             }
             return expired;

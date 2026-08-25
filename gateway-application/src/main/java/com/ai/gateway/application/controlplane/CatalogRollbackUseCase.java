@@ -88,12 +88,7 @@ public final class CatalogRollbackUseCase {
                 CatalogSnapshot historicalSnapshot = catalogPort.loadSnapshot(targetSnapshotVersion);
                 if (historicalSnapshot == null) {
                     throw new IllegalArgumentException(
-                            "Historical snapshot version " + targetSnapshotVersion + " not found");
-                }
-                if (!environment.equals(historicalSnapshot.environment())) {
-                    throw new IllegalArgumentException(
-                            "Historical snapshot belongs to environment "
-                                    + historicalSnapshot.environment());
+                            "未找到历史快照版本 " + targetSnapshotVersion + "。");
                 }
                 long newSnapshotVersion = catalogPort.reserveSnapshotVersion();
                 String newPolicyRef = historicalSnapshot.policyRef()

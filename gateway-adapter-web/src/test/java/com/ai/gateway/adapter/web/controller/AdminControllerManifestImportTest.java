@@ -11,11 +11,13 @@ import com.ai.gateway.application.controlplane.ManifestApprovalUseCase;
 import com.ai.gateway.application.controlplane.ManifestImportUseCase;
 import com.ai.gateway.application.controlplane.ManifestValidationUseCase;
 import com.ai.gateway.domain.model.AdminAction;
+import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.ValidationReport;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
 import com.ai.gateway.domain.port.ManifestDocumentValidator;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.RETURNS_DEEP_STUBS;
 
 class AdminControllerManifestImportTest {
 
@@ -47,6 +50,7 @@ class AdminControllerManifestImportTest {
         AuthenticationPort authenticationPort = mock(AuthenticationPort.class);
         AuthorizationPort authorizationPort = mock(AuthorizationPort.class);
         ManifestDocumentValidator documentValidator = mock(ManifestDocumentValidator.class);
+        ManifestDocumentMapper documentMapper = mock(ManifestDocumentMapper.class);
 
         prepareAuthenticatedRequest(authenticationPort, authorizationPort);
         when(documentValidator.validate(any())).thenReturn(
@@ -95,6 +99,42 @@ class AdminControllerManifestImportTest {
         verifyNoInteractions(importUseCase);
     }
 
+    @Test
+    void shouldReturnStableCodeAndChineseMessageForDuplicateManifest() throws Exception {
+        ManifestImportUseCase importUseCase = mock(ManifestImportUseCase.class);
+        AuthenticationPort authenticationPort = mock(AuthenticationPort.class);
+        AuthorizationPort authorizationPort = mock(AuthorizationPort.class);
+        ManifestDocumentValidator documentValidator = mock(ManifestDocumentValidator.class);
+        ManifestDocumentMapper documentMapper = mock(ManifestDocumentMapper.class);
+
+        prepareAuthenticatedRequest(authenticationPort, authorizationPort);
+        when(documentValidator.validate(any())).thenReturn(ValidationReport.success());
+        JsonNode document = new ObjectMapper().readTree("{\"metadata\":{},\"spec\":{}}");
+        CapabilityManifest mappedManifest = mock(CapabilityManifest.class, RETURNS_DEEP_STUBS);
+        when(documentMapper.toValidationTree(any())).thenReturn(document);
+        when(documentMapper.toDomain(any())).thenReturn(mappedManifest);
+        when(mappedManifest.metadata().id()).thenReturn("order.detail.query");
+        when(mappedManifest.metadata().version()).thenReturn("1.0.0");
+        when(importUseCase.importManifest(any())).thenReturn(
+                new ManifestImportUseCase.ImportResult(
+                        false,
+                        ValidationReport.success(),
+                        null,
+                        "能力「order.detail.query」的版本「1.0.0」已存在，不能重复导入；如需修改内容，请递增版本号。"));
+
+        AdminController controller = controller(
+                importUseCase, authenticationPort, authorizationPort, documentValidator, documentMapper);
+
+        var response = controller.importManifest(document);
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
+        assertThat(response.getBody()).containsEntry("status", "REJECTED");
+        assertThat(response.getBody()).containsEntry(
+                "errorCode", "MANIFEST_IMPORT_REJECTED");
+        assertThat(response.getBody()).containsEntry(
+                "error", "能力「order.detail.query」的版本「1.0.0」已存在，不能重复导入；如需修改内容，请递增版本号。");
+    }
+
     private static void prepareAuthenticatedRequest(
             AuthenticationPort authenticationPort,
             AuthorizationPort authorizationPort) {
@@ -125,5 +165,26 @@ class AdminControllerManifestImportTest {
                 authorizationPort,
                 documentValidator,
                 new ManifestDocumentMapper(new ObjectMapper()));
+    }
+
+    private static AdminController controller(
+            ManifestImportUseCase importUseCase,
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            ManifestDocumentValidator documentValidator,
+            ManifestDocumentMapper documentMapper) {
+        return new AdminController(
+                importUseCase,
+                mock(ManifestApprovalUseCase.class),
+                mock(CatalogPublishUseCase.class),
+                mock(CatalogRollbackUseCase.class),
+                mock(CapabilitySuspendUseCase.class),
+                mock(CapabilityResumeUseCase.class),
+                mock(ManifestValidationUseCase.class),
+                mock(CatalogSnapshotQueryUseCase.class),
+                authenticationPort,
+                authorizationPort,
+                documentValidator,
+                documentMapper);
     }
 }

@@ -101,7 +101,8 @@ public final class AclManageUseCase {
         CapabilityManifest manifest = manifestRepository
                 .findByIdAndVersion(capabilityId, capabilityVersion)
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "Capability Manifest not found: " + capabilityId + ":" + capabilityVersion));
+                        "未找到能力清单：能力「" + capabilityId + "」，版本「"
+                                + capabilityVersion + "」。"));
         List<String> requiredPermissions = manifest.spec().authorization() == null
                 ? List.of()
                 : manifest.spec().authorization().permissions();

@@ -1,0 +1,129 @@
+{
+  "apiVersion" : "gateway.ai/v1",
+  "kind" : "Capability",
+  "metadata" : {
+    "id" : "order.detail.query",
+    "version" : "1.0.0",
+    "owner" : {
+      "team" : "order-platform",
+      "contact" : "order-platform@example.com"
+    },
+    "tags" : [ "order", "query" ]
+  },
+  "spec" : {
+    "displayName" : "查询订单详情",
+    "description" : "按订单号查询当前组织可见的订单详情",
+    "examples" : {
+      "positive" : [ "查询订单 A100 的详情", "查看订单 B200 当前状态", "订单 C300 的金额是多少" ],
+      "negative" : [ "创建一笔新订单", "取消订单 D400" ],
+      "synonyms" : [ "订单详情", "订单信息" ]
+    },
+    "risk" : "READ_ONLY",
+    "inputSchema" : {
+      "$schema" : "https://json-schema.org/draft/2020-12/schema",
+      "type" : "object",
+      "additionalProperties" : false,
+      "required" : [ "orderNo" ],
+      "properties" : {
+        "orderNo" : {
+          "type" : "string",
+          "minLength" : 1,
+          "maxLength" : 64,
+          "pattern" : "^[A-Za-z0-9-]+$"
+        }
+      }
+    },
+    "authorization" : {
+      "permissions" : [ "order:detail:read" ],
+      "principalClaims" : {
+        "/orgId" : {
+          "type" : "integer",
+          "required" : true
+        }
+      }
+    },
+    "invocation" : {
+      "protocol" : "DUBBO",
+      "registryRef" : "nacos-main",
+      "interfaceName" : "com.ai.gateway.testprovider.OrderQueryApi",
+      "version" : "1.0.0",
+      "method" : "query",
+      "parameterTypes" : [ "java.lang.Long", "java.util.Map" ],
+      "arguments" : [ {
+        "position" : 0,
+        "name" : "orgId",
+        "protocolType" : "java.lang.Long",
+        "source" : "PRINCIPAL",
+        "sourcePath" : "/orgId"
+      }, {
+        "position" : 1,
+        "name" : "request",
+        "protocolType" : "java.util.Map",
+        "object" : {
+          "/orderNo" : {
+            "source" : "MODEL",
+            "sourcePath" : "/orderNo"
+          }
+        }
+      } ],
+      "serialization" : "fastjson2"
+    },
+    "output" : {
+      "mode" : "ENVELOPE",
+      "envelope" : {
+        "codePath" : "/code",
+        "successValues" : [ "200" ],
+        "dataPath" : "/value",
+        "messagePath" : "/message"
+      },
+      "projection" : [ {
+        "from" : "/orderNo",
+        "to" : "/orderNo"
+      }, {
+        "from" : "/status",
+        "to" : "/status"
+      }, {
+        "from" : "/amount",
+        "to" : "/amount"
+      }, {
+        "from" : "/customerName",
+        "to" : "/customerName"
+      } ],
+      "publicSchema" : {
+        "$schema" : "https://json-schema.org/draft/2020-12/schema",
+        "type" : "object",
+        "additionalProperties" : false,
+        "required" : [ "orderNo", "status", "amount", "customerName" ],
+        "properties" : {
+          "orderNo" : {
+            "type" : "string",
+            "maxLength" : 64
+          },
+          "status" : {
+            "type" : "string",
+            "maxLength" : 32
+          },
+          "amount" : {
+            "type" : "number",
+            "minimum" : 0
+          },
+          "customerName" : {
+            "type" : "string",
+            "maxLength" : 128,
+            "x-sensitive" : true
+          }
+        }
+      },
+      "redactions" : [ {
+        "path" : "/customerName",
+        "method" : "PARTIAL_MASK"
+      } ],
+      "maxBytes" : 65536
+    },
+    "resilience" : {
+      "timeoutMs" : 3000,
+      "retries" : 1,
+      "maxConcurrent" : 50
+    }
+  }
+}

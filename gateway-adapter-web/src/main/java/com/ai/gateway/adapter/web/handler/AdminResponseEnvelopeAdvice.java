@@ -60,7 +60,7 @@ public final class AdminResponseEnvelopeAdvice implements ResponseBodyAdvice<Obj
         Object existing = legacy.get("error");
         if (existing instanceof Map<?, ?> map) {
             Object code = map.containsKey("errorCode") ? map.get("errorCode") : "REQUEST_FAILED";
-            Object message = map.containsKey("message") ? map.get("message") : "Request failed";
+            Object message = map.containsKey("message") ? map.get("message") : "请求失败，请稍后重试。";
             return Map.of(
                     "errorCode", String.valueOf(code),
                     "message", String.valueOf(message));
@@ -68,7 +68,7 @@ public final class AdminResponseEnvelopeAdvice implements ResponseBodyAdvice<Obj
         return Map.of(
                 "errorCode", String.valueOf(legacy.getOrDefault("errorCode", "REQUEST_FAILED")),
                 "message", String.valueOf(legacy.getOrDefault(
-                        "message", existing == null ? "Request failed" : existing)));
+                        "message", existing == null ? "请求失败，请稍后重试。" : existing)));
     }
 
     private boolean isError(Object status) {
