@@ -17,6 +17,7 @@
         <module>gateway-domain</module>
         <module>gateway-application</module>
         <module>gateway-adapter-mcp</module>
+        <module>gateway-adapter-a2a</module>
         <module>gateway-adapter-web</module>
         <module>gateway-adapter-postgresql</module>
         <module>gateway-adapter-redis</module>
@@ -61,6 +62,8 @@
         <mockito.version>5.14.2</mockito.version>
         <lombok.version>1.18.36</lombok.version>
         <mcp-sdk.version>0.10.0</mcp-sdk.version>
+        <!-- A2A：只引入 spec 模块（纯记录 + Jackson），不引入 CDI/Quarkus 取向的 server-common -->
+        <a2a-sdk.version>0.3.3.Final</a2a-sdk.version>
         <grpc.version>1.68.1</grpc.version>
         <protobuf.version>3.25.5</protobuf.version>
         <testcontainers.version>1.20.4</testcontainers.version>

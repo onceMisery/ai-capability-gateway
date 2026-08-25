@@ -36,6 +36,34 @@ public class GatewayProperties {
     private Snapshot snapshot = new Snapshot();
     private Sentinel sentinel = new Sentinel();
     private Protocol protocol = new Protocol();
+    private Runtime runtime = new Runtime();
+
+    /** 运行面配置根节点（{@code gateway.runtime.*}）。 */
+    @Getter
+    @Setter
+    public static class Runtime {
+        private NlRouter nlRouter = new NlRouter();
+    }
+
+    /**
+     * 运行面自然语言路由的曝光配置（{@code gateway.runtime.nl-router.*}）。
+     *
+     * <p>此处只承载「原始配置文本」，不做语义判定：模式解析与非法组合归一化由
+     * {@code NlRouterMode} 与 {@code NlRouterPolicy} 负责，配置类保持哑对象，
+     * 从而使同一份判定被运行面与管理面诊断面共用，不在配置层出现第二套 switch。</p>
+     */
+    @Getter
+    @Setter
+    public static class NlRouter {
+        /** 运行面模式：FULL | COMPAT | DIAGNOSTIC | DISABLED。 */
+        private String mode = "COMPAT";
+        /** 管理面诊断端点开关；仅在模式本身支持诊断时生效。 */
+        private boolean diagnosticsEnabled = true;
+        /** 单次诊断输出的候选上限，防止一次调用倾泻整个目录。 */
+        private int diagnosticsMaxCandidates = 10;
+        /** 诊断端点 QPS 上限；诊断会真实消耗模型额度，必须独立限流。 */
+        private int diagnosticsQps = 5;
+    }
 
     @Getter
     @Setter
@@ -115,6 +143,15 @@ public class GatewayProperties {
         private double mcpMessageQps = 500d;
         private double mcpResolveQps = 200d;
         private double mcpCallQps = 200d;
+        /** {@code tools/list} 曝光模式：{@code META_TOOL} | {@code DIRECT_PROJECTION} | {@code HYBRID}。 */
+        private String mcpToolExposure = "HYBRID";
+        /** 单次 {@code tools/list} 最多直投的工具数，超出按排序策略取前 N 个并降级。 */
+        private int mcpDirectMaxTools = 64;
+        /** 单次 {@code tools/list} 所有直投 Schema 的累计字节上限。 */
+        private long mcpDirectMaxSchemaBytes = 131_072L;
+        /** 目录/策略纪元的观测间隔，变化时推送 {@code notifications/tools/list_changed}。 */
+        private long mcpToolListWatchMs = 5_000L;
+        private double mcpNotifyQps = 20d;
         private java.util.List<McpTrustedClient> mcpTrustedClients =
                 new java.util.ArrayList<>();
     }

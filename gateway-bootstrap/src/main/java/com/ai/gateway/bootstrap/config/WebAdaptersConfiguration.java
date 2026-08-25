@@ -4,6 +4,7 @@ import com.ai.gateway.adapter.web.controller.AclAdminController;
 import com.ai.gateway.adapter.web.controller.AgentToolController;
 import com.ai.gateway.adapter.web.GatewayWebProperties;
 import com.ai.gateway.adapter.web.controller.AdminController;
+import com.ai.gateway.adapter.web.controller.CatalogDiagnosticsController;
 import com.ai.gateway.adapter.web.controller.CatalogQueryController;
 import com.ai.gateway.adapter.web.controller.ConsoleAuthController;
 import com.ai.gateway.adapter.web.controller.HealthController;
@@ -48,6 +49,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
         MonitorQueryController.class,
         CatalogQueryController.class,
         SystemConfigController.class,
+        CatalogDiagnosticsController.class,
         GlobalExceptionHandler.class,
         TraceContextFilter.class,
         RequestSizeLimitFilter.class,

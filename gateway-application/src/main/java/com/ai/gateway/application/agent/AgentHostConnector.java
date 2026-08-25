@@ -3,6 +3,7 @@ package com.ai.gateway.application.agent;
 import com.ai.gateway.application.operation.OperationCancelUseCase;
 import com.ai.gateway.application.operation.OperationConfirmUseCase;
 import com.ai.gateway.application.operation.OperationStatusUseCase;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.OperationRecord;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.RequestContext;
@@ -194,6 +195,31 @@ public final class AgentHostConnector {
             String locale,
             String idempotencyKey,
             CallPolicy policy) {
+        return call(requestContext, agentTurnId, requestId, toolRef, arguments, locale,
+                idempotencyKey, policy, AuditPlane.AGENT_HOST);
+    }
+
+    /**
+     * 在指定入口平面下执行一次 Agent 工具调用。
+     *
+     * <p>平面与 {@link CallPolicy} 是两个正交的概念：策略决定是否允许写前置确认，
+     * 平面只决定审计与埋点归属。MCP 客户端即使被信任、走 {@code HOST_CONFIRMATION} 策略，
+     * 其成本与故障率仍应记在 {@code mcp} 平面上。</p>
+     *
+     * @param plane 发起本次调用的入口平面
+     */
+    public CallResult call(
+            RequestContext requestContext,
+            String agentTurnId,
+            String requestId,
+            String toolRef,
+            Map<String, Object> arguments,
+            String locale,
+            String idempotencyKey,
+            CallPolicy policy,
+            AuditPlane plane) {
+        Objects.requireNonNull(policy, "policy must not be null");
+        Objects.requireNonNull(plane, "plane must not be null");
         StoredTurn turn = findTurn(requestContext, agentTurnId, toolRef);
         if (turn == null) {
             return CallResult.error("TOOL_REF_NOT_IN_TURN");
@@ -206,11 +232,9 @@ public final class AgentHostConnector {
         }
 
         Principal principal = turn.principal();
-        AgentHostToolCallUseCase.Result gatewayResult = policy.allowWritePrepare()
-                ? callUseCase.call(principal, requestId, toolRef, arguments, locale,
-                        idempotencyKey)
-                : callUseCase.call(principal, requestId, toolRef, arguments, locale,
-                        idempotencyKey, false);
+        AgentHostToolCallUseCase.Result gatewayResult = callUseCase.call(
+                principal, requestId, toolRef, arguments, locale, idempotencyKey,
+                policy.allowWritePrepare(), plane);
         AgentModelResultMapper.ModelResult safeResult;
         try {
             safeResult = modelResultMapper.map(

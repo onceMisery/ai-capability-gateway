@@ -1,6 +1,7 @@
 package com.ai.gateway.application.runtime;
 
 import com.ai.gateway.application.operation.OperationPrepareUseCase;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ConfirmationToken;
@@ -25,6 +26,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -36,7 +38,8 @@ class AgentToolCallUseCaseTest {
     void delegatesVisibleReadToStructuredInvocation() {
         Fixtures fixtures = new Fixtures(RiskLevel.READ_ONLY);
         when(fixtures.structured.invokeResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString())).thenReturn(new StructuredInvocationUseCase.Result(
+                anyMap(), anyString(), eq(AuditPlane.AGENT_HOST)))
+                .thenReturn(new StructuredInvocationUseCase.Result(
                 StructuredInvocationUseCase.Status.COMPLETED, Map.of("ok", true), null,
                 "completed", 8L, "orders.query", "1.0.0"));
 
@@ -47,7 +50,7 @@ class AgentToolCallUseCaseTest {
         assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.COMPLETED);
         assertThat(result.data()).containsEntry("ok", true);
         verify(fixtures.structured).invokeResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString());
+                anyMap(), anyString(), eq(AuditPlane.AGENT_HOST));
         verify(fixtures.prepare, never()).prepareResolved(anyString(), any(), any(), any(),
                 anyMap(), anyString(), anyString());
     }
@@ -70,7 +73,7 @@ class AgentToolCallUseCaseTest {
         assertThat(result.operationId()).isEqualTo("operation");
         assertThat(result.token()).isSameAs(token);
         verify(fixtures.structured, never()).invokeResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString());
+                anyMap(), anyString(), any(AuditPlane.class));
     }
 
     @Test
@@ -98,7 +101,7 @@ class AgentToolCallUseCaseTest {
         assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.ERROR);
         assertThat(result.errorCode()).isEqualTo("HIGH_RISK_WRITE_BLOCKED");
         verify(fixtures.structured, never()).invokeResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString());
+                anyMap(), anyString(), any(AuditPlane.class));
         verify(fixtures.prepare, never()).prepareResolved(anyString(), any(), any(), any(),
                 anyMap(), anyString(), anyString());
     }
@@ -116,7 +119,7 @@ class AgentToolCallUseCaseTest {
         assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.ERROR);
         assertThat(result.errorCode()).isEqualTo("PERMISSION_DENIED");
         verify(fixtures.structured, never()).invokeResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString());
+                anyMap(), anyString(), any(AuditPlane.class));
     }
 
     private static final class Fixtures {

@@ -1,7 +1,11 @@
 package com.ai.gateway.bootstrap.config;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.core.env.MapPropertySource;
 import org.springframework.mock.env.MockEnvironment;
+
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +60,89 @@ class ProductionConfigurationValidatorTest {
 
         assertThatCode(() -> ProductionConfigurationValidator.validate(environment))
                 .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsUnparseableNlRouterModeInAnyEnvironment() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("gateway.environment", "development")
+                .withProperty("gateway.runtime.nl-router.mode", "DIAGNOSTICS");
+
+        assertThatThrownBy(() -> ProductionConfigurationValidator.validate(environment))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("gateway.runtime.nl-router.mode")
+                .hasMessageContaining("DIAGNOSTICS");
+    }
+
+    @Test
+    void requiresLlmCredentialsWhenRouterKernelIsLoaded() {
+        MockEnvironment environment = productionEnvironment()
+                .withProperty("gateway.runtime.nl-router.mode", "DIAGNOSTIC");
+        environment.getPropertySources().addFirst(blankLlmCredentials());
+
+        assertThatThrownBy(() -> ProductionConfigurationValidator.validate(environment))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("gateway.llm.endpoint")
+                .hasMessageContaining("gateway.llm.api-key")
+                .hasMessageContaining("gateway.llm.model");
+    }
+
+    @Test
+    void allowsMissingLlmCredentialsWhenRouterIsDisabled() {
+        MockEnvironment environment = productionEnvironment()
+                .withProperty("gateway.runtime.nl-router.mode", "DISABLED");
+        environment.getPropertySources().addFirst(blankLlmCredentials());
+
+        assertThatCode(() -> ProductionConfigurationValidator.validate(environment))
+                .doesNotThrowAnyException();
+    }
+
+    @Test
+    void rejectsGatewaySelectionWhenRouterIsDisabled() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("gateway.environment", "development")
+                .withProperty("gateway.runtime.nl-router.mode", "DISABLED")
+                .withProperty("gateway.a2a.selection-mode", "GATEWAY_SELECTION");
+
+        assertThatThrownBy(() -> ProductionConfigurationValidator.validate(environment))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("gateway.a2a.selection-mode")
+                .hasMessageContaining("GATEWAY_SELECTION");
+    }
+
+    @Test
+    void toleratesDelegatedSelectionWhenRouterIsDisabled() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("gateway.environment", "development")
+                .withProperty("gateway.runtime.nl-router.mode", "DISABLED")
+                .withProperty("gateway.a2a.selection-mode", "DELEGATED_SELECTION");
+
+        assertThatCode(() -> ProductionConfigurationValidator.validate(environment))
+                .doesNotThrowAnyException();
+    }
+
+    /**
+     * A DISABLED deployment that still opts into diagnostics must start: the flag is
+     * normalized away by NlRouterMode/NlRouterPolicy, so the validator only warns.
+     */
+    @Test
+    void doesNotFailOnDiagnosticsFlagWhenRouterIsDisabled() {
+        MockEnvironment environment = new MockEnvironment()
+                .withProperty("gateway.environment", "staging")
+                .withProperty("gateway.runtime.nl-router.mode", "DISABLED")
+                .withProperty("gateway.runtime.nl-router.diagnostics-enabled", "true");
+
+        assertThatCode(() -> ProductionConfigurationValidator.validate(environment))
+                .doesNotThrowAnyException();
+    }
+
+    /** Overrides the fixture's LLM credentials with blank values. */
+    private static MapPropertySource blankLlmCredentials() {
+        Map<String, Object> blank = new HashMap<>();
+        blank.put("gateway.llm.endpoint", "");
+        blank.put("gateway.llm.api-key", "");
+        blank.put("gateway.llm.model", "");
+        return new MapPropertySource("blank-llm-credentials", blank);
     }
 
     private static MockEnvironment productionEnvironment() {

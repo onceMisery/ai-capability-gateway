@@ -1,8 +1,9 @@
 package com.ai.gateway.application.runtime;
 
+import com.ai.gateway.application.catalog.CandidateResolutionService;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.AuditEvent;
-import com.ai.gateway.domain.model.CatalogSnapshot;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.NlInteraction;
 import com.ai.gateway.domain.model.Principal;
@@ -77,13 +78,11 @@ public final class NaturalLanguageQueryUseCase {
 
     /**
      * Default routing thresholds for the initial release.
+     *
+     * <p>取值来自 {@link RoutingThresholds#defaults()}，与管理面能力目录诊断共用同一份
+     * 阈值，避免诊断结论与线上判定分叉。</p>
      */
-    private static final RoutingThresholds DEFAULT_THRESHOLDS = new RoutingThresholds(
-            1.0, // minRelevanceScore
-            0.5, // minTop1Top2ScoreDiff
-            5, // maxCandidates (Top-K)
-            4096 // maxTokenBudget
-    );
+    private static final RoutingThresholds DEFAULT_THRESHOLDS = RoutingThresholds.defaults();
 
     /**
      * Default clarification session TTL in seconds (5 minutes).
@@ -91,16 +90,20 @@ public final class NaturalLanguageQueryUseCase {
     private static final long CLARIFICATION_TTL_SECONDS = 300;
 
     private final AuthenticationPort authenticationPort;
-    private final AuthorizationPort authorizationPort;
-    private final CatalogPort catalogPort;
-    private final CandidateRetriever candidateRetriever;
+    private final CandidateResolutionService candidateResolutionService;
     private final AuditPort auditPort;
     private final ThresholdEvaluator thresholdEvaluator;
-    private final TextNormalizer textNormalizer;
     private final InteractionRepository interactionRepository;
-    private final String environment;
     private final SelectDecisionProcessor selectDecisionProcessor;
+    private final NlRouterPolicy routerPolicy;
 
+    /**
+     * 兼容构造器：按端口装配，内部自行构造 {@link CandidateResolutionService}，
+     * 并采用 {@link NlRouterPolicy#full()}（保持既有全量行为）。
+     *
+     * <p>保留该构造器使既有调用方与测试无需改动即可编译（开闭原则：新增能力通过
+     * 新构造器进入，不破坏既有契约）。新代码请使用显式传入策略的构造器。</p>
+     */
     public NaturalLanguageQueryUseCase(AuthenticationPort authenticationPort,
                                         AuthorizationPort authorizationPort,
                                         CatalogPort catalogPort,
@@ -111,26 +114,45 @@ public final class NaturalLanguageQueryUseCase {
                                         InteractionRepository interactionRepository,
                                         String environment,
                                         SelectDecisionProcessor selectDecisionProcessor) {
+        this(authenticationPort,
+                new CandidateResolutionService(catalogPort, authorizationPort,
+                        candidateRetriever, textNormalizer, environment),
+                auditPort, thresholdEvaluator, interactionRepository,
+                selectDecisionProcessor, NlRouterPolicy.full());
+    }
+
+    /**
+     * 主构造器。
+     *
+     * @param authenticationPort 身份认证端口
+     * @param candidateResolutionService 候选确定性解析服务（授权过滤 + BM25 的唯一实现）
+     * @param auditPort 审计端口，终态审计必须先落地再返回数据
+     * @param thresholdEvaluator 阈值与区分度评估
+     * @param interactionRepository 澄清会话仓储
+     * @param selectDecisionProcessor SELECT 后处理（受限选择 + 参数绑定 + 执行）
+     * @param routerPolicy 运行面曝光策略
+     */
+    public NaturalLanguageQueryUseCase(AuthenticationPort authenticationPort,
+                                        CandidateResolutionService candidateResolutionService,
+                                        AuditPort auditPort,
+                                        ThresholdEvaluator thresholdEvaluator,
+                                        InteractionRepository interactionRepository,
+                                        SelectDecisionProcessor selectDecisionProcessor,
+                                        NlRouterPolicy routerPolicy) {
         this.authenticationPort = java.util.Objects.requireNonNull(authenticationPort,
                 "authenticationPort must not be null");
-        this.authorizationPort = java.util.Objects.requireNonNull(authorizationPort,
-                "authorizationPort must not be null");
-        this.catalogPort = java.util.Objects.requireNonNull(catalogPort,
-                "catalogPort must not be null");
-        this.candidateRetriever = java.util.Objects.requireNonNull(candidateRetriever,
-                "candidateRetriever must not be null");
+        this.candidateResolutionService = java.util.Objects.requireNonNull(
+                candidateResolutionService, "candidateResolutionService must not be null");
         this.auditPort = java.util.Objects.requireNonNull(auditPort,
                 "auditPort must not be null");
         this.thresholdEvaluator = java.util.Objects.requireNonNull(thresholdEvaluator,
                 "thresholdEvaluator must not be null");
         this.interactionRepository = java.util.Objects.requireNonNull(interactionRepository,
                 "interactionRepository must not be null");
-        this.textNormalizer = java.util.Objects.requireNonNull(textNormalizer,
-                "textNormalizer must not be null");
-        this.environment = java.util.Objects.requireNonNull(environment,
-                "environment must not be null");
         this.selectDecisionProcessor = java.util.Objects.requireNonNull(
                 selectDecisionProcessor, "selectDecisionProcessor must not be null");
+        this.routerPolicy = java.util.Objects.requireNonNull(routerPolicy,
+                "routerPolicy must not be null");
     }
 
     /**
@@ -155,6 +177,15 @@ public final class NaturalLanguageQueryUseCase {
         long startTime = System.currentTimeMillis();
         log.info("NL routing started: requestId={}, locale={}", requestId, locale);
 
+        // Step 0: 曝光策略闸门。运行面未曝光时立即返回稳定错误码，不触达认证与目录，
+        // 也不产生任何 LLM 成本；诊断面走独立入口，不受此闸门影响。
+        if (!routerPolicy.runtimeQueryAllowed()) {
+            log.debug("NL runtime surface not exposed: mode={}", routerPolicy.mode());
+            return new QueryResult(QueryStatus.ERROR, null, null, null, 0,
+                    ErrorCode.NL_ROUTER_DISABLED.name(),
+                    "Natural-language routing is not exposed on this deployment");
+        }
+
         // Step 1: Authenticate and construct Principal
         Principal principal;
         try {
@@ -176,64 +207,17 @@ public final class NaturalLanguageQueryUseCase {
                     "Audit persistence failed — Fail Closed");
         }
 
-        // Step 2: Fix catalog snapshot
-        CatalogSnapshot snapshot;
-        try {
-            snapshot = catalogPort.loadCurrentSnapshot(environment);
-        } catch (Exception e) {
-            log.error("Failed to load catalog snapshot: {}", e.getMessage());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null, 0,
-                    ErrorCode.PROTOCOL_ERROR.name(), "Failed to load catalog snapshot"),
-                    principal, requestId, 0L, null, startTime);
+        // Step 2-5: 快照固定 → 授权前置过滤 → 文本归一化 → BM25 Top-K。
+        // 该段由 CandidateResolutionService 唯一实现，与 Agent 平面、诊断面共用，
+        // 确保三个入口的授权过滤只有一份。
+        CandidateResolutionService.Resolution resolution = candidateResolutionService.resolve(
+                principal, text, DEFAULT_THRESHOLDS.maxCandidates());
+        if (!resolution.resolved()) {
+            return auditRoutingTerminal(mapResolutionFailure(resolution), principal, requestId,
+                    resolution.snapshotVersion(), null, startTime);
         }
-        if (snapshot == null || snapshot.capabilities().isEmpty()) {
-            return auditRoutingTerminal(new QueryResult(QueryStatus.NO_MATCH, null, null, null, 0,
-                    ErrorCode.NO_CAPABILITY_MATCH.name(), "No capabilities published"),
-                    principal, requestId, 0L, null, startTime);
-        }
-        long snapshotVersion = snapshot.snapshotVersion();
-
-        // Step 3: Permission and environment pre-filter
-        // Visibility authorization: filter to only capabilities the Principal can see
-        List<CapabilityManifest> visibleCapabilities;
-        try {
-            visibleCapabilities = authorizationPort.filterVisibleCapabilities(
-                    principal, snapshot.capabilities());
-        } catch (Exception e) {
-            log.error("Visibility authorization failed: {}", e.getMessage());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null, snapshotVersion,
-                    ErrorCode.PERMISSION_DENIED.name(),
-                    "Authorization data source unavailable"),
-                    principal, requestId, snapshotVersion, null, startTime);
-        }
-        if (visibleCapabilities.isEmpty()) {
-            return auditRoutingTerminal(new QueryResult(QueryStatus.NO_MATCH, null, null, null, snapshotVersion,
-                    ErrorCode.NO_CAPABILITY_MATCH.name(),
-                    "No visible capabilities for this principal"),
-                    principal, requestId, snapshotVersion, null, startTime);
-        }
-
-        // Step 4: Text normalization
-        String normalizedText = textNormalizer.normalize(text);
-        if (normalizedText.isBlank()) {
-            return auditRoutingTerminal(new QueryResult(QueryStatus.NO_MATCH, null, null, null, snapshotVersion,
-                    ErrorCode.NO_CAPABILITY_MATCH.name(),
-                    "Normalized text is empty after stop-word removal"),
-                    principal, requestId, snapshotVersion, null, startTime);
-        }
-
-        // Step 5: BM25 Top-K retrieval
-        List<CandidateRetriever.ScoredCapability> candidates;
-        try {
-            candidates = candidateRetriever.retrieve(
-                    normalizedText, visibleCapabilities, DEFAULT_THRESHOLDS.maxCandidates());
-        } catch (Exception e) {
-            log.error("Candidate retrieval failed: {}", e.getMessage());
-            return auditRoutingTerminal(new QueryResult(QueryStatus.ERROR, null, null, null, snapshotVersion,
-                    ErrorCode.PROTOCOL_ERROR.name(),
-                    "Candidate retrieval failed"),
-                    principal, requestId, snapshotVersion, null, startTime);
-        }
+        long snapshotVersion = resolution.snapshotVersion();
+        List<CandidateRetriever.ScoredCapability> candidates = resolution.candidates();
 
         // Step 6: Threshold/discrimination screening
         ThresholdEvaluator.ThresholdResult thresholdResult =
@@ -318,10 +302,55 @@ public final class NaturalLanguageQueryUseCase {
     }
 
     /**
+     * 把候选解析失败映射为对外查询结果。
+     *
+     * <p>映射刻意保持“无可见能力”与“无匹配”同一表述，避免通过错误措辞差异
+     * 泄漏能力存在性。{@code diagnosticReason} 只写日志，不进入响应。</p>
+     *
+     * @param resolution 失败的解析结果
+     * @return 对外查询结果
+     */
+    private QueryResult mapResolutionFailure(CandidateResolutionService.Resolution resolution) {
+        long version = resolution.snapshotVersion();
+        return switch (resolution.outcome()) {
+            case SNAPSHOT_UNAVAILABLE -> {
+                log.error("Failed to load catalog snapshot: {}", resolution.diagnosticReason());
+                yield new QueryResult(QueryStatus.ERROR, null, null, null, version,
+                        ErrorCode.PROTOCOL_ERROR.name(), "Failed to load catalog snapshot");
+            }
+            case EMPTY_CATALOG -> new QueryResult(QueryStatus.NO_MATCH, null, null, null, version,
+                    ErrorCode.NO_CAPABILITY_MATCH.name(), "No capabilities published");
+            case AUTHORIZATION_UNAVAILABLE -> {
+                log.error("Visibility authorization failed: {}", resolution.diagnosticReason());
+                yield new QueryResult(QueryStatus.ERROR, null, null, null, version,
+                        ErrorCode.PERMISSION_DENIED.name(),
+                        "Authorization data source unavailable");
+            }
+            case NO_VISIBLE_CAPABILITY -> new QueryResult(QueryStatus.NO_MATCH, null, null, null,
+                    version, ErrorCode.NO_CAPABILITY_MATCH.name(),
+                    "No visible capabilities for this principal");
+            case EMPTY_NORMALIZED_TEXT -> new QueryResult(QueryStatus.NO_MATCH, null, null, null,
+                    version, ErrorCode.NO_CAPABILITY_MATCH.name(),
+                    "Normalized text is empty after stop-word removal");
+            case RETRIEVAL_FAILED -> {
+                log.error("Candidate retrieval failed: {}", resolution.diagnosticReason());
+                yield new QueryResult(QueryStatus.ERROR, null, null, null, version,
+                        ErrorCode.PROTOCOL_ERROR.name(), "Candidate retrieval failed");
+            }
+            case RESOLVED -> throw new IllegalStateException(
+                    "resolved outcome must not be mapped as failure");
+        };
+    }
+
+    /**
      * Initiates a clarification session.
      *
      * <p>Creates a short-lived interaction record and returns a
      * CLARIFICATION_REQUIRED result with the interactionId.</p>
+     *
+     * <p>当曝光策略禁止多轮澄清时（{@code COMPAT} 档），仍返回单次
+     * {@code CLARIFICATION_REQUIRED} 提示，但不落库交互记录、不返回
+     * {@code interactionId}，澄清对话状态因此不回到网关。</p>
      *
      * @param candidates the ambiguous candidate capabilities
      * @param question the clarification question
@@ -336,6 +365,16 @@ public final class NaturalLanguageQueryUseCase {
                                                long snapshotVersion,
                                                String requestId,
                                                long startTime) {
+        if (!routerPolicy.clarificationSessionAllowed()) {
+            log.info("Single-shot clarification (no session): mode={}, requestId={}",
+                    routerPolicy.mode(), requestId);
+            return auditRoutingTerminal(new QueryResult(QueryStatus.CLARIFICATION_REQUIRED,
+                    null, question, null, snapshotVersion,
+                    ErrorCode.CLARIFICATION_REQUIRED.name(), null,
+                    null, null, null), principal, requestId,
+                    snapshotVersion, null, startTime);
+        }
+
         String interactionId = UUID.randomUUID().toString();
         String principalDigest = computePrincipalDigest(principal);
 
@@ -377,6 +416,14 @@ public final class NaturalLanguageQueryUseCase {
     private QueryResult auditRoutingTerminal(QueryResult result, Principal principal,
                                              String requestId, long snapshotVersion,
                                              CapabilityManifest manifest, long startTime) {
+        return auditRoutingTerminal(result, principal, requestId, snapshotVersion, manifest,
+                startTime, AuditPlane.GATEWAY_NL);
+    }
+
+    private QueryResult auditRoutingTerminal(QueryResult result, Principal principal,
+                                             String requestId, long snapshotVersion,
+                                             CapabilityManifest manifest, long startTime,
+                                             AuditPlane plane) {
         String subjectDigest = principal == null ? null : computePrincipalDigest(principal);
         long orgId = principal == null ? 0L : principal.orgId();
         String resultCode = result.errorCode() != null
@@ -388,7 +435,7 @@ public final class NaturalLanguageQueryUseCase {
                 manifest == null ? null : manifest.metadata().version(),
                 manifest == null ? null : ManifestDigest.sha256(manifest),
                 snapshotVersion, null, null, resultCode,
-                System.currentTimeMillis() - startTime, "{}"));
+                System.currentTimeMillis() - startTime, plane.detailsJson()));
         return result;
     }
 

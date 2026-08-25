@@ -1,5 +1,6 @@
 package com.ai.gateway.application.runtime;
 
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.DeadlineBudget;
 import com.ai.gateway.domain.model.ErrorCode;
 import com.ai.gateway.domain.model.ExecutionPlan;
@@ -177,12 +178,35 @@ public final class DeterministicExecutionUseCase {
     public ExecutionResult execute(String requestId, ExecutionPlan plan,
                                     com.ai.gateway.domain.model.Principal principal,
                                     com.ai.gateway.domain.model.CapabilityManifest manifest) {
+        return execute(requestId, plan, principal, manifest, AuditPlane.STRUCTURED);
+    }
+
+    /**
+     * 在指定入口平面下执行计划。
+     *
+     * <p>平面只影响审计与埋点归属，绝不影响任何安全判定：授权、Schema 校验与结果治理
+     * 对所有平面完全一致。新增入口（A2A、MCP……）只需在调用点传入自己的平面，
+     * 本方法与下游审计明细的写法都不必改动。</p>
+     *
+     * @param requestId 入站请求标识，用于审计与链路关联
+     * @param plan 执行计划
+     * @param principal 执行主体
+     * @param manifest 能力清单
+     * @param plane 发起本次执行的入口平面
+     * @return 执行结果
+     */
+    public ExecutionResult execute(String requestId, ExecutionPlan plan,
+                                    com.ai.gateway.domain.model.Principal principal,
+                                    com.ai.gateway.domain.model.CapabilityManifest manifest,
+                                    AuditPlane plane) {
         java.util.Objects.requireNonNull(requestId, "requestId must not be null");
         java.util.Objects.requireNonNull(plan, "plan must not be null");
         java.util.Objects.requireNonNull(principal, "principal must not be null");
         java.util.Objects.requireNonNull(manifest, "manifest must not be null");
-        ExecutionAuditContext auditContext =
-                ExecutionAuditContext.forExecution(requestId, plan, principal);
+        java.util.Objects.requireNonNull(plane, "plane must not be null");
+        ExecutionAuditContext auditContext = ExecutionAuditContext
+                .forExecution(requestId, plan, principal)
+                .withPlane(plane);
         long startTime = System.currentTimeMillis();
         log.info("Deterministic execution started: executionId={}, capability={}",
                 plan.executionId(), plan.capabilityId());
@@ -201,7 +225,7 @@ public final class DeterministicExecutionUseCase {
             auditPort.recordTerminal(auditContext,
                     ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
                     System.currentTimeMillis() - startTime,
-                    "{\"reason\":\"parameter_processing_failed\"}");
+                    plane.detailsJson("reason", "parameter_processing_failed"));
             return new ExecutionResult(null,
                     ErrorCode.ARGUMENT_VALIDATION_FAILED.name(),
                     "Parameter processing failed");
@@ -217,7 +241,7 @@ public final class DeterministicExecutionUseCase {
                     plan.capabilityId());
             auditPort.recordTerminal(auditContext, ErrorCode.PERMISSION_DENIED.name(),
                     System.currentTimeMillis() - startTime,
-                    "{\"reason\":\"authorization_unavailable\"}");
+                    plane.detailsJson("reason", "authorization_unavailable"));
             return new ExecutionResult(null,
                     ErrorCode.PERMISSION_DENIED.name(),
                     "Authorization data source unavailable");
@@ -227,7 +251,7 @@ public final class DeterministicExecutionUseCase {
             auditPort.recordTerminal(auditContext,
                     ErrorCode.PERMISSION_DENIED.name(),
                     System.currentTimeMillis() - startTime,
-                    "{}");
+                    plane.detailsJson());
             return new ExecutionResult(null,
                     ErrorCode.PERMISSION_DENIED.name(),
                     "Execution authorization denied");
@@ -267,7 +291,7 @@ public final class DeterministicExecutionUseCase {
             auditPort.recordTerminal(auditContext,
                     ErrorCode.PROTOCOL_ERROR.name(),
                     System.currentTimeMillis() - startTime,
-                    "{\"reason\":\"provider_invocation_failed\"}");
+                    plane.detailsJson("reason", "provider_invocation_failed"));
             return new ExecutionResult(null,
                     ErrorCode.PROTOCOL_ERROR.name(),
                     "Protocol invocation failed");
@@ -279,7 +303,7 @@ public final class DeterministicExecutionUseCase {
             auditPort.recordTerminal(auditContext,
                     invocationResult.errorCode().name(),
                     System.currentTimeMillis() - startTime,
-                    "{\"protocolStatus\":\"" + invocationResult.protocolStatus() + "\"}");
+                    plane.detailsJson("protocolStatus", invocationResult.protocolStatus()));
             return new ExecutionResult(null,
                     invocationResult.errorCode().name(),
                     safeProviderErrorMessage(invocationResult.errorCode()));
@@ -301,7 +325,7 @@ public final class DeterministicExecutionUseCase {
             log.warn("Result exceeds Payload budget: capability={}", plan.capabilityId());
             auditPort.recordTerminal(auditContext, ErrorCode.RESULT_TOO_LARGE.name(),
                     System.currentTimeMillis() - startTime,
-                    "{\"reason\":\"payload_budget_exceeded\"}");
+                    plane.detailsJson("reason", "payload_budget_exceeded"));
             return new ExecutionResult(null,
                     ErrorCode.RESULT_TOO_LARGE.name(),
                     "Provider result exceeds the configured payload budget");
@@ -310,7 +334,7 @@ public final class DeterministicExecutionUseCase {
             auditPort.recordTerminal(auditContext,
                     ErrorCode.PROTOCOL_ERROR.name(),
                     System.currentTimeMillis() - startTime,
-                    "{\"reason\":\"result_governance_failed\"}");
+                    plane.detailsJson("reason", "result_governance_failed"));
             return new ExecutionResult(null,
                     ErrorCode.PROTOCOL_ERROR.name(),
                     "Result governance failed");
@@ -319,7 +343,7 @@ public final class DeterministicExecutionUseCase {
         // Record the terminal audit event
         long durationMs = System.currentTimeMillis() - startTime;
         auditPort.recordTerminal(auditContext, "SUCCEEDED", durationMs,
-                "{\"snapshotVersion\":" + plan.snapshotVersion() + "}");
+                plane.detailsJsonWithRawFields("\"snapshotVersion\":" + plan.snapshotVersion()));
 
         log.info("Deterministic execution completed: executionId={}, durationMs={}",
                 plan.executionId(), durationMs);

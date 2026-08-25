@@ -93,7 +93,16 @@ public enum ErrorCode {
      * 写操作结果不确定：请求可能已到达 Provider，但网关未收到确定性响应。
      * 只能通过状态查询或对账解决。
      */
-    EXECUTION_UNKNOWN(false);
+    EXECUTION_UNKNOWN(false),
+
+    /**
+     * 运行面自然语言路由未对外曝光（{@link NlRouterMode#runtimeExposed()} 为
+     * {@code false}）。不可重试：调用方应改用结构化工具调用或 MCP 入口。
+     *
+     * <p>这是一项曝光策略结果，不代表能力缺失——LLM 路由内核在
+     * {@code DIAGNOSTIC} 档下仍然保留，仅通过管理面诊断端点暴露。</p>
+     */
+    NL_ROUTER_DISABLED(false);
 
     private final boolean retryable;
 

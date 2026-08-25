@@ -19,6 +19,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -56,8 +57,10 @@ class JdbcCatalogPortTest {
 
         port.loadCurrentSnapshot("production");
 
-        verify(statement).setMaxRows(17);
-        verify(statement).setQueryTimeout(4);
+        // 读预算必须覆盖 loadCurrentSnapshot 的两次查询：按环境定位的查询，
+        // 以及环境为空时兜底的历史快照查询——任何一条不设限都会把无界读放行到数据库。
+        verify(statement, times(2)).setMaxRows(17);
+        verify(statement, times(2)).setQueryTimeout(4);
     }
 
     @Test

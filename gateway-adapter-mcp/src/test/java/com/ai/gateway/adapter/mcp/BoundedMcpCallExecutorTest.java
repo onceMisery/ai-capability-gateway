@@ -21,7 +21,14 @@ class BoundedMcpCallExecutorTest {
         ThreadPoolExecutor pool = pool();
         pool.prestartAllCoreThreads();
         CountDownLatch release = new CountDownLatch(1);
-        pool.submit(() -> await(release));
+        CountDownLatch running = new CountDownLatch(1);
+        pool.submit(() -> {
+            running.countDown();
+            await(release);
+        });
+        // 必须先确认首个任务已被工作线程取走：队列容量为 1，若在出队前就提交第二个任务，
+        // 拒绝会发生在测试自己的 submit 上，而不是被测的 execute 上。
+        assertThat(running.await(1L, TimeUnit.SECONDS)).isTrue();
         pool.submit(() -> await(release));
         BoundedMcpCallExecutor executor = new BoundedMcpCallExecutor(
                 pool, mock(TelemetryPort.class));

@@ -16,6 +16,8 @@ public final class McpRateLimiter {
     public static final String MESSAGE = "mcp-message";
     public static final String RESOLVE = "mcp-resolve";
     public static final String CALL = "mcp-call";
+    /** 工具清单变更通知的广播资源键：目录抖动不应放大成会话风暴。 */
+    public static final String NOTIFY = "mcp-notify";
 
     private static final String GLOBAL_KEY = "global";
     private final RateLimiterManager delegate;

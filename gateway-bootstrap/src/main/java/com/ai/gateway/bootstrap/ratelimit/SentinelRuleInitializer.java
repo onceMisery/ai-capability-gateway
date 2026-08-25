@@ -12,7 +12,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 在启动时加载初始的硬编码 Sentinel 流控与降级规则。
@@ -40,10 +42,7 @@ public class SentinelRuleInitializer implements InitializingBean {
     private final double llmQps;
     private final int llmMaxQueueingMs;
     private final List<String> capabilityIds;
-    private final double mcpSseQps;
-    private final double mcpMessageQps;
-    private final double mcpResolveQps;
-    private final double mcpCallQps;
+    private final Map<String, Double> mcpQps;
 
     /**
      * 构造一个新的初始化器。
@@ -55,22 +54,31 @@ public class SentinelRuleInitializer implements InitializingBean {
      */
     public SentinelRuleInitializer(double globalQps, double llmQps, int llmMaxQueueingMs,
                                    List<String> capabilityIds) {
-        this(globalQps, llmQps, llmMaxQueueingMs, capabilityIds,
-                100d, 500d, 200d, 200d);
+        this(globalQps, llmQps, llmMaxQueueingMs, capabilityIds, Map.of());
     }
 
+    /**
+     * 构造一个新的初始化器。
+     *
+     * <p>MCP 维度以「资源键 → QPS」的映射传入，而不是逐个维度的形参：新增一个 MCP 入口
+     * （如工具清单变更通知）时只需在调用方多放一个键，本类无需再开一个构造重载，
+     * 也不会出现「配置里加了阈值但忘了注册规则」的静默漂移。键必须与
+     * {@code McpRateLimiter} 的资源键常量一致。</p>
+     *
+     * @param globalQps 全局 QPS 阈值
+     * @param llmQps LLM 路由 QPS 阈值
+     * @param llmMaxQueueingMs LLM 路由的最大排队时间
+     * @param capabilityIds 用于初始化降级规则的能力 id 列表
+     * @param mcpQps MCP 各入口维度的 QPS 阈值，键为限流资源键
+     */
     public SentinelRuleInitializer(double globalQps, double llmQps, int llmMaxQueueingMs,
                                    List<String> capabilityIds,
-                                   double mcpSseQps, double mcpMessageQps,
-                                   double mcpResolveQps, double mcpCallQps) {
+                                   Map<String, Double> mcpQps) {
         this.globalQps = globalQps;
         this.llmQps = llmQps;
         this.llmMaxQueueingMs = llmMaxQueueingMs;
         this.capabilityIds = capabilityIds == null ? List.of() : List.copyOf(capabilityIds);
-        this.mcpSseQps = mcpSseQps;
-        this.mcpMessageQps = mcpMessageQps;
-        this.mcpResolveQps = mcpResolveQps;
-        this.mcpCallQps = mcpCallQps;
+        this.mcpQps = mcpQps == null ? Map.of() : new LinkedHashMap<>(mcpQps);
     }
 
     /**
@@ -79,10 +87,9 @@ public class SentinelRuleInitializer implements InitializingBean {
     @Override
     public void afterPropertiesSet() {
         List<FlowRule> flowRules = getFlowRules();
-        addMcpRule(flowRules, "mcp-sse", mcpSseQps);
-        addMcpRule(flowRules, "mcp-message", mcpMessageQps);
-        addMcpRule(flowRules, "mcp-resolve", mcpResolveQps);
-        addMcpRule(flowRules, "mcp-call", mcpCallQps);
+        for (Map.Entry<String, Double> entry : mcpQps.entrySet()) {
+            addMcpRule(flowRules, entry.getKey(), entry.getValue());
+        }
 
         FlowRuleManager.loadRules(flowRules);
 
@@ -134,8 +141,8 @@ public class SentinelRuleInitializer implements InitializingBean {
     }
 
     private static void addMcpRule(List<FlowRule> flowRules, String dimension,
-                                   double qps) {
-        if (qps <= 0) {
+                                   Double qps) {
+        if (qps == null || qps <= 0) {
             throw new IllegalArgumentException("MCP QPS must be positive: " + dimension);
         }
         FlowRule rule = new FlowRule("gateway:" + dimension + ":global");

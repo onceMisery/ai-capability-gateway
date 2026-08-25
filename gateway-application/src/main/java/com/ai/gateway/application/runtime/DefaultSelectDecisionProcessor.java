@@ -223,8 +223,11 @@ public final class DefaultSelectDecisionProcessor implements SelectDecisionProce
                     principal, requestId, snapshotVersion, manifest, startTime);
         }
 
+        // 运行面自然语言链路的执行一律归属 gateway-nl 平面：诊断面是 dry-run，
+        // 永远不会走到这里，因此此处平面是常量而非入参。
         DeterministicExecutionUseCase.ExecutionResult result =
-                deterministicExecutionUseCase.execute(requestId, plan, principal, manifest);
+                deterministicExecutionUseCase.execute(requestId, plan, principal, manifest,
+                        AuditPlane.GATEWAY_NL);
         if (result.errorCode() != null) {
             return new NaturalLanguageQueryUseCase.QueryResult(
                     NaturalLanguageQueryUseCase.QueryStatus.ERROR, null, null, null,

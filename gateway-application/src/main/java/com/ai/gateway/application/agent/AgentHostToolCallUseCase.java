@@ -3,6 +3,7 @@ package com.ai.gateway.application.agent;
 import com.ai.gateway.application.catalog.ActiveCatalogView;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import com.ai.gateway.application.runtime.AgentToolCallUseCase;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.Principal;
 import com.ai.gateway.domain.model.PolicySnapshot;
 import com.ai.gateway.domain.model.RequestContext;
@@ -71,12 +72,33 @@ public final class AgentHostToolCallUseCase {
                        String locale,
                        String idempotencyKey,
                        boolean allowWritePrepare) {
+        return call(principal, requestId, toolRef, arguments, locale, idempotencyKey,
+                allowWritePrepare, AuditPlane.AGENT_HOST);
+    }
+
+    /**
+     * 在指定入口平面下执行 toolRef 校验与派发。
+     *
+     * <p>Host 直连与 MCP 客户端共用同一条校验链，只有审计与埋点归属不同：
+     * 平面作为入参而非成员，避免为每个入口各装配一个实例。</p>
+     *
+     * @param plane 发起本次调用的入口平面
+     */
+    public Result call(Principal principal,
+                       String requestId,
+                       String toolRef,
+                       Map<String, Object> arguments,
+                       String locale,
+                       String idempotencyKey,
+                       boolean allowWritePrepare,
+                       AuditPlane plane) {
         Objects.requireNonNull(principal, "principal must not be null");
         requireText(requestId, "requestId");
         requireText(toolRef, "toolRef");
         Objects.requireNonNull(arguments, "arguments must not be null");
         requireText(locale, "locale");
         requireText(idempotencyKey, "idempotencyKey");
+        Objects.requireNonNull(plane, "plane must not be null");
 
         long started = System.nanoTime();
         String outcome = "error";
@@ -110,32 +132,26 @@ public final class AgentHostToolCallUseCase {
                         view.catalogVersion(), policyEpoch);
             }
 
-            AgentToolCallUseCase.Result delegated = allowWritePrepare
-                    ? delegate.callResolved(
-                            requestId,
-                            principal,
-                            view.snapshot(),
-                            verification.manifest(),
-                            arguments,
-                            locale,
-                            idempotencyKey)
-                    : delegate.callResolved(
-                            requestId,
-                            principal,
-                            view.snapshot(),
-                            verification.manifest(),
-                            arguments,
-                            locale,
-                            idempotencyKey,
-                            false);
+            AgentToolCallUseCase.Result delegated = delegate.callResolved(
+                    requestId,
+                    principal,
+                    view.snapshot(),
+                    verification.manifest(),
+                    arguments,
+                    locale,
+                    idempotencyKey,
+                    allowWritePrepare,
+                    plane);
             outcome = delegated.status().name().toLowerCase(java.util.Locale.ROOT);
             return Result.from(delegated, verification.policyEpoch());
             } finally {
                 viewLease.close();
             }
         } finally {
+            // 埋点同样带上平面标签：MCP 与 Host 直连的时延/失败率必须可分别观测。
             telemetry.recordDuration("gateway.agent.call.duration", System.nanoTime() - started,
-                    Map.of("resource", "call", "outcome", outcome));
+                    Map.of("resource", "call", "outcome", outcome,
+                            AuditPlane.FIELD, plane.wireValue()));
         }
     }
 

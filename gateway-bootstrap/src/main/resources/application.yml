@@ -142,6 +142,20 @@ gateway:
   operation:
     confirmation-secret: ${GATEWAY_CONFIRMATION_SECRET:}
 
+  # 运行面自然语言路由的曝光策略。
+  # mode 语义（不删除 LLM 内核，只控制曝光面）：
+  #   FULL       -> 候选检索 + LLM 受限选择 + 多轮澄清会话（预发/测试默认）
+  #   COMPAT     -> 单回合，不建澄清会话（存量生产默认）
+  #   DIAGNOSTIC -> 运行面返回 501 NL_ROUTER_DISABLED；LLM 内核保留，
+  #                 仅通过管理面 POST /admin/v1/diagnostics/nl-route 暴露（新建生产默认）
+  #   DISABLED   -> 运行面与管理面诊断全部关闭；适用于不配置 LLM 凭据的最小部署
+  runtime:
+    nl-router:
+      mode: ${GATEWAY_NL_ROUTER_MODE:COMPAT}
+      diagnostics-enabled: ${GATEWAY_NL_ROUTER_DIAGNOSTICS_ENABLED:true}
+      diagnostics-max-candidates: ${GATEWAY_NL_ROUTER_DIAGNOSTICS_MAX_CANDIDATES:10}
+      diagnostics-qps: ${GATEWAY_NL_ROUTER_DIAGNOSTICS_QPS:5}
+
   agent:
     tool-ref-current-key-id: ${GATEWAY_AGENT_TOOL_REF_KEY_ID:k1}
     tool-ref-secret: ${GATEWAY_AGENT_TOOL_REF_SECRET:}
@@ -172,6 +186,15 @@ gateway:
     mcp-message-qps: ${GATEWAY_AGENT_MCP_MESSAGE_QPS:500}
     mcp-resolve-qps: ${GATEWAY_AGENT_MCP_RESOLVE_QPS:200}
     mcp-call-qps: ${GATEWAY_AGENT_MCP_CALL_QPS:200}
+    mcp-notify-qps: ${GATEWAY_AGENT_MCP_NOTIFY_QPS:20}
+    # tools/list 曝光模式：META_TOOL（仅两个 Meta-Tool）| DIRECT_PROJECTION（仅直投能力）
+    # | HYBRID（直投能力 + 保留 Meta-Tool）。模式只决定展示形态，不放宽任何安全约束：
+    # 直投与 Meta-Tool 共用同一条执行边界和同一次执行时授权。
+    mcp-tool-exposure: ${GATEWAY_AGENT_MCP_TOOL_EXPOSURE:HYBRID}
+    mcp-direct-max-tools: ${GATEWAY_AGENT_MCP_DIRECT_MAX_TOOLS:64}
+    mcp-direct-max-schema-bytes: ${GATEWAY_AGENT_MCP_DIRECT_MAX_SCHEMA_BYTES:131072}
+    # 目录/策略纪元的观测间隔，变化时向本节点会话推送 notifications/tools/list_changed。
+    mcp-tool-list-watch-ms: ${GATEWAY_AGENT_MCP_TOOL_LIST_WATCH_MS:5000}
     # 只填写已认证 Bearer Token 的 SHA-256 指纹，不填写明文 Token。
     # 未命中该注册表的客户端始终只能按 READ_ONLY 执行。
     mcp-trusted-clients: []

@@ -61,6 +61,7 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
     private final Duration closeTimeout;
     private final String nodeId;
     private final McpRateLimiter rateLimiter;
+    private final McpSessionRequestInterceptor requestInterceptor;
     private final RouterFunction<ServerResponse> routerFunction;
     private final ConcurrentHashMap<String, SessionBinding> sessions =
             new ConcurrentHashMap<>();
@@ -127,9 +128,32 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             Duration closeTimeout,
             String nodeId,
             McpRateLimiter rateLimiter) {
+        this(objectMapper, requestAuthenticator, telemetry, messageEndpoint, sseEndpoint,
+                maxSessions, idleTimeout, callTimeout, closeTimeout, nodeId, rateLimiter,
+                McpSessionRequestInterceptor.none());
+    }
+
+    /**
+     * @param requestInterceptor 会话级请求拦截器；用于服务按会话身份投影的工具面，
+     *                           {@link McpSessionRequestInterceptor#none()} 表示不拦截
+     */
+    public AuthenticatedWebMvcSseServerTransportProvider(
+            ObjectMapper objectMapper,
+            McpRequestAuthenticator requestAuthenticator,
+            TelemetryPort telemetry,
+            String messageEndpoint,
+            String sseEndpoint,
+            int maxSessions,
+            Duration idleTimeout,
+            Duration callTimeout,
+            Duration closeTimeout,
+            String nodeId,
+            McpRateLimiter rateLimiter,
+            McpSessionRequestInterceptor requestInterceptor) {
         this.objectMapper = Objects.requireNonNull(objectMapper);
         this.requestAuthenticator = Objects.requireNonNull(requestAuthenticator);
         this.telemetry = Objects.requireNonNull(telemetry);
+        this.requestInterceptor = Objects.requireNonNull(requestInterceptor);
         this.messageEndpoint = requirePath(messageEndpoint, "messageEndpoint");
         this.sseEndpoint = requirePath(sseEndpoint, "sseEndpoint");
         if (maxSessions <= 0) {
@@ -178,6 +202,33 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
                 .flatMap(binding -> binding.session().sendNotification(method, params)
                         .onErrorComplete())
                 .then();
+    }
+
+    /**
+     * 向本节点所有活跃会话推送 {@code notifications/tools/list_changed}。
+     *
+     * <p>与 {@link #notifyClients} 的区别是显式排除非本节点会话：{@code sessions} 只保存
+     * 本实例建立的会话，但会话键携带 {@code nodeId} 前缀，这里再做一次防御性校验，
+     * 使「只处理本节点会话」成为可断言的行为而不是隐含前提。</p>
+     *
+     * <p>单个会话推送失败（连接已断、客户端不支持该通知）只跳过该会话：推送本身不是
+     * 权威失效机制，真正的失效判定发生在执行期重新鉴权。</p>
+     *
+     * @return 收到推送的会话数
+     */
+    public int notifyToolListChanged() {
+        int notified = 0;
+        for (Map.Entry<String, SessionBinding> entry : sessions.entrySet()) {
+            if (isForeignSession(entry.getKey())) {
+                continue;
+            }
+            entry.getValue().session()
+                    .sendNotification(McpToolListChangeBroadcaster.METHOD, Map.of())
+                    .onErrorComplete()
+                    .subscribe();
+            notified++;
+        }
+        return notified;
     }
 
     @Override
@@ -234,7 +285,7 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
                     McpServerSession session = Objects.requireNonNull(sessionFactory,
                             "MCP session factory is not initialized").create(transport);
                     SessionBinding binding = new SessionBinding(
-                            session, principalFingerprint, System.nanoTime());
+                            session, transport, principalFingerprint, System.nanoTime());
                     synchronized (lifecycleLock) {
                         if (!isRunning()) {
                             session.closeGracefully().subscribe(
@@ -320,6 +371,11 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             String body = request.body(String.class);
             McpSchema.JSONRPCMessage message = McpSchema.deserializeJsonRpcMessage(
                     objectMapper, body);
+            long deadlineNanos = deadlineAfter(callTimeout);
+            if (interceptRequest(binding, message, requestContext, deadlineNanos)) {
+                binding.touch();
+                return ServerResponse.ok().build();
+            }
             Mono<Void> handling = binding.session().handle(message);
             if (handling == null) {
                 return ServerResponse.status(HttpStatus.INTERNAL_SERVER_ERROR)
@@ -327,8 +383,7 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
             }
             handling
                     .contextWrite(context -> McpRequestContextHolder.bindAuthenticated(
-                            context, requestContext, principal,
-                            deadlineAfter(callTimeout)))
+                            context, requestContext, principal, deadlineNanos))
                     .timeout(callTimeout)
                     .block();
             binding.touch();
@@ -353,6 +408,40 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
         long now = System.nanoTime();
         long deadline = now + timeout.toNanos();
         return deadline < now ? Long.MAX_VALUE : deadline;
+    }
+
+    /**
+     * 给拦截器一次作答机会，用于服务按会话身份投影的工具面。
+     *
+     * <p>仅拦截带 {@code id} 的请求（{@link McpSchema.JSONRPCRequest}）：通知没有响应可回，
+     * 拦截它只会让客户端状态机与 SDK 的认知产生分歧。拦截器返回 {@code null} 时原路交还
+     * SDK 会话，因此 {@code initialize}、{@code ping} 等方法的行为完全不变。</p>
+     *
+     * @return 是否已由拦截器作答
+     */
+    private boolean interceptRequest(SessionBinding binding, McpSchema.JSONRPCMessage message,
+                                     RequestContext requestContext, long deadlineNanos) {
+        if (!(message instanceof McpSchema.JSONRPCRequest jsonRpcRequest)) {
+            return false;
+        }
+        Object result;
+        try {
+            result = requestInterceptor.intercept(jsonRpcRequest.method(),
+                    jsonRpcRequest.params(), requestContext, deadlineNanos);
+        } catch (RuntimeException e) {
+            // 拦截器故障不得吞掉请求：交还 SDK 走既有路径，最差也只是回到静态工具面。
+            telemetry.increment("gateway.mcp.calls", Map.of("outcome", "intercept_failed"));
+            return false;
+        }
+        if (result == null) {
+            return false;
+        }
+        binding.transport()
+                .sendMessage(new McpSchema.JSONRPCResponse(McpSchema.JSONRPC_VERSION,
+                        jsonRpcRequest.id(), result, null))
+                .block(closeTimeout);
+        telemetry.increment("gateway.mcp.calls", Map.of("outcome", "intercepted"));
+        return true;
     }
 
     private Principal authenticate(RequestContext requestContext) {
@@ -477,20 +566,32 @@ public final class AuthenticatedWebMvcSseServerTransportProvider
 
     private static final class SessionBinding {
         private final McpServerSession session;
+        private final McpServerTransport transport;
         private final String principalFingerprint;
         private final AtomicLong lastAccessNanos;
         private final Semaphore inFlight = new Semaphore(1);
         private final AtomicBoolean closeClaimed = new AtomicBoolean();
 
-        private SessionBinding(McpServerSession session, String principalFingerprint,
-                               long lastAccessNanos) {
+        private SessionBinding(McpServerSession session, McpServerTransport transport,
+                               String principalFingerprint, long lastAccessNanos) {
             this.session = session;
+            this.transport = transport;
             this.principalFingerprint = principalFingerprint;
             this.lastAccessNanos = new AtomicLong(lastAccessNanos);
         }
 
         private McpServerSession session() {
             return session;
+        }
+
+        /**
+         * 直接回写会话传输通道。
+         *
+         * <p>被拦截的请求必须由我们自己作答，而 {@link McpServerSession} 只暴露
+         * {@code sendNotification}，无法回送带 {@code id} 的响应——因此这里保留传输引用。</p>
+         */
+        private McpServerTransport transport() {
+            return transport;
         }
 
         private String principalFingerprint() {

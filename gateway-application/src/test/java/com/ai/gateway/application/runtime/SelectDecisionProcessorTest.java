@@ -1,5 +1,6 @@
 package com.ai.gateway.application.runtime;
 
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.ArgumentBinding;
 import com.ai.gateway.domain.model.ArgumentSource;
 import com.ai.gateway.domain.model.CapabilityManifest;
@@ -56,7 +57,8 @@ class SelectDecisionProcessorTest {
         when(schemaValidator.validate(anyMap(), anyMap())).thenReturn(ValidationReport.success());
         when(authorization.authorizeExecution(principal, "order.query", "1.0.0"))
                 .thenReturn(true);
-        when(execution.execute(anyString(), any(ExecutionPlan.class), eq(principal), eq(manifest)))
+        when(execution.execute(anyString(), any(ExecutionPlan.class), eq(principal), eq(manifest),
+                eq(AuditPlane.GATEWAY_NL)))
                 .thenReturn(new DeterministicExecutionUseCase.ExecutionResult(
                         Map.of("ok", true), null, "ok"));
 
@@ -72,7 +74,8 @@ class SelectDecisionProcessorTest {
                                                ignoredStartTime) -> result);
 
         ArgumentCaptor<ExecutionPlan> plan = ArgumentCaptor.forClass(ExecutionPlan.class);
-        verify(execution).execute(eq("req-1"), plan.capture(), eq(principal), eq(manifest));
+        verify(execution).execute(eq("req-1"), plan.capture(), eq(principal), eq(manifest),
+                eq(AuditPlane.GATEWAY_NL));
         assertThat(plan.getValue().resolvedProtocolArguments()).containsExactly("en-US");
     }
 

@@ -1,6 +1,7 @@
 package com.ai.gateway.application.runtime;
 
 import com.ai.gateway.application.operation.OperationPrepareUseCase;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ConfirmationToken;
@@ -117,12 +118,31 @@ public final class AgentToolCallUseCase {
                                String locale,
                                String clientIdempotencyKey,
                                boolean allowWritePrepare) {
+        return callResolved(requestId, principal, snapshot, manifest, modelArguments,
+                locale, clientIdempotencyKey, allowWritePrepare, AuditPlane.AGENT_HOST);
+    }
+
+    /**
+     * 在指定入口平面下派发已固定的能力。
+     *
+     * @param plane 发起本次调用的入口平面；MCP 等入口传入自己的平面以便成本与故障率归属
+     */
+    public Result callResolved(String requestId,
+                               com.ai.gateway.domain.model.Principal principal,
+                               CatalogSnapshot snapshot,
+                               CapabilityManifest manifest,
+                               Map<String, Object> modelArguments,
+                               String locale,
+                               String clientIdempotencyKey,
+                               boolean allowWritePrepare,
+                               AuditPlane plane) {
         requireText(requestId, "requestId");
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(snapshot, "snapshot must not be null");
         Objects.requireNonNull(manifest, "manifest must not be null");
         Objects.requireNonNull(modelArguments, "modelArguments must not be null");
         requireText(locale, "locale");
+        Objects.requireNonNull(plane, "plane must not be null");
         String capabilityId = manifest.metadata().id();
         String capabilityVersion = manifest.metadata().version();
         if (manifest.spec().risk() == RiskLevel.WRITE_HIGH) {
@@ -133,7 +153,7 @@ public final class AgentToolCallUseCase {
         if (manifest.spec().risk() == RiskLevel.READ_ONLY) {
             return fromStructured(structuredInvocationUseCase.invokeResolved(
                     requestId, principal, snapshot, manifest,
-                    modelArguments, locale));
+                    modelArguments, locale, plane));
         }
         if (!allowWritePrepare) {
             return error("MCP_WRITE_DISABLED",

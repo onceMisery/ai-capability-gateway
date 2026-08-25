@@ -3,6 +3,7 @@ package com.ai.gateway.application.agent;
 import com.ai.gateway.application.operation.OperationCancelUseCase;
 import com.ai.gateway.application.operation.OperationConfirmUseCase;
 import com.ai.gateway.application.operation.OperationStatusUseCase;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.CapabilityVisibility;
 import com.ai.gateway.domain.model.OperationRecord;
 import com.ai.gateway.domain.model.OperationState;
@@ -21,8 +22,10 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -47,7 +50,7 @@ class AgentHostConnectorTest {
         assertThat(rejected.result().errorCode()).isEqualTo("TOOL_REF_NOT_IN_TURN");
         verify(fixtures.callUseCase, never()).call(
                 any(Principal.class), anyString(), anyString(), anyMap(),
-                anyString(), anyString());
+                anyString(), anyString(), anyBoolean(), any(AuditPlane.class));
     }
 
     @Test
@@ -55,7 +58,8 @@ class AgentHostConnectorTest {
         Fixtures fixtures = new Fixtures();
         fixtures.connector.resolve(RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
         Instant expiresAt = Instant.now().plusSeconds(60);
-        when(fixtures.callUseCase.call(any(Principal.class), anyString(), anyString(), anyMap(), anyString(), anyString()))
+        when(fixtures.callUseCase.call(any(Principal.class), anyString(), anyString(), anyMap(),
+                anyString(), anyString(), anyBoolean(), eq(AuditPlane.AGENT_HOST)))
                 .thenReturn(new AgentHostToolCallUseCase.Result(
                         AgentHostToolCallUseCase.Status.CONFIRMATION_REQUIRED, null, null,
                         "Update order", 8L, 42L, "op-1",
@@ -88,7 +92,8 @@ class AgentHostConnectorTest {
         Fixtures fixtures = new Fixtures();
         fixtures.connector.resolve(RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
         Instant expiresAt = Instant.now().plusSeconds(60);
-        when(fixtures.callUseCase.call(any(Principal.class), anyString(), anyString(), anyMap(), anyString(), anyString()))
+        when(fixtures.callUseCase.call(any(Principal.class), anyString(), anyString(), anyMap(),
+                anyString(), anyString(), anyBoolean(), eq(AuditPlane.AGENT_HOST)))
                 .thenReturn(new AgentHostToolCallUseCase.Result(
                         AgentHostToolCallUseCase.Status.CONFIRMATION_REQUIRED, null, null,
                         "Update order", 8L, 42L, "op-cancel", "private-token", true, expiresAt));
@@ -143,7 +148,8 @@ class AgentHostConnectorTest {
         Fixtures fixtures = new Fixtures();
         fixtures.connector.resolve(RequestContext.empty(), "turn-1", "resolve-1", "query order", 5);
         when(fixtures.callUseCase.call(any(Principal.class), anyString(), anyString(), anyMap(),
-                anyString(), anyString())).thenReturn(new AgentHostToolCallUseCase.Result(
+                anyString(), anyString(), anyBoolean(), eq(AuditPlane.AGENT_HOST)))
+                .thenReturn(new AgentHostToolCallUseCase.Result(
                         AgentHostToolCallUseCase.Status.COMPLETED, Map.of("ok", true), null,
                         "completed", 8L, 42L, null, null, false, null));
 
@@ -199,7 +205,7 @@ class AgentHostConnectorTest {
         assertThat(result.result().errorCode()).isEqualTo("TOOL_REF_NOT_IN_TURN");
         verify(fixtures.callUseCase, never()).call(
                 any(Principal.class), anyString(), anyString(), anyMap(),
-                anyString(), anyString());
+                anyString(), anyString(), anyBoolean(), any(AuditPlane.class));
     }
 
     private static final class Fixtures {

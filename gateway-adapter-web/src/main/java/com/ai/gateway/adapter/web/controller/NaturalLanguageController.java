@@ -265,6 +265,10 @@ public class NaturalLanguageController {
             case "PROTOCOL_ERROR" -> HttpStatus.BAD_GATEWAY;
             case "RESULT_TOO_LARGE" -> HttpStatus.PAYLOAD_TOO_LARGE;
             case "EXECUTION_UNKNOWN" -> HttpStatus.CONFLICT;
+            // 501：运行面自然语言路由在本部署未对外曝光。用 NOT_IMPLEMENTED 而非 403/404
+            // 是为了区分「无权限」「无匹配」与「该入口本身未开启」——调用方据此改用
+            // 结构化工具调用或 MCP 入口，而不是反复重试或去申请权限。
+            case "NL_ROUTER_DISABLED" -> HttpStatus.NOT_IMPLEMENTED;
             default -> HttpStatus.INTERNAL_SERVER_ERROR;
         };
     }

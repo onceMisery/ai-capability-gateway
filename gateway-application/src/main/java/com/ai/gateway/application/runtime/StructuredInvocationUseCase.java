@@ -1,5 +1,6 @@
 package com.ai.gateway.application.runtime;
 
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ErrorCode;
@@ -153,12 +154,39 @@ public final class StructuredInvocationUseCase {
                                  CapabilityManifest manifest,
                                  Map<String, Object> modelArguments,
                                  String locale) {
+        return invokeResolved(requestId, principal, snapshot, manifest, modelArguments,
+                locale, AuditPlane.STRUCTURED);
+    }
+
+    /**
+     * 在指定入口平面下调用已固定的能力清单。
+     *
+     * <p>平面仅用于审计与成本归属：Agent、MCP、A2A 与结构化直调共用同一条确定性执行链，
+     * 若不区分平面，某一入口的故障率会被其他入口的流量稀释。安全判定与本参数无关。</p>
+     *
+     * @param requestId 入站请求标识
+     * @param principal 已认证主体
+     * @param snapshot 已固定的目录快照
+     * @param manifest 已固定的能力清单
+     * @param modelArguments 模型/调用方提交的公开参数
+     * @param locale 语言标签
+     * @param plane 发起本次调用的入口平面
+     * @return 调用结果
+     */
+    public Result invokeResolved(String requestId,
+                                 Principal principal,
+                                 CatalogSnapshot snapshot,
+                                 CapabilityManifest manifest,
+                                 Map<String, Object> modelArguments,
+                                 String locale,
+                                 AuditPlane plane) {
         requireText(requestId, "requestId");
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(snapshot, "snapshot must not be null");
         Objects.requireNonNull(manifest, "manifest must not be null");
         Objects.requireNonNull(modelArguments, "modelArguments must not be null");
         requireText(locale, "locale");
+        Objects.requireNonNull(plane, "plane must not be null");
         String capabilityId = manifest.metadata().id();
         String capabilityVersion = manifest.metadata().version();
         if (manifest.spec().risk() != RiskLevel.READ_ONLY) {
@@ -214,7 +242,7 @@ public final class StructuredInvocationUseCase {
                 modelArguments, boundArguments, "policy-" + executionId,
                 manifest.spec().risk(), policy);
         DeterministicExecutionUseCase.ExecutionResult execution =
-                deterministicExecutionUseCase.execute(requestId, plan, principal, manifest);
+                deterministicExecutionUseCase.execute(requestId, plan, principal, manifest, plane);
         if (execution.errorCode() != null) {
             return new Result(Status.ERROR, execution.data(), execution.errorCode(),
                     execution.summary(), snapshot.snapshotVersion(), capabilityId, capabilityVersion);

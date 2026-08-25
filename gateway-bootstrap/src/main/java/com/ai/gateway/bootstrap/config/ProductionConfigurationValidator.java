@@ -1,5 +1,8 @@
 package com.ai.gateway.bootstrap.config;
 
+import com.ai.gateway.domain.model.NlRouterMode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
@@ -19,9 +22,24 @@ import java.util.Set;
 @Component
 public final class ProductionConfigurationValidator implements InitializingBean {
 
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(ProductionConfigurationValidator.class);
+
     private static final Set<String> ALLOWED_ENVIRONMENTS =
             Set.of("development", "test", "staging", "production");
     private static final int MIN_SECRET_BYTES = 32;
+    private static final String NL_ROUTER_MODE_KEY = "gateway.runtime.nl-router.mode";
+    private static final String NL_ROUTER_DIAGNOSTICS_ENABLED_KEY =
+            "gateway.runtime.nl-router.diagnostics-enabled";
+    /**
+     * A2A 入站选择档位配置键。
+     *
+     * <p>该配置由 P1 的 {@code gateway-adapter-a2a} 模块引入；此处提前校验其与
+     * 自然语言路由模式的组合，使「先配 A2A、后关 LLM」这类顺序造成的非法组合
+     * 在启动期即被拦下，而不必等 A2A 模块落地后再补校验。</p>
+     */
+    private static final String A2A_SELECTION_MODE_KEY = "gateway.a2a.selection-mode";
+    private static final String GATEWAY_SELECTION = "GATEWAY_SELECTION";
 
     private final Environment environment;
 
@@ -46,6 +64,10 @@ public final class ProductionConfigurationValidator implements InitializingBean 
             throw new IllegalStateException(
                     "gateway.environment must be one of " + ALLOWED_ENVIRONMENTS);
         }
+        // 自然语言路由模式在所有环境都必须可解析：模式拼错会静默退化成默认档，
+        // 使运行面在本应关闭的部署上继续曝光，属安全相关的配置错误。
+        NlRouterMode routerMode = requireValidNlRouterMode(environment);
+        validateNlRouterCombinations(environment, routerMode);
         if (!"production".equals(normalized)) {
             return;
         }
@@ -59,9 +81,13 @@ public final class ProductionConfigurationValidator implements InitializingBean 
         requireNonBlank(environment, violations, "spring.datasource.username");
         requireNonBlank(environment, violations, "spring.datasource.password");
         requireNonBlank(environment, violations, "gateway.redis.address");
-        requireNonBlank(environment, violations, "gateway.llm.endpoint");
-        requireNonBlank(environment, violations, "gateway.llm.api-key");
-        requireNonBlank(environment, violations, "gateway.llm.model");
+        // LLM 凭据只在「内核会被使用」时强制：DISABLED 档下运行面与诊断面都关闭，
+        // 此时强制凭据会让「不需要模型的最小部署」无法上线。
+        if (routerMode.llmKernelLoaded()) {
+            requireNonBlank(environment, violations, "gateway.llm.endpoint");
+            requireNonBlank(environment, violations, "gateway.llm.api-key");
+            requireNonBlank(environment, violations, "gateway.llm.model");
+        }
         requireNonBlank(environment, violations, "dubbo.registry.address");
 
         String datasourceUrl = value(environment, "spring.datasource.url");
@@ -89,6 +115,64 @@ public final class ProductionConfigurationValidator implements InitializingBean 
         if (!violations.isEmpty()) {
             throw new IllegalStateException(
                     "Unsafe production configuration: " + String.join("; ", violations));
+        }
+    }
+
+    /**
+     * 解析并校验 {@code gateway.runtime.nl-router.mode}。
+     *
+     * <p>该校验对所有环境生效而非仅生产：模式拼错在任何环境都会静默回落到默认档，
+     * 使一个「本应关闭运行面」的部署继续对外曝光自然语言入口——这属于曝光面错误，
+     * 与环境无关。</p>
+     *
+     * @param environment Spring 环境
+     * @return 解析出的模式
+     * @throws IllegalStateException 取值不在 {@link NlRouterMode} 范围内时抛出
+     */
+    private static NlRouterMode requireValidNlRouterMode(Environment environment) {
+        String rawMode = value(environment, NL_ROUTER_MODE_KEY);
+        try {
+            return NlRouterMode.parse(rawMode);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(NL_ROUTER_MODE_KEY + " must be one of "
+                    + java.util.Arrays.toString(NlRouterMode.values())
+                    + " but was '" + rawMode + "'", e);
+        }
+    }
+
+    /**
+     * 校验自然语言路由模式与其它开关的组合合法性。
+     *
+     * <p>两类组合被区别对待，判据是「继续启动是否会造成安全或语义错误」：</p>
+     * <ul>
+     * <li><b>硬失败</b>：{@code DISABLED} 档下 A2A 入站仍选择 {@code GATEWAY_SELECTION}。
+     * 该档位要求网关自己跑受限选择，而 LLM 内核在 DISABLED 下不装配，
+     * 运行期必然在每次入站请求上失败。让它在启动期失败，而不是在流量上失败。</li>
+     * <li><b>降级并告警</b>：{@code DISABLED} 档下仍显式开启管理面诊断。
+     * 归一化本身已由 {@code NlRouterMode.diagnosticsCapable()} 与
+     * {@code NlRouterPolicy} 在同一处完成，此处不重复判定、只提示配置无效，
+     * 避免运维误以为诊断端点可用。</li>
+     * </ul>
+     *
+     * @param environment Spring 环境
+     * @param routerMode  已解析的模式
+     */
+    private static void validateNlRouterCombinations(Environment environment,
+                                                     NlRouterMode routerMode) {
+        if (routerMode.llmKernelLoaded()) {
+            return;
+        }
+        String a2aSelectionMode = value(environment, A2A_SELECTION_MODE_KEY);
+        if (GATEWAY_SELECTION.equalsIgnoreCase(a2aSelectionMode)) {
+            throw new IllegalStateException(A2A_SELECTION_MODE_KEY + " must not be '"
+                    + GATEWAY_SELECTION + "' when " + NL_ROUTER_MODE_KEY + " is "
+                    + NlRouterMode.DISABLED + ": gateway-side restricted selection requires "
+                    + "the LLM kernel");
+        }
+        if (Boolean.parseBoolean(value(environment, NL_ROUTER_DIAGNOSTICS_ENABLED_KEY))) {
+            LOGGER.warn("{}=true is ignored because {} is {}; catalog diagnostics stays "
+                            + "unavailable on this deployment",
+                    NL_ROUTER_DIAGNOSTICS_ENABLED_KEY, NL_ROUTER_MODE_KEY, routerMode);
         }
     }
 

@@ -10,6 +10,8 @@ import com.ai.gateway.application.agent.AgentModelResultMapper;
 import com.ai.gateway.application.agent.AgentHostConnector;
 import com.ai.gateway.application.agent.AgentResolveAdmissionController;
 import com.ai.gateway.application.agent.AgentTurnStore;
+import com.ai.gateway.application.agent.AgentToolProjectionUseCase;
+import com.ai.gateway.application.agent.CapabilityProjectionRanker;
 import com.ai.gateway.application.agent.InMemoryAgentTurnStore;
 import com.ai.gateway.application.agent.CapabilityPublicProjectionService;
 import com.ai.gateway.application.agent.InMemoryPendingConfirmationStore;
@@ -23,6 +25,7 @@ import com.ai.gateway.adapter.mcp.McpRateLimiter;
 import com.ai.gateway.adapter.mcp.McpSecurityMode;
 import com.ai.gateway.adapter.mcp.McpWebMvcTransportAdapter;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
+import com.ai.gateway.application.catalog.CandidateResolutionService;
 import com.ai.gateway.application.catalog.LuceneCandidateRetriever;
 import com.ai.gateway.application.console.AclManageUseCase;
 import com.ai.gateway.application.console.AuditQueryUseCase;
@@ -56,10 +59,13 @@ import com.ai.gateway.application.runtime.AgentToolCatalogUseCase;
 import com.ai.gateway.application.runtime.DeterministicExecutionUseCase;
 import com.ai.gateway.application.runtime.DefaultSelectDecisionProcessor;
 import com.ai.gateway.application.runtime.NaturalLanguageQueryUseCase;
+import com.ai.gateway.application.runtime.NlRouteDiagnosticsUseCase;
+import com.ai.gateway.application.runtime.NlRouterPolicy;
 import com.ai.gateway.application.runtime.SelectDecisionProcessor;
 import com.ai.gateway.application.runtime.StructuredInvocationUseCase;
 import com.ai.gateway.application.runtime.HealthReadinessUseCase;
 import com.ai.gateway.domain.model.CacheStatus;
+import com.ai.gateway.domain.model.NlRouterMode;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ConverterType;
 import com.ai.gateway.domain.model.GatewayConfig;
@@ -591,29 +597,76 @@ public class BeanConfig {
                 typeConverterRegistry, deterministicExecutionUseCase, payloadLimits);
     }
 
+    /**
+     * 运行面自然语言路由的曝光策略。
+     *
+     * <p>把配置文本在装配期一次性解析为不可变值对象：运行面用例与管理面诊断用例共享
+     * 同一个实例，因此两者对「是否曝光 / 是否允许澄清会话 / 是否允许诊断」的判定
+     * 天然一致，不存在两处各自 switch 模式枚举而漂移的可能。</p>
+     */
+    @Bean
+    public NlRouterPolicy nlRouterPolicy(GatewayProperties gatewayProperties) {
+        GatewayProperties.NlRouter config = gatewayProperties.getRuntime().getNlRouter();
+        return new NlRouterPolicy(
+                NlRouterMode.parse(config.getMode()),
+                config.isDiagnosticsEnabled(),
+                config.getDiagnosticsMaxCandidates() > 0
+                        ? config.getDiagnosticsMaxCandidates()
+                        : NlRouterPolicy.DEFAULT_DIAGNOSTICS_MAX_CANDIDATES);
+    }
+
+    /**
+     * 候选能力确定性解析服务：运行面自然语言路由与管理面诊断面共用的唯一检索内核。
+     *
+     * <p>之所以必须是单一 Bean：该链路含授权前置过滤这一安全关键步骤，多个入口各自
+     * 持有一套检索实现等同于持有多套授权过滤，任何一处遗漏都是越权泄漏。</p>
+     */
+    @Bean
+    public CandidateResolutionService candidateResolutionService(
+            CatalogPort catalogPort,
+            AuthorizationPort authorizationPort,
+            CandidateRetriever candidateRetriever,
+            TextNormalizer textNormalizer) {
+        return new CandidateResolutionService(catalogPort, authorizationPort,
+                candidateRetriever, textNormalizer, CatalogEnvironment.DEFAULT);
+    }
+
+    /**
+     * 管理面能力目录诊断用例（dry-run）。
+     *
+     * <p>与运行面用例共用 {@link CandidateResolutionService}、{@link ThresholdEvaluator}
+     * 与 {@code RoutingThresholds.defaults()}，因此诊断结论可用于解释线上行为。</p>
+     */
+    @Bean
+    public NlRouteDiagnosticsUseCase nlRouteDiagnosticsUseCase(
+            CandidateResolutionService candidateResolutionService,
+            CapabilityPublicProjectionService projectionService,
+            AliasGenerator aliasGenerator,
+            ThresholdEvaluator thresholdEvaluator,
+            LlmRouterPort llmRouterPort,
+            com.ai.gateway.domain.port.AuditPort auditPort,
+            NlRouterPolicy nlRouterPolicy) {
+        return new NlRouteDiagnosticsUseCase(candidateResolutionService, projectionService,
+                aliasGenerator, thresholdEvaluator, llmRouterPort, auditPort, nlRouterPolicy);
+    }
+
     @Bean
     public NaturalLanguageQueryUseCase naturalLanguageQueryUseCase(
             AuthenticationPort authenticationPort,
-            AuthorizationPort authorizationPort,
-            CatalogPort catalogPort,
-            CandidateRetriever candidateRetriever,
+            CandidateResolutionService candidateResolutionService,
             com.ai.gateway.domain.port.AuditPort auditPort,
             ThresholdEvaluator thresholdEvaluator,
             InteractionRepository interactionRepository,
-            TextNormalizer textNormalizer,
-            GatewayProperties gatewayProperties,
-            SelectDecisionProcessor selectDecisionProcessor) {
+            SelectDecisionProcessor selectDecisionProcessor,
+            NlRouterPolicy nlRouterPolicy) {
         return new NaturalLanguageQueryUseCase(
                 authenticationPort,
-                authorizationPort,
-                catalogPort,
-                candidateRetriever,
+                candidateResolutionService,
                 auditPort,
                 thresholdEvaluator,
-                textNormalizer,
                 interactionRepository,
-                CatalogEnvironment.DEFAULT,
-                selectDecisionProcessor);
+                selectDecisionProcessor,
+                nlRouterPolicy);
     }
 
     /**
@@ -813,14 +866,102 @@ public class BeanConfig {
             AgentHostConnector connector,
             GatewayProperties gatewayProperties,
             McpClientTrustRegistry trustRegistry,
-            McpRateLimiter mcpRateLimiter) {
+            McpRateLimiter mcpRateLimiter,
+            com.ai.gateway.adapter.mcp.McpProjectedToolCatalog mcpProjectedToolCatalog) {
         McpSecurityMode mode = McpSecurityMode.parse(
                 gatewayProperties.getAgent().getMcpSecurityMode());
         assertMcpSecurityModeAllowed(mode, gatewayProperties.getEnvironment());
         if (mode == McpSecurityMode.DISABLED) {
             throw new IllegalStateException("MCP is disabled by configuration");
         }
-        return new McpGatewayAdapter(connector, mode, trustRegistry, mcpRateLimiter);
+        return new McpGatewayAdapter(connector, mode, trustRegistry, mcpRateLimiter,
+                mcpProjectedToolCatalog);
+    }
+
+    /**
+     * 无查询词的工具投影用例：{@code tools/list} 需要的是「我被授权的全部只读能力」，
+     * 而不是「与某句自然语言最相关的 Top-K」，因此它不依赖 {@code CandidateRetriever}。
+     */
+    @Bean
+    public AgentToolProjectionUseCase agentToolProjectionUseCase(
+            AuthenticationPort authenticationPort,
+            AuthorizationPort authorizationPort,
+            InMemoryCatalogManager catalogManager,
+            ToolReferenceService toolReferenceService,
+            AgentTurnStore agentTurnStore,
+            AliasGenerator aliasGenerator,
+            TelemetryPort telemetryPort) {
+        return new AgentToolProjectionUseCase(
+                authenticationPort, authorizationPort, catalogManager,
+                toolReferenceService, agentTurnStore, aliasGenerator,
+                CapabilityProjectionRanker.lexicographic(), telemetryPort);
+    }
+
+    /**
+     * MCP 工具面的曝光策略。
+     *
+     * <p>曝光模式只决定「展示形态」：直投能力与 Meta-Tool 共用同一条执行边界与同一次
+     * 执行时授权，因此切换模式不放宽任何安全约束，只改变模型看到的工具列表。</p>
+     */
+    @Bean
+    public com.ai.gateway.adapter.mcp.McpProjectedToolCatalog mcpProjectedToolCatalog(
+            GatewayProperties gatewayProperties,
+            AgentToolProjectionUseCase agentToolProjectionUseCase,
+            TelemetryPort telemetryPort) {
+        GatewayProperties.Agent agent = gatewayProperties.getAgent();
+        com.ai.gateway.adapter.mcp.McpToolExposureMode mode = mcpToolExposureMode(
+                agent.getMcpToolExposure());
+        if (!mode.projectsCapabilities()) {
+            // META_TOOL 模式下不注入投影用例，杜绝「模式为纯 Meta-Tool 却仍走投影」的可能。
+            return com.ai.gateway.adapter.mcp.McpProjectedToolCatalog.metaToolOnly();
+        }
+        return com.ai.gateway.adapter.mcp.McpProjectedToolCatalog.of(mode,
+                agentToolProjectionUseCase,
+                new AgentToolProjectionUseCase.ProjectionBudget(
+                        agent.getMcpDirectMaxTools(), agent.getMcpDirectMaxSchemaBytes()),
+                telemetryPort);
+    }
+
+    private static com.ai.gateway.adapter.mcp.McpToolExposureMode mcpToolExposureMode(
+            String configured) {
+        String normalized = configured == null ? "" : configured.trim();
+        if (normalized.isEmpty()) {
+            throw new IllegalStateException("gateway.agent.mcp-tool-exposure must not be blank");
+        }
+        try {
+            return com.ai.gateway.adapter.mcp.McpToolExposureMode.valueOf(
+                    normalized.toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(
+                    "gateway.agent.mcp-tool-exposure is invalid: " + configured, e);
+        }
+    }
+
+    /**
+     * 目录/策略纪元变化时向本节点会话推送 {@code notifications/tools/list_changed}。
+     *
+     * <p>推送属于体验优化而非安全机制：alias 索引每次 {@code tools/list} 都重建，
+     * 授权在执行时再判一次，因此「通知没送达」最差只是客户端多拿到一次
+     * {@code CAPABILITY_UNAVAILABLE}，不会放行任何越权调用。</p>
+     */
+    @Bean(destroyMethod = "close")
+    public com.ai.gateway.adapter.mcp.McpToolListChangeBroadcaster mcpToolListChangeBroadcaster(
+            McpWebMvcTransportAdapter transportAdapter,
+            InMemoryCatalogManager catalogManager,
+            AuthorizationPort authorizationPort,
+            McpRateLimiter mcpRateLimiter,
+            TelemetryPort telemetryPort,
+            GatewayProperties gatewayProperties) {
+        com.ai.gateway.adapter.mcp.McpToolListChangeBroadcaster broadcaster =
+                new com.ai.gateway.adapter.mcp.McpToolListChangeBroadcaster(
+                        () -> new com.ai.gateway.adapter.mcp.McpToolListChangeBroadcaster.Epoch(
+                                catalogManager.getCurrentSnapshotVersion(),
+                                authorizationPort.currentPolicyEpoch()),
+                        transportAdapter.transportProvider()::notifyToolListChanged,
+                        mcpRateLimiter, telemetryPort);
+        broadcaster.start(java.time.Duration.ofMillis(
+                gatewayProperties.getAgent().getMcpToolListWatchMs()));
+        return broadcaster;
     }
 
     @Bean

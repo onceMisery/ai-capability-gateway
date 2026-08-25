@@ -158,6 +158,8 @@ public class GlobalExceptionHandler {
             case PROTOCOL_ERROR -> HttpStatus.BAD_GATEWAY;
             case RESULT_TOO_LARGE -> HttpStatus.PAYLOAD_TOO_LARGE;
             case EXECUTION_UNKNOWN -> HttpStatus.CONFLICT;
+            // 501：该入口在本部署未曝光（曝光策略结果，非能力缺失）。
+            case NL_ROUTER_DISABLED -> HttpStatus.NOT_IMPLEMENTED;
         };
     }
 

@@ -21,6 +21,7 @@ public final class CapabilityPublicProjectionService {
     private static final int MAX_FIELD_DESCRIPTION = 160;
     private static final int MAX_PROPERTIES = 32;
     private static final int MAX_PUBLIC_SCHEMA_BYTES = 16 * 1024;
+    private static final int MAX_EXAMPLE = 120;
     private static final Set<String> COMBINATORS = Set.of(
             "oneOf", "anyOf", "allOf", "not", "if", "then", "else",
             "dependentSchemas", "patternProperties", "unevaluatedProperties");
@@ -57,8 +58,21 @@ public final class CapabilityPublicProjectionService {
                 publicSchema));
     }
 
-    private Map<String, Object> stripTrustedFields(CapabilityManifest manifest) {
-        Set<String> hiddenRootFields = new java.util.HashSet<>();
+    /**
+     * 计算「因来源非 MODEL 而必须从模型可见 Schema 中剥离」的根级字段名。
+     *
+     * <p>与 {@link #stripTrustedFields(CapabilityManifest)} 共用同一份判定，
+     * 保证管理面诊断展示的剥离清单与模型实际看到的投影严格一致——若两者各自实现，
+     * 诊断结论就可能与真实模型视图不符，从而给出错误的清单修复建议。</p>
+     *
+     * @param manifest 能力清单，允许为 {@code null}
+     * @return 被剥离的根级字段名集合；无剥离时为空集合，永不为 {@code null}
+     */
+    public Set<String> trustedFieldNames(CapabilityManifest manifest) {
+        if (manifest == null) {
+            return Set.of();
+        }
+        Set<String> hiddenRootFields = new java.util.LinkedHashSet<>();
         for (ArgumentBinding binding : manifest.spec().invocation().arguments()) {
             if (!binding.isComposite() && binding.source() != null
                     && binding.source() != ArgumentSource.MODEL) {
@@ -75,6 +89,42 @@ public final class CapabilityPublicProjectionService {
                 });
             }
         }
+        return hiddenRootFields;
+    }
+
+    /**
+     * 计算「可以安全出现在 Agent 侧可见面上的正向示例」。
+     *
+     * <p>这是一个<b>新增</b>的公开投影视角，而不是对 {@link Projection} 的改造：示例只被 AgentCard
+     * 这类「域粒度描述面」需要，把它塞进 {@code Projection} 会波及所有既有构造点，
+     * 也会让 MCP 工具投影凭空多出一份它并不使用的字段（开闭原则）。</p>
+     *
+     * <p>示例与 {@link #project(CapabilityManifest)} 共用同一道注入检测：命中注入模式的清单一律
+     * 返回空列表，而不是「去掉可疑那条、留下其余」——同一份清单里既然已有人尝试注入，
+     * 它剩余的自然语言内容也不再具备可信度。</p>
+     *
+     * @param manifest     能力清单，允许为 {@code null}
+     * @param maxExamples  返回条数上限，非正数时返回空列表
+     * @return 已归一化、去重、截断的正向示例；不可用时为空列表，永不为 {@code null}
+     */
+    public List<String> publicExamples(CapabilityManifest manifest, int maxExamples) {
+        if (manifest == null || maxExamples <= 0 || containsUnsafeContent(manifest)) {
+            return List.of();
+        }
+        java.util.LinkedHashSet<String> examples = new java.util.LinkedHashSet<>();
+        for (String candidate : manifest.spec().examples().positive()) {
+            String sanitized = sanitize(candidate, MAX_EXAMPLE);
+            if (!sanitized.isEmpty()) {
+                examples.add(sanitized);
+            }
+            if (examples.size() >= maxExamples) {
+                break;
+            }
+        }
+        return List.copyOf(examples);
+    }
+
+    private Map<String, Object> stripTrustedFields(CapabilityManifest manifest) {        Set<String> hiddenRootFields = trustedFieldNames(manifest);
         if (hiddenRootFields.isEmpty()) {
             return manifest.spec().inputSchema();
         }

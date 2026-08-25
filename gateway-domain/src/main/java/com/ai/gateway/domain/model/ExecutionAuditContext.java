@@ -17,6 +17,7 @@ import java.util.Objects;
  * @param capabilityVersion 能力版本
  * @param manifestDigest Manifest 摘要
  * @param snapshotVersion 执行时固定的目录快照版本
+ * @param plane 发起本次执行的入口平面，用于成本与故障率归属
  * @author cmiracle@163.com
  * @since 0.1.0
  */
@@ -28,7 +29,8 @@ public record ExecutionAuditContext(
         String capabilityId,
         String capabilityVersion,
         String manifestDigest,
-        long snapshotVersion
+        long snapshotVersion,
+        AuditPlane plane
 ) {
 
     public ExecutionAuditContext {
@@ -40,6 +42,40 @@ public record ExecutionAuditContext(
         if (snapshotVersion <= 0) {
             throw new IllegalArgumentException("snapshotVersion must be positive");
         }
+        Objects.requireNonNull(plane, "plane must not be null");
+    }
+
+    /**
+     * 兼容既有调用方的构造器：未声明平面时按结构化直调归属。
+     *
+     * <p>新增入口平面只需在调用点补一次 {@link #withPlane(AuditPlane)}，
+     * 既有调用方无需改动。</p>
+     */
+    public ExecutionAuditContext(
+            String requestId,
+            String operationId,
+            String subjectDigest,
+            long orgId,
+            String capabilityId,
+            String capabilityVersion,
+            String manifestDigest,
+            long snapshotVersion) {
+        this(requestId, operationId, subjectDigest, orgId, capabilityId, capabilityVersion,
+                manifestDigest, snapshotVersion, AuditPlane.STRUCTURED);
+    }
+
+    /**
+     * 返回仅替换入口平面的副本。
+     *
+     * <p>平面由入口决定、由执行链携带，因此在此处以「派生」而非「构造参数」表达：
+     * 上游任何入口都可以在不改动工厂方法签名的前提下声明自己的平面。</p>
+     *
+     * @param plane 目标平面
+     * @return 平面被替换后的新上下文
+     */
+    public ExecutionAuditContext withPlane(AuditPlane plane) {
+        return new ExecutionAuditContext(requestId, operationId, subjectDigest, orgId,
+                capabilityId, capabilityVersion, manifestDigest, snapshotVersion, plane);
     }
 
     /**

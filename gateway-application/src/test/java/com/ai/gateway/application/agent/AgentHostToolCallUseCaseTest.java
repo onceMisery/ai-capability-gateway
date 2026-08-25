@@ -2,6 +2,7 @@ package com.ai.gateway.application.agent;
 
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import com.ai.gateway.application.runtime.AgentToolCallUseCase;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.Principal;
@@ -20,6 +21,7 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -35,7 +37,8 @@ class AgentHostToolCallUseCaseTest {
         Fixtures fixtures = new Fixtures();
         when(fixtures.delegate.callResolved(
                 anyString(), eq(fixtures.principal), any(), eq(fixtures.manifest),
-                anyMap(), eq("zh-CN"), eq("idem-1")))
+                anyMap(), eq("zh-CN"), eq("idem-1"), anyBoolean(),
+                eq(AuditPlane.AGENT_HOST)))
                 .thenReturn(new AgentToolCallUseCase.Result(
                         AgentToolCallUseCase.Status.COMPLETED, Map.of("ok", true),
                         null, "completed", 8L, "orders.detail.query", "1.0.0",

@@ -86,10 +86,15 @@ public class AdminAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private AdminAction actionFor(HttpServletRequest request) {
+        String path = request.getRequestURI();
+        // 诊断端点是 POST（需要请求体承载查询文本）但语义上不是导入，
+        // 必须在 GET/POST 分流之前单独判定，否则会落到 IMPORT 兜底分支上被错误授权。
+        if (path.contains("/diagnostics/")) {
+            return AdminAction.DIAGNOSE;
+        }
         if ("GET".equalsIgnoreCase(request.getMethod())) {
             return AdminAction.READ;
         }
-        String path = request.getRequestURI();
         if (path.contains("/acl/") || path.contains("/roles") || path.contains("/permissions")) {
             return AdminAction.MANAGE_ACL;
         }

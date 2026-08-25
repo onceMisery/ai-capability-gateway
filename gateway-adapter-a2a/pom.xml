@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.ai.gateway</groupId>
+        <artifactId>ai-capability-gateway</artifactId>
+        <version>0.1.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>gateway-adapter-a2a</artifactId>
+    <name>Gateway Adapter A2A</name>
+    <description>Inbound A2A server bridge over the shared Agent application use cases</description>
+    <dependencies>
+        <!--
+            只依赖 a2a-java-sdk-spec：它是纯记录 + Jackson，没有容器耦合。
+            a2a-java-sdk-server-common 会带入 jakarta.enterprise.cdi-api / jakarta.inject-api /
+            mutiny-zero 等 CDI 与 Quarkus 取向的依赖，与本项目的 Spring 栈不匹配；
+            JSON-RPC 分发在本模块内实现（与 MCP 模块自持传输提供者的做法一致）。
+        -->
+        <dependency>
+            <groupId>io.github.a2asdk</groupId>
+            <artifactId>a2a-java-sdk-spec</artifactId>
+            <version>${a2a-sdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-application</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

@@ -63,5 +63,14 @@
             <artifactId>archunit-junit5</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+          仅测试作用域：golden query 检索基线以 JSON 维护（docs/aegis/baseline/），
+          需要一个解析器读取它。生产代码仍保持零 Jackson 依赖（application 层不做序列化）。
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

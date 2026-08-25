@@ -117,10 +117,14 @@ public final class McpWebMvcTransportAdapter {
         this.objectMapper = Objects.requireNonNull(objectMapper);
         Objects.requireNonNull(gatewayAdapter);
         Objects.requireNonNull(callExecutor);
+        // SDK 的高层服务只能静态注册工具，因此注册面永远是两个 Meta-Tool；
+        // 按会话身份投影的工具面由拦截器在 JSON-RPC 层覆盖 tools/list 与 alias 形态的
+        // tools/call。两者分工明确：静态注册保证协议握手可用，拦截器负责身份相关部分。
         this.transportProvider = new AuthenticatedWebMvcSseServerTransportProvider(
                 objectMapper, requestAuthenticator, telemetry,
                 "/mcp/message", "/mcp/sse", maxSessions, idleTimeout, callTimeout,
-                closeTimeout, nodeId, rateLimiter);
+                closeTimeout, nodeId, rateLimiter,
+                new McpSessionToolFacade(gatewayAdapter, objectMapper, callExecutor));
         McpServer.AsyncSpecification specification = McpServer.async(transportProvider)
                 .serverInfo("ai-capability-gateway", "0.1.0")
                 .capabilities(McpSchema.ServerCapabilities.builder().tools(false).build());

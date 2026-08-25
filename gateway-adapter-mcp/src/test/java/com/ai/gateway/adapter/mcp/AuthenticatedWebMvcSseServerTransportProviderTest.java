@@ -258,9 +258,11 @@ class AuthenticatedWebMvcSseServerTransportProviderTest {
                 AuthenticatedWebMvcSseServerTransportProvider.class.getName()
                         + "$SessionBinding");
         Constructor<?> constructor = bindingType.getDeclaredConstructor(
-                McpServerSession.class, String.class, long.class);
+                McpServerSession.class, io.modelcontextprotocol.spec.McpServerTransport.class,
+                String.class, long.class);
         constructor.setAccessible(true);
         Object binding = constructor.newInstance(session,
+                org.mockito.Mockito.mock(io.modelcontextprotocol.spec.McpServerTransport.class),
                 PrincipalFingerprint.digest(principal), lastAccessNanos);
 
         Field sessionsField = AuthenticatedWebMvcSseServerTransportProvider.class

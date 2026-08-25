@@ -30,6 +30,13 @@ final class AgentTestFixtures {
     }
 
     static CapabilityManifest manifest(String id, RiskLevel risk, String description) {
+        return manifest(id, risk, description, "Order detail",
+                List.of("query order detail"));
+    }
+
+    /** Variant that controls the model-visible narrative fields. */
+    static CapabilityManifest manifest(String id, RiskLevel risk, String description,
+                                       String displayName, List<String> positiveExamples) {
         Map<String, Object> properties = new LinkedHashMap<>();
         properties.put("orderNo", Map.of(
                 "type", "string", "description", "Order number"));
@@ -58,9 +65,9 @@ final class AgentTestFixtures {
                         new CapabilityManifest.Owner("orders", "orders@example.com"),
                         List.of("orders")),
                 new CapabilityManifest.Spec(
-                        "Order detail", description,
+                        displayName, description,
                         new CapabilityManifest.Examples(
-                                List.of("query order detail"),
+                                positiveExamples,
                                 List.of("delete order"), List.of("order")),
                         risk, schema, null, binding, output,
                         new ResiliencePolicy(1000L, 0, 1, false)));

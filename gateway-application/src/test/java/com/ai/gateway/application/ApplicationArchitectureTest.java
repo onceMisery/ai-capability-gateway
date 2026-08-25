@@ -7,6 +7,7 @@ import com.ai.gateway.domain.service.OperationStateMachine;
 import com.tngtech.archunit.base.DescribedPredicate;
 import com.tngtech.archunit.core.domain.JavaClass;
 import com.tngtech.archunit.core.domain.JavaMethodCall;
+import com.tngtech.archunit.core.importer.ImportOption;
 import com.tngtech.archunit.junit.AnalyzeClasses;
 import com.tngtech.archunit.junit.ArchTest;
 import com.tngtech.archunit.lang.ArchRule;
@@ -21,9 +22,16 @@ import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
  * framework packages. It may only depend on the domain layer and JDK
  * standard library.</p>
  *
+ * <p>Test classes are excluded on purpose: the rules constrain the dependency surface the
+ * module <em>ships</em>. Test code legitimately uses test-scoped libraries the production
+ * layer must never see — Jackson to read JSON baselines and audit details, Mockito to stand
+ * in for ports — and banning them there would only push the same assertions into hand-rolled
+ * parsers, weakening the tests without protecting the layer.</p>
+ *
  * @since 0.1.0
  */
-@AnalyzeClasses(packages = "com.ai.gateway.application")
+@AnalyzeClasses(packages = "com.ai.gateway.application",
+        importOptions = ImportOption.DoNotIncludeTests.class)
 public class ApplicationArchitectureTest {
 
     /**

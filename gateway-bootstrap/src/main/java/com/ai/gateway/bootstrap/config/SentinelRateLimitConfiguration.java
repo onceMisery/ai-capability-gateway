@@ -1,5 +1,6 @@
 package com.ai.gateway.bootstrap.config;
 
+import com.ai.gateway.adapter.mcp.McpRateLimiter;
 import com.ai.gateway.bootstrap.ratelimit.SentinelRateLimiterAdapter;
 import com.ai.gateway.bootstrap.ratelimit.SentinelRuleInitializer;
 import com.ai.gateway.domain.port.RateLimiterPort;
@@ -48,9 +49,15 @@ public class SentinelRateLimitConfiguration {
             GatewayProperties properties) {
         GatewayProperties.Sentinel sentinel = properties.getSentinel();
         GatewayProperties.Agent agent = properties.getAgent();
+        // 资源键直接引用 McpRateLimiter 常量：限流规则与取用限流的代码共用同一个键，
+        // 避免「配了阈值但资源名拼错，于是这条入口实际不限流」这类静默失效。
+        java.util.Map<String, Double> mcpQps = new java.util.LinkedHashMap<>();
+        mcpQps.put(McpRateLimiter.SSE, agent.getMcpSseQps());
+        mcpQps.put(McpRateLimiter.MESSAGE, agent.getMcpMessageQps());
+        mcpQps.put(McpRateLimiter.RESOLVE, agent.getMcpResolveQps());
+        mcpQps.put(McpRateLimiter.CALL, agent.getMcpCallQps());
+        mcpQps.put(McpRateLimiter.NOTIFY, agent.getMcpNotifyQps());
         return new SentinelRuleInitializer(sentinel.getGlobalQps(), sentinel.getLlmQps(),
-                sentinel.getLlmMaxQueueingMs(), List.of(),
-                agent.getMcpSseQps(), agent.getMcpMessageQps(),
-                agent.getMcpResolveQps(), agent.getMcpCallQps());
+                sentinel.getLlmMaxQueueingMs(), List.of(), mcpQps);
     }
 }

@@ -35,4 +35,22 @@ public record RoutingThresholds(
         int maxCandidates,
         int maxTokenBudget
 ) {
+
+    /**
+     * 返回当前版本的默认路由阈值。
+     *
+     * <p>运行面自然语言路由与管理面能力目录诊断<b>必须</b>共用这一份取值：诊断的唯一
+     * 价值在于复现运行面的真实判定，若两侧各自持有阈值常量，诊断结论就会与线上行为
+     * 分叉，进而给出错误的清单修复建议。新增入口同样应从此处取值，而不是自行拷贝数字。</p>
+     *
+     * @return 默认阈值；取值来源为离线标注基准，不依赖模型自报置信度
+     */
+    public static RoutingThresholds defaults() {
+        return new RoutingThresholds(
+                1.0,  // minRelevanceScore：BM25 最低相关度
+                0.5,  // minTop1Top2ScoreDiff：低于该分差视为歧义
+                5,    // maxCandidates：Top-K
+                4096  // maxTokenBudget
+        );
+    }
 }
