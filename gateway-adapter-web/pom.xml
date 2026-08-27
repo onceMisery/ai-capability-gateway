@@ -19,6 +19,15 @@
             <groupId>com.ai.gateway</groupId>
             <artifactId>gateway-domain</artifactId>
         </dependency>
+        <!--
+            A2A 入站的 HTTP 承载面落在本模块（设计 §3.4：新模块 + Web 层 Controller 桥接）。
+            Web 层只做 Servlet ↔ 协议分发器的搬运，不引入 A2A SDK 的任何类型——
+            控制器的出参是已序列化的 JSON 文本，协议语义全部留在 gateway-adapter-a2a 内。
+        -->
+        <dependency>
+            <groupId>com.ai.gateway</groupId>
+            <artifactId>gateway-adapter-a2a</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

@@ -1,5 +1,7 @@
 package com.ai.gateway.application.agent;
 
+import com.ai.gateway.application.catalog.AgentCandidateRanker;
+import com.ai.gateway.application.catalog.AuthorizedCandidateRetrieval;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CapabilityVisibility;
@@ -54,7 +56,7 @@ class AgentCapabilityResolverTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    authentication, authorization, manager, retrieval(retriever), ranker(),
                     new ToolReferenceService("k1", key("current-key"), null, null, 120L),
                     mock(TelemetryPort.class), executor, 20L);
 
@@ -80,7 +82,7 @@ class AgentCapabilityResolverTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    authentication, authorization, manager, retrieval(retriever), ranker(),
                     new ToolReferenceService("k1", key("current-key"), null, null, 120L),
                     mock(TelemetryPort.class), executor, 1_000L);
 
@@ -118,7 +120,7 @@ class AgentCapabilityResolverTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    authentication, authorization, manager, retrieval(retriever), ranker(),
                     new ToolReferenceService("k1", key("current-key"), null, null, 120L),
                     mock(TelemetryPort.class), executor, 20L);
 
@@ -163,7 +165,7 @@ class AgentCapabilityResolverTest {
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
                     authentication, authorization, manager,
-                    retriever, new TextNormalizer(),
+                    retrieval(retriever), ranker(),
                     new ToolReferenceService("k1", key("current-key"), null, null, 120L),
                     mock(TelemetryPort.class), executor, 100L);
 
@@ -204,7 +206,7 @@ class AgentCapabilityResolverTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    authentication, authorization, manager, retrieval(retriever), ranker(),
                     references, telemetry, executor, 1_000L);
 
             AgentCapabilityResolver.Resolution first = resolver.resolve(
@@ -249,7 +251,7 @@ class AgentCapabilityResolverTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    authentication, authorization, manager, retrieval(retriever), ranker(),
                     new ToolReferenceService("k1", key("current-key"), null, null, 120L),
                     mock(TelemetryPort.class), executor, 1_000L);
 
@@ -294,7 +296,7 @@ class AgentCapabilityResolverTest {
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             AgentCapabilityResolver resolver = new AgentCapabilityResolver(
-                    authentication, authorization, manager, retriever, new TextNormalizer(),
+                    authentication, authorization, manager, retrieval(retriever), ranker(),
                     new ToolReferenceService("k1", key("current-key"), null, null, 120L),
                     telemetry, executor, 20L);
 
@@ -306,6 +308,18 @@ class AgentCapabilityResolverTest {
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    /**
+     * The resolver no longer owns retrieval or reranking; it is assembled from the two
+     * shared collaborators every Agent-plane entry point uses.
+     */
+    private static AuthorizedCandidateRetrieval retrieval(CandidateRetriever retriever) {
+        return new AuthorizedCandidateRetrieval(retriever, new TextNormalizer());
+    }
+
+    private static AgentCandidateRanker ranker() {
+        return new AgentCandidateRanker(new TextNormalizer());
     }
 
     private static byte[] key(String seed) {

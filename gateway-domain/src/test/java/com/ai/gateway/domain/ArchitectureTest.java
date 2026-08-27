@@ -59,4 +59,19 @@ public class ArchitectureTest {
     static final ArchRule domainMustNotDependOnLogging =
             noClasses().that().resideInAPackage("com.ai.gateway.domain..")
                     .should().dependOnClassesThat().resideInAPackage("org.slf4j..");
+
+    /**
+     * Domain must not depend on any agent-interoperability protocol SDK.
+     *
+     * <p>A2A and MCP are transport-level protocols: their record types describe how a peer talks
+     * to the gateway, not what the gateway governs. Letting either into the domain would make a
+     * protocol version bump a domain change, and would silently turn protocol-shaped payloads
+     * into domain vocabulary — the exact coupling the hexagonal split exists to prevent.
+     */
+    @ArchTest
+    static final ArchRule domainMustNotDependOnAgentProtocolSdks =
+            noClasses().that().resideInAPackage("com.ai.gateway.domain..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "io.a2a..",
+                            "io.modelcontextprotocol..");
 }

@@ -1,5 +1,6 @@
 package com.ai.gateway.application.operation;
 
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CatalogSnapshot;
 import com.ai.gateway.domain.model.ConfirmationSummary;
@@ -269,7 +270,7 @@ public final class OperationPrepareUseCase {
         }
 
         return persistPreparedOperation(manifest, modelArguments, boundArguments, principal,
-                snapshotVersion, clientIdempotencyKey);
+                snapshotVersion, clientIdempotencyKey, AuditPlane.GATEWAY_NL);
     }
 
     /**
@@ -323,12 +324,14 @@ public final class OperationPrepareUseCase {
         }
 
         return prepareResolved(requestId, principal, snapshot, manifest,
-                modelArguments, locale, clientIdempotencyKey);
+                modelArguments, locale, clientIdempotencyKey, AuditPlane.STRUCTURED);
     }
 
     /**
-     * Prepares a low-risk write already pinned by a trusted in-memory catalog view.
-     * Full binding and execution authorization are still repeated here.
+     * 兼容既有调用方的重载：未声明发起平面时按结构化直调归属。
+     *
+     * <p>此重载只服务于「确实是结构化直调」的调用点。Agent / MCP / A2A 平面必须调用
+     * 带 {@link AuditPlane} 的重载，否则终态审计会把它们错误计入结构化直调。</p>
      */
     public PrepareResult prepareResolved(String requestId,
                                          Principal principal,
@@ -337,12 +340,32 @@ public final class OperationPrepareUseCase {
                                          Map<String, Object> modelArguments,
                                          String locale,
                                          String clientIdempotencyKey) {
+        return prepareResolved(requestId, principal, snapshot, manifest, modelArguments,
+                locale, clientIdempotencyKey, AuditPlane.STRUCTURED);
+    }
+
+    /**
+     * Prepares a low-risk write already pinned by a trusted in-memory catalog view.
+     * Full binding and execution authorization are still repeated here.
+     *
+     * <p>{@code originPlane} 随记录一起冻结：Confirm/Cancel 是独立请求，届时已无从推断
+     * 本次写操作最初来自哪个入口。</p>
+     */
+    public PrepareResult prepareResolved(String requestId,
+                                         Principal principal,
+                                         CatalogSnapshot snapshot,
+                                         CapabilityManifest manifest,
+                                         Map<String, Object> modelArguments,
+                                         String locale,
+                                         String clientIdempotencyKey,
+                                         AuditPlane originPlane) {
         requireText(requestId, "requestId");
         Objects.requireNonNull(principal, "principal must not be null");
         Objects.requireNonNull(snapshot, "snapshot must not be null");
         Objects.requireNonNull(manifest, "manifest must not be null");
         Objects.requireNonNull(modelArguments, "modelArguments must not be null");
         requireText(locale, "locale");
+        Objects.requireNonNull(originPlane, "originPlane must not be null");
         validateClientIdempotencyKey(clientIdempotencyKey);
         if (manifest.spec().risk() != RiskLevel.WRITE_LOW) {
             return failure("Capability is not an eligible low-risk write");
@@ -372,7 +395,7 @@ public final class OperationPrepareUseCase {
             return failure("Authorization denied");
         }
         return persistPreparedOperation(manifest, modelArguments, boundArguments, principal,
-                snapshot.snapshotVersion(), clientIdempotencyKey);
+                snapshot.snapshotVersion(), clientIdempotencyKey, originPlane);
     }
 
     private PrepareResult persistPreparedOperation(CapabilityManifest manifest,
@@ -380,7 +403,8 @@ public final class OperationPrepareUseCase {
                                                    List<Object> boundArguments,
                                                    Principal principal,
                                                    long snapshotVersion,
-                                                   String clientIdempotencyKey) {
+                                                   String clientIdempotencyKey,
+                                                   AuditPlane originPlane) {
         String capabilityId = manifest.metadata().id();
         String capabilityVersion = manifest.metadata().version();
 
@@ -433,7 +457,8 @@ public final class OperationPrepareUseCase {
                 "policy-decision-" + operationId,
                 summary,
                 expiresAt,
-                0L // initial optimistic concurrency version
+                0L, // initial optimistic concurrency version
+                originPlane
         );
 
         OperationRecord persisted = operationRepository.saveOrGetByIdempotencyKey(record);

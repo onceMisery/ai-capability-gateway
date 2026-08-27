@@ -75,6 +75,22 @@ public class ApplicationArchitectureTest {
                     .should().dependOnClassesThat().resideInAPackage("com.fasterxml.jackson..");
 
     /**
+     * Application must not depend on any agent-interoperability protocol SDK.
+     *
+     * <p>The application layer owns the protocol-neutral agent turn — {@code AgentHostConnector},
+     * the card projection, the candidate resolver. Every one of those must be expressible for MCP,
+     * A2A, and whatever comes next; the moment one of them names an SDK type, the second protocol
+     * can only be added by either duplicating the use case or translating shapes back and forth.
+     * Protocol records belong in {@code gateway-adapter-mcp} / {@code gateway-adapter-a2a} only.
+     */
+    @ArchTest
+    static final ArchRule applicationMustNotDependOnAgentProtocolSdks =
+            noClasses().that().resideInAPackage("com.ai.gateway.application..")
+                    .should().dependOnClassesThat().resideInAnyPackage(
+                            "io.a2a..",
+                            "io.modelcontextprotocol..");
+
+    /**
      * Operation state transitions must go through {@link OperationStateMachine}:
      * any class that calls {@link OperationRepository#casUpdateState} must also
      * depend on the state machine, so the rules cannot be bypassed by accident.

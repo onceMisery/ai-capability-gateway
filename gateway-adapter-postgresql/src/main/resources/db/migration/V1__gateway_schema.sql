@@ -121,6 +121,12 @@ CREATE TABLE operation_record (
     confirmation_summary JSONB,
     expires_at TIMESTAMPTZ,
     version BIGINT NOT NULL DEFAULT 0,
+    -- 发起 Prepare 的入口平面（AuditPlane 线上取值：gateway-nl / agent-host / mcp /
+    -- a2a-inbound / structured / unknown）。Confirm/Cancel 是独立请求，其调用上下文无法
+    -- 反映写操作最初来自哪个平面，不落库就只能在终态审计里省略平面标签，或一律按
+    -- structured 归属——后者会把 MCP、A2A 发起的写操作错误计入结构化直调，污染成本归因。
+    -- 刻意不设 DEFAULT：缺省值会让漏传平面的调用点静默通过，NULL 由应用层映射为 unknown。
+    origin_plane VARCHAR(32),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uq_operation_record_operation_id UNIQUE (operation_id),

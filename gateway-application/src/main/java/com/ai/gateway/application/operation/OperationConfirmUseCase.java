@@ -1,5 +1,6 @@
 package com.ai.gateway.application.operation;
 
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.ConfirmationToken;
 import com.ai.gateway.domain.model.DeadlineBudget;
 import com.ai.gateway.domain.model.ErrorCode;
@@ -238,7 +239,7 @@ public final class OperationConfirmUseCase {
                     record.capabilityId(), record.capabilityVersion(),
                     record.manifestDigest(), record.snapshotVersion(),
                     null, null, "AUTHORIZATION_DENIED", 0L,
-                    "{\"reason\":\"authorization_denied\"}"));
+                    record.originPlane().detailsJson("reason", "authorization_denied")));
             return new ConfirmResult(false, null,
                     "Re-authorization denied");
         }
@@ -286,7 +287,7 @@ public final class OperationConfirmUseCase {
                     persisted == OperationState.UNKNOWN
                             ? ErrorCode.EXECUTION_UNKNOWN.name()
                             : ErrorCode.ARGUMENT_VALIDATION_FAILED.name(), 0L,
-                    "{\"reason\":\"frozen_arguments_invalid\"}");
+                    auditContext.plane().detailsJson("reason", "frozen_arguments_invalid"));
             return new ConfirmResult(false, persisted.name(),
                     "Frozen operation arguments failed integrity verification");
         }
@@ -322,7 +323,7 @@ public final class OperationConfirmUseCase {
                     persisted == OperationState.UNKNOWN
                             ? ErrorCode.EXECUTION_UNKNOWN.name()
                             : ErrorCode.PROTOCOL_ERROR.name(), 0,
-                    "{\"reason\":\"provider_invocation_failed\"}");
+                    auditContext.plane().detailsJson("reason", "provider_invocation_failed"));
             return new ConfirmResult(false, persisted.name(),
                     "Provider invocation failed");
         }
@@ -342,7 +343,7 @@ public final class OperationConfirmUseCase {
                     record.version() + 1);
             auditPort.recordTerminal(auditContext,
                     ErrorCode.EXECUTION_UNKNOWN.name(), 0L,
-                    "{\"operationId\":\"" + operationId + "\"}");
+                    auditContext.plane().detailsJson("operationId", operationId));
             return new ConfirmResult(false, OperationState.UNKNOWN.name(),
                     "Unable to persist final operation state");
         }
@@ -350,7 +351,7 @@ public final class OperationConfirmUseCase {
         // Record terminal audit event
         auditPort.recordTerminal(auditContext,
                 finalState.name(), 0,
-                "{\"operationId\":\"" + operationId + "\"}");
+                auditContext.plane().detailsJson("operationId", operationId));
 
         log.info("Confirm phase complete: operationId={}, finalState={}",
                 operationId, finalState);
@@ -369,7 +370,7 @@ public final class OperationConfirmUseCase {
                 record.operationId(), record.capabilityId(), record.capabilityVersion(),
                 record.manifestDigest(), record.snapshotVersion(), null, null,
                 errorCode == null ? record.state().name() : errorCode.name(),
-                0L, "{\"reason\":\"" + reason + "\"}"));
+                0L, record.originPlane().detailsJson("reason", reason)));
     }
 
     private void recordUnboundRejection(String operationId, Principal principal,
@@ -378,7 +379,9 @@ public final class OperationConfirmUseCase {
                 UUID.randomUUID().toString(), "CONFIRM_REJECTED", Instant.now(),
                 computeDigest(principal.subject()), principal.orgId(), operationId,
                 operationId, null, null, null, 0L, null, null,
-                errorCode.name(), 0L, "{\"reason\":\"" + reason + "\"}"));
+                // 令牌无效或记录不存在时没有任何可信的平面来源：显式标注 unknown，
+                // 而不是让这类拒绝落到某个真实平面的分桶里。
+                errorCode.name(), 0L, AuditPlane.UNKNOWN.detailsJson("reason", reason)));
     }
 
     private OperationState persistExecutionFailure(OperationRecord record) {

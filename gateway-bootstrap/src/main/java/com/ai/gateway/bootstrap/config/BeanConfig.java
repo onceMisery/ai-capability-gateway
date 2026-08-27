@@ -25,6 +25,8 @@ import com.ai.gateway.adapter.mcp.McpRateLimiter;
 import com.ai.gateway.adapter.mcp.McpSecurityMode;
 import com.ai.gateway.adapter.mcp.McpWebMvcTransportAdapter;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
+import com.ai.gateway.application.catalog.AgentCandidateRanker;
+import com.ai.gateway.application.catalog.AuthorizedCandidateRetrieval;
 import com.ai.gateway.application.catalog.CandidateResolutionService;
 import com.ai.gateway.application.catalog.LuceneCandidateRetriever;
 import com.ai.gateway.application.console.AclManageUseCase;
@@ -106,6 +108,7 @@ import com.ai.gateway.domain.service.TextNormalizer;
 import com.ai.gateway.domain.service.ThresholdEvaluator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -117,6 +120,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ai.gateway.adapter.dubbo.DubboInvocationAdapter;
 import com.ai.gateway.adapter.rest.RestInvocationAdapter;
 import com.ai.gateway.adapter.grpc.GrpcInvocationAdapter;
+import com.ai.gateway.adapter.a2a.A2aInvocationAdapter;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 
@@ -124,6 +128,7 @@ import java.time.Instant;
 import java.time.format.DateTimeParseException;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -374,20 +379,36 @@ public class BeanConfig {
         return new MicrometerTelemetryAdapter(observationRegistry, meterRegistry);
     }
 
-    /** 主运行期适配器；具体的 Dubbo Bean 仍保留以供诊断使用。 */
+    /**
+     * 主运行期适配器；具体的 Dubbo Bean 仍保留以供诊断使用。
+     *
+     * <p>A2A 出站适配器走 {@link ObjectProvider} 惰性取用，且声明类型是具体的
+     * {@code A2aInvocationAdapter} 而不是 {@code InvocationAdapter}：后者会把本方法自身产出的
+     * {@code @Primary} Bean 也算作候选，形成自引用。它只在 A2A 客户端模式下装配
+     * （见 {@code A2aClientConfiguration}），因此这里必须允许它缺席，
+     * 而不能声明成必需依赖——否则未启用 A2A 的部署会直接启动失败。</p>
+     *
+     * <p>新增一种协议时只需往委托清单里多放一个适配器：路由表由
+     * {@link ProtocolRoutingInvocationAdapter} 按各适配器自报的 {@code protocol()} 建立，
+     * 既有分支无需改动（开闭原则）。</p>
+     */
     @Bean
     @Primary
     public InvocationAdapter resilientInvocationAdapter(
             DubboInvocationAdapter delegate,
             RestInvocationAdapter restInvocationAdapter,
             GrpcInvocationAdapter grpcInvocationAdapter,
+            ObjectProvider<A2aInvocationAdapter> a2aInvocationAdapter,
             ManifestRepository manifestRepository,
             RateLimiterManager rateLimiterManager,
             CircuitBreakerManager circuitBreakerManager,
             BulkheadManager bulkheadManager,
             TelemetryPort telemetryPort) {
+        List<InvocationAdapter> delegates = new ArrayList<>(
+                List.of(delegate, restInvocationAdapter, grpcInvocationAdapter));
+        a2aInvocationAdapter.ifAvailable(delegates::add);
         InvocationAdapter routed = ProtocolRoutingInvocationAdapter.of(
-                manifestRepository, List.of(delegate, restInvocationAdapter, grpcInvocationAdapter));
+                manifestRepository, delegates);
         return new ResilientInvocationAdapter(routed, rateLimiterManager,
                 circuitBreakerManager, bulkheadManager, telemetryPort);
     }
@@ -616,19 +637,46 @@ public class BeanConfig {
     }
 
     /**
-     * 候选能力确定性解析服务：运行面自然语言路由与管理面诊断面共用的唯一检索内核。
+     * 授权域内候选检索内核：全网关唯一一份「归一化 → BM25 Top-K → 结果落域校验」。
+     *
+     * <p>之所以必须是单一 Bean：这一段含授权域判定这一安全关键步骤。运行面自然语言路由、
+     * 管理面诊断、MCP 工具目录与 Host 侧 capability resolve 四个入口若各自持有一套检索实现，
+     * 等同于持有多套授权过滤，任何一处遗漏都是越权泄漏；共用同一个 Bean 还使四者对同一
+     * Principal、同一 query 得到同一候选集合。</p>
+     */
+    @Bean
+    public AuthorizedCandidateRetrieval authorizedCandidateRetrieval(
+            CandidateRetriever candidateRetriever,
+            TextNormalizer textNormalizer) {
+        return new AuthorizedCandidateRetrieval(candidateRetriever, textNormalizer);
+    }
+
+    /**
+     * Agent 平面候选重排规则：唯一一份「BM25 分数 → 最终展示顺序」的换算。
+     *
+     * <p>之所以必须是单一 Bean：Top-1 决定模型看到哪份 schema、决定 toolRef/alias 签给哪个
+     * 能力。两个 Agent 入口各持一份加分规则不会报错，只会让「网关按什么顺序推荐能力」
+     * 变成一件依赖入口的事。</p>
+     */
+    @Bean
+    public AgentCandidateRanker agentCandidateRanker(TextNormalizer textNormalizer) {
+        return new AgentCandidateRanker(textNormalizer);
+    }
+
+    /**
+     * 候选能力确定性解析服务：运行面自然语言路由与管理面诊断面共用的快照面入口。
      *
      * <p>之所以必须是单一 Bean：该链路含授权前置过滤这一安全关键步骤，多个入口各自
-     * 持有一套检索实现等同于持有多套授权过滤，任何一处遗漏都是越权泄漏。</p>
+     * 持有一套检索实现等同于持有多套授权过滤，任何一处遗漏都是越权泄漏。它与 Agent 平面
+     * 共用更下一层的 {@link AuthorizedCandidateRetrieval}。</p>
      */
     @Bean
     public CandidateResolutionService candidateResolutionService(
             CatalogPort catalogPort,
             AuthorizationPort authorizationPort,
-            CandidateRetriever candidateRetriever,
-            TextNormalizer textNormalizer) {
+            AuthorizedCandidateRetrieval authorizedCandidateRetrieval) {
         return new CandidateResolutionService(catalogPort, authorizationPort,
-                candidateRetriever, textNormalizer, CatalogEnvironment.DEFAULT);
+                authorizedCandidateRetrieval, CatalogEnvironment.DEFAULT);
     }
 
     /**
@@ -717,12 +765,13 @@ public class BeanConfig {
             AuthenticationPort authenticationPort,
             AuthorizationPort authorizationPort,
             InMemoryCatalogManager catalogManager,
-            CandidateRetriever candidateRetriever,
+            AuthorizedCandidateRetrieval authorizedCandidateRetrieval,
+            AgentCandidateRanker agentCandidateRanker,
             AliasGenerator aliasGenerator,
             GatewayProperties gatewayProperties) {
         return new AgentToolCatalogUseCase(authenticationPort, authorizationPort,
-                catalogManager, candidateRetriever, new TextNormalizer(), aliasGenerator,
-                CatalogEnvironment.DEFAULT);
+                catalogManager, authorizedCandidateRetrieval, agentCandidateRanker,
+                aliasGenerator, CatalogEnvironment.DEFAULT);
     }
 
     /** 统一的 Agent 读取/准备分发器。 */
@@ -789,15 +838,17 @@ public class BeanConfig {
             AuthenticationPort authenticationPort,
             AuthorizationPort authorizationPort,
             InMemoryCatalogManager catalogManager,
-            CandidateRetriever candidateRetriever,
+            AuthorizedCandidateRetrieval authorizedCandidateRetrieval,
+            AgentCandidateRanker agentCandidateRanker,
             ToolReferenceService toolReferenceService,
             TelemetryPort telemetryPort,
             @org.springframework.beans.factory.annotation.Qualifier("agentResolveExecutor")
             ExecutorService agentResolveExecutor,
             GatewayProperties gatewayProperties) {
         return new AgentCapabilityResolver(
-                authenticationPort, authorizationPort, catalogManager, candidateRetriever,
-                new TextNormalizer(), toolReferenceService, telemetryPort,
+                authenticationPort, authorizationPort, catalogManager,
+                authorizedCandidateRetrieval, agentCandidateRanker,
+                toolReferenceService, telemetryPort,
                 agentResolveExecutor, gatewayProperties.getAgent().getResolveTimeoutMs());
     }
 

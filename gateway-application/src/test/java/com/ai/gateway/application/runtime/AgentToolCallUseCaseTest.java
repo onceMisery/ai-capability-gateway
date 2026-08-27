@@ -52,7 +52,7 @@ class AgentToolCallUseCaseTest {
         verify(fixtures.structured).invokeResolved(anyString(), any(), any(), any(),
                 anyMap(), anyString(), eq(AuditPlane.AGENT_HOST));
         verify(fixtures.prepare, never()).prepareResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString(), anyString());
+                anyMap(), anyString(), anyString(), any(AuditPlane.class));
     }
 
     @Test
@@ -61,7 +61,7 @@ class AgentToolCallUseCaseTest {
         ConfirmationToken token = new ConfirmationToken("token", "operation", "principal",
                 7L, "arguments", "signature", Instant.now().plusSeconds(300), false);
         when(fixtures.prepare.prepareResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString(), anyString()))
+                anyMap(), anyString(), anyString(), any(AuditPlane.class)))
                 .thenReturn(new OperationPrepareUseCase.PrepareResult(
                         true, "operation", token, "confirm", token.expiresAt(), null));
 
@@ -72,8 +72,32 @@ class AgentToolCallUseCaseTest {
         assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.CONFIRMATION_REQUIRED);
         assertThat(result.operationId()).isEqualTo("operation");
         assertThat(result.token()).isSameAs(token);
+        // 发起平面必须一路传到 Prepare：Confirm/Cancel 只能从操作记录读回平面，
+        // 这里漏传就会让 Agent Host 发起的写操作在终态审计里退化为 unknown。
+        verify(fixtures.prepare).prepareResolved(anyString(), any(), any(), any(),
+                anyMap(), anyString(), anyString(), eq(AuditPlane.AGENT_HOST));
         verify(fixtures.structured, never()).invokeResolved(anyString(), any(), any(), any(),
                 anyMap(), anyString(), any(AuditPlane.class));
+    }
+
+    /** MCP 与 Agent Host 共用同一条写链路，平面标签却必须各自保留。 */
+    @Test
+    void lowRiskWriteFromTheMcpPlaneFreezesTheMcpPlaneOnPrepare() {
+        Fixtures fixtures = new Fixtures(RiskLevel.WRITE_LOW);
+        ConfirmationToken token = new ConfirmationToken("token", "operation", "principal",
+                7L, "arguments", "signature", Instant.now().plusSeconds(300), false);
+        when(fixtures.prepare.prepareResolved(anyString(), any(), any(), any(),
+                anyMap(), anyString(), anyString(), any(AuditPlane.class)))
+                .thenReturn(new OperationPrepareUseCase.PrepareResult(
+                        true, "operation", token, "confirm", token.expiresAt(), null));
+
+        AgentToolCallUseCase.Result result = fixtures.useCase().callResolved(
+                "req-mcp", fixtures.principal, fixtures.snapshot(), fixtures.manifest,
+                Map.of(), "zh-CN", "agent-call-1", true, AuditPlane.MCP);
+
+        assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.CONFIRMATION_REQUIRED);
+        verify(fixtures.prepare).prepareResolved(anyString(), any(), any(), any(),
+                anyMap(), anyString(), anyString(), eq(AuditPlane.MCP));
     }
 
     @Test
@@ -87,7 +111,7 @@ class AgentToolCallUseCaseTest {
         assertThat(result.status()).isEqualTo(AgentToolCallUseCase.Status.ERROR);
         assertThat(result.errorCode()).isEqualTo("MCP_WRITE_DISABLED");
         verify(fixtures.prepare, never()).prepareResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString(), anyString());
+                anyMap(), anyString(), anyString(), any(AuditPlane.class));
     }
 
     @Test
@@ -103,7 +127,7 @@ class AgentToolCallUseCaseTest {
         verify(fixtures.structured, never()).invokeResolved(anyString(), any(), any(), any(),
                 anyMap(), anyString(), any(AuditPlane.class));
         verify(fixtures.prepare, never()).prepareResolved(anyString(), any(), any(), any(),
-                anyMap(), anyString(), anyString());
+                anyMap(), anyString(), anyString(), any(AuditPlane.class));
     }
 
     @Test

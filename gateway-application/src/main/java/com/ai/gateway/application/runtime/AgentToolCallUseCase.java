@@ -161,9 +161,11 @@ public final class AgentToolCallUseCase {
                     snapshot.snapshotVersion(), capabilityId, capabilityVersion);
         }
 
+        // 发起平面随操作记录一起冻结：Confirm/Cancel 是独立请求，届时无法再推断本次写操作
+        // 来自 Agent Host 还是 MCP，不在此处落库就只能在终态审计里省略或错误归属平面。
         OperationPrepareUseCase.PrepareResult prepared = operationPrepareUseCase.prepareResolved(
                 requestId, principal, snapshot, manifest, modelArguments,
-                locale, clientIdempotencyKey);
+                locale, clientIdempotencyKey, plane);
         if (!prepared.success()) {
             return error("PREPARE_FAILED", prepared.error(), snapshot.snapshotVersion(),
                     capabilityId, capabilityVersion);

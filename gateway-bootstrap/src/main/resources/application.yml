@@ -198,7 +198,35 @@ gateway:
     # 只填写已认证 Bearer Token 的 SHA-256 指纹，不填写明文 Token。
     # 未命中该注册表的客户端始终只能按 READ_ONLY 执行。
     mcp-trusted-clients: []
-  
+
+  # A2A 互操作面（方案 B）。默认全关：开启前必须先配 public-url，否则启动校验直接失败。
+  #   mode: DISABLED（默认）| SERVER_ONLY（只承载入站）| CLIENT_ONLY（只出站）| FULL
+  #   selection-mode:
+  #     DELEGATED_SELECTION（默认）-> 首跳回传已授权候选集，由对端自己的模型选择；全程零 LLM 调用
+  #     GATEWAY_SELECTION          -> 复用网关侧 NL 路由内核做一跳完成；生产需显式放行
+  #     STRUCTURED_ONLY            -> 只接受结构化首跳，自由文本一律拒绝
+  a2a:
+    enabled: ${GATEWAY_A2A_ENABLED:false}
+    mode: ${GATEWAY_A2A_MODE:DISABLED}
+    agent-name: ${GATEWAY_A2A_AGENT_NAME:capability-gateway}
+    public-url: ${GATEWAY_A2A_PUBLIC_URL:}
+    # 置为 false 会让匿名调用方拿到带 skills 的卡片，等于公开能力目录的域粒度；
+    # 生产环境下该取值被启动校验直接拒绝。
+    extended-card-required: ${GATEWAY_A2A_EXTENDED_CARD_REQUIRED:true}
+    selection-mode: ${GATEWAY_A2A_SELECTION_MODE:DELEGATED_SELECTION}
+    allow-gateway-selection-in-production: ${GATEWAY_A2A_ALLOW_GATEWAY_SELECTION_IN_PRODUCTION:false}
+    max-delegation-depth: ${GATEWAY_A2A_MAX_DELEGATION_DEPTH:3}
+    identity-mode: ${GATEWAY_A2A_IDENTITY_MODE:ON_BEHALF_OF}
+    task-qps: ${GATEWAY_A2A_TASK_QPS:100}
+    # 公开卡匿名可达，必须与 Task 分开限流，否则一次爬卡就能挤占入站执行额度。
+    card-qps: ${GATEWAY_A2A_CARD_QPS:50}
+    client-max-concurrency: ${GATEWAY_A2A_CLIENT_MAX_CONCURRENCY:32}
+    candidate-top-k: ${GATEWAY_A2A_CANDIDATE_TOP_K:5}
+    locale: ${GATEWAY_A2A_LOCALE:zh-CN}
+    timezone: ${GATEWAY_A2A_TIMEZONE:UTC}
+    # 只填写已认证凭据的 SHA-256 指纹，不填写明文。未命中者恒为 READ_ONLY。
+    peer-trust: []
+
   # Rate limits
   rate-limits:
     per-user: 100

@@ -22,6 +22,28 @@
             <groupId>io.github.a2asdk</groupId>
             <artifactId>a2a-java-sdk-spec</artifactId>
             <version>${a2a-sdk.version}</version>
+            <exclusions>
+                <!-- SDK 声明的 slf4j 版本高于本项目统一管理的版本，
+                     由本模块显式引入受管版本，避免 Enforcer 的上界规则被打破。 -->
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-api</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+        <!--
+            A2A 的线格里包含 java.time 类型（AgentInterface 之外的时间戳字段），
+            而本模块的 ObjectMapper 由 A2aJsonRpcDispatcher 自持、不复用 Web 层的共享实例，
+            因此必须自己显式声明 JavaTimeModule 的来源：靠传递依赖拿到它，
+            意味着 Web 层某次依赖调整就能静默改变 A2A 的对外线格。
+        -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
         </dependency>
         <dependency>
             <groupId>com.ai.gateway</groupId>

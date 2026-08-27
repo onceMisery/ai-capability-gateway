@@ -31,6 +31,7 @@ public class GatewayProperties {
     private Llm llm = new Llm();
     private Operation operation = new Operation();
     private Agent agent = new Agent();
+    private A2a a2a = new A2a();
     private Redis redis = new Redis();
     private Audit audit = new Audit();
     private Snapshot snapshot = new Snapshot();
@@ -71,6 +72,14 @@ public class GatewayProperties {
         private java.util.Map<String, String> restEndpoints = new java.util.LinkedHashMap<>();
         private java.util.Map<String, String> grpcEndpoints = new java.util.LinkedHashMap<>();
         private java.util.Map<String, String> grpcDescriptorSets = new java.util.LinkedHashMap<>();
+        /**
+         * 远端 Agent 端点表（{@code 引用键 -> A2A JSON-RPC 地址}）。
+         *
+         * <p>与 {@code restEndpoints} 同一用途：清单只携带引用键，地址由部署侧决定。
+         * 因此一份能力清单在各环境可以逐字节相同，而「导入清单」永远不可能给网关
+         * 新增一个它本来到不了的出站目标。</p>
+         */
+        private java.util.Map<String, String> a2aAgentEndpoints = new java.util.LinkedHashMap<>();
     }
 
     @Getter
@@ -164,6 +173,82 @@ public class GatewayProperties {
         private String tokenAssurance = "HIGH";
         private String confirmationChannel = "HOST_UI";
         private boolean enabled = true;
+        private String expiresAt = "";
+    }
+
+    /**
+     * A2A 互操作配置根节点（{@code gateway.a2a.*}）。
+     *
+     * <p>与 {@link NlRouter} 同样保持哑对象：模式字符串不在此处解析，
+     * 由 {@code A2aMode}、{@code A2aSelectionMode}、{@code A2aIdentityMode} 各自的
+     * {@code from(String)} 做失效关闭归一化。配置层一旦自己判定一次，
+     * 就会出现「配置认为放行、适配器认为拒绝」这类只在生产才暴露的分歧。</p>
+     */
+    @Getter
+    @Setter
+    public static class A2a {
+        /** 总开关；关闭时三个端点一律不注册。 */
+        private boolean enabled;
+        /** 承载模式：DISABLED | SERVER_ONLY | CLIENT_ONLY | FULL。 */
+        private String mode = "DISABLED";
+        /** 公开卡上的 Agent 名称。 */
+        private String agentName = "capability-gateway";
+        /** 公开卡上对外可达的基地址；{@code mode != DISABLED} 时必填。 */
+        private String publicUrl = "";
+        /** 是否强制扩展卡走认证；生产环境不允许置为 {@code false}。 */
+        private boolean extendedCardRequired = true;
+        /** 首跳选择模式：DELEGATED_SELECTION | GATEWAY_SELECTION | STRUCTURED_ONLY。 */
+        private String selectionMode = "DELEGATED_SELECTION";
+        /**
+         * 生产环境显式放行 {@code GATEWAY_SELECTION} 档。
+         *
+         * <p>该档把「选哪个能力」交给网关侧的模型推理，因此入站流量会消耗模型额度、
+         * 并把一条依赖模型可用性的路径放进生产。默认不放行，使这个代价必须被显式承担
+         * 而不是从兼容默认值里继承下来。</p>
+         */
+        private boolean allowGatewaySelectionInProduction;
+        /** 委托深度上限，超出即拒绝，用于阻断 Agent 间环路。 */
+        private int maxDelegationDepth = 3;
+        /** 未注册 peer 的默认身份来源模式：ON_BEHALF_OF | SERVICE_ACCOUNT。 */
+        private String identityMode = "ON_BEHALF_OF";
+        /** 入站 Task 的 QPS 上限。 */
+        private double taskQps = 100d;
+        /** 公开卡的独立 QPS 上限：匿名可达的端点必须与 Task 分开限流。 */
+        private double cardQps = 50d;
+        /** 出站客户端的并发上限。 */
+        private int clientMaxConcurrency = 32;
+        /** 首跳回传的候选数量上限。 */
+        private int candidateTopK = 5;
+        /** 执行时使用的语言标签。 */
+        private String locale = "zh-CN";
+        /** 执行时使用的时区标识；仅 {@code GATEWAY_SELECTION} 档用到。 */
+        private String timezone = "UTC";
+        /** 受信 peer 档案；只登记凭据指纹，未命中者恒为 {@code READ_ONLY}。 */
+        private java.util.List<A2aPeerTrust> peerTrust = new java.util.ArrayList<>();
+    }
+
+    /**
+     * 单个受信 peer 的档案配置（{@code gateway.a2a.peer-trust[]}）。
+     *
+     * <p>只登记 {@code tokenFingerprint}，不登记明文：注册表持有明文等于把一份可直接冒充
+     * 受信 peer 的凭据副本留在配置里，而校验只需要指纹。</p>
+     */
+    @Getter
+    @Setter
+    public static class A2aPeerTrust {
+        private String peerId = "";
+        private String tokenFingerprint = "";
+        /** 信任分级：READ_ONLY | TRUSTED_CONFIRMATION。 */
+        private String trustTier = "READ_ONLY";
+        /** 身份来源模式：ON_BEHALF_OF | SERVICE_ACCOUNT。 */
+        private String identityMode = "ON_BEHALF_OF";
+        /** 服务账号模式下的固定租户号；空表示未配置。 */
+        private String serviceAccountOrgId = "";
+        /** 服务账号模式下的能力白名单；该模式下不得为空。 */
+        private java.util.List<String> allowedCapabilityIds = new java.util.ArrayList<>();
+        private int maxDelegationDepth = 3;
+        private boolean enabled = true;
+        /** 过期时刻（ISO-8601）；空表示不过期。 */
         private String expiresAt = "";
     }
 

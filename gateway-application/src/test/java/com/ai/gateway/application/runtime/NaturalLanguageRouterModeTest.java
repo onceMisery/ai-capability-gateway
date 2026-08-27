@@ -146,23 +146,28 @@ class NaturalLanguageRouterModeTest {
         private final InteractionRepository interactions = mock(InteractionRepository.class);
         private final SelectDecisionProcessor selectProcessor = mock(SelectDecisionProcessor.class);
         private final CapabilityManifest manifest = manifest("order.query");
+        private final CapabilityManifest sibling = manifest("order.cancel");
         private boolean ambiguous;
 
         private NaturalLanguageQueryUseCase useCase(NlRouterMode mode) {
             Principal principal = new Principal("user-1", 7L, List.of("user"), List.of(),
                     Instant.now(), "JWT");
+            // 检索域与快照必须与检索器返回项保持一致：候选解析内核会丢弃任何落在
+            // 已授权检索域之外的返回项，因此歧义场景下第二个能力也必须是可见的，
+            // 否则测到的是「域外结果被丢弃」而不是「分差不足触发澄清」。
+            List<CapabilityManifest> visible = ambiguous
+                    ? List.of(manifest, sibling) : List.of(manifest);
             when(authentication.authenticate(any())).thenReturn(principal);
             when(catalog.loadCurrentSnapshot("test"))
-                    .thenReturn(new CatalogSnapshot(3L, "test", List.of(manifest),
+                    .thenReturn(new CatalogSnapshot(3L, "test", visible,
                             "policy-1", "digest"));
             when(authorization.filterVisibleCapabilities(any(), anyList()))
-                    .thenReturn(List.of(manifest));
+                    .thenReturn(visible);
             // 分差 0.1 < minTop1Top2ScoreDiff(0.5) 时判定为 CLARIFY。
             when(retriever.retrieve(anyString(), anyList(), anyInt()))
                     .thenReturn(ambiguous
                             ? List.of(new CandidateRetriever.ScoredCapability(manifest, 2.0),
-                                    new CandidateRetriever.ScoredCapability(
-                                            manifest("order.cancel"), 1.9))
+                                    new CandidateRetriever.ScoredCapability(sibling, 1.9))
                             : List.of(new CandidateRetriever.ScoredCapability(manifest, 2.0)));
 
             return new NaturalLanguageQueryUseCase(authentication,

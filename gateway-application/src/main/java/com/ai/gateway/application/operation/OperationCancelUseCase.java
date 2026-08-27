@@ -1,6 +1,7 @@
 package com.ai.gateway.application.operation;
 
 import com.ai.gateway.domain.model.AuditEvent;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.OperationRecord;
 import com.ai.gateway.domain.model.OperationState;
 import com.ai.gateway.domain.model.Principal;
@@ -83,7 +84,8 @@ public final class OperationCancelUseCase {
                 UUID.randomUUID().toString(), "OPERATION_CANCEL_REJECTED", Instant.now(),
                 subjectDigest(principal.subject()), principal.orgId(), operationId,
                 operationId, null, null, null, 0L, null, null, resultCode, 0L,
-                "{\"reason\":\"" + reason + "\"}"));
+                // 没有操作记录就没有可信的发起平面来源：显式标注 unknown，不猜。
+                AuditPlane.UNKNOWN.detailsJson("reason", reason)));
     }
 
     private void audit(OperationRecord record, String reason, String resultCode) {
@@ -94,7 +96,8 @@ public final class OperationCancelUseCase {
                 Instant.now(), record.principalDigest(), record.orgId(), record.operationId(),
                 record.operationId(), record.capabilityId(), record.capabilityVersion(),
                 record.manifestDigest(), record.snapshotVersion(), record.policyDecisionId(),
-                null, resultCode, 0L, "{\"reason\":\"" + reason + "\"}"));
+                // 平面取自 Prepare 阶段冻结的记录：Cancel 是独立请求，无从推断发起入口。
+                null, resultCode, 0L, record.originPlane().detailsJson("reason", reason)));
     }
 
     public record CancelResult(boolean success, String state, String message) {

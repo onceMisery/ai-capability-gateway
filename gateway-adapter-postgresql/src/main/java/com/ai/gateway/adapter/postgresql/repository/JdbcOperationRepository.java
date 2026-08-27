@@ -1,6 +1,7 @@
 package com.ai.gateway.adapter.postgresql.repository;
 
 import com.ai.gateway.adapter.postgresql.JsonbSupport;
+import com.ai.gateway.domain.model.AuditPlane;
 import com.ai.gateway.domain.model.ConfirmationSummary;
 import com.ai.gateway.domain.model.OperationRecord;
 import com.ai.gateway.domain.model.OperationState;
@@ -36,8 +37,8 @@ public class JdbcOperationRepository implements OperationRepository {
             "INSERT INTO operation_record (operation_id, state, principal_digest, org_id, " +
             "capability_id, capability_version, manifest_digest, snapshot_version, " +
             "encrypted_arguments, arguments_digest, idempotency_key, policy_decision_id, " +
-            "confirmation_summary, expires_at, version) " +
-            "VALUES (CAST(? AS UUID), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?)";
+            "confirmation_summary, expires_at, version, origin_plane) " +
+            "VALUES (CAST(? AS UUID), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?, ?, ?)";
 
     private static final String SQL_INSERT_IF_ABSENT =
             SQL_INSERT + " ON CONFLICT (idempotency_key) DO NOTHING";
@@ -46,13 +47,15 @@ public class JdbcOperationRepository implements OperationRepository {
             "SELECT operation_id, state, principal_digest, org_id, capability_id, " +
             "capability_version, manifest_digest, snapshot_version, encrypted_arguments, " +
             "arguments_digest, idempotency_key, policy_decision_id, confirmation_summary, " +
-            "expires_at, version FROM operation_record WHERE operation_id = CAST(? AS UUID)";
+            "expires_at, version, origin_plane " +
+            "FROM operation_record WHERE operation_id = CAST(? AS UUID)";
 
     private static final String SQL_FIND_BY_IDEMPOTENCY_KEY =
             "SELECT operation_id, state, principal_digest, org_id, capability_id, " +
             "capability_version, manifest_digest, snapshot_version, encrypted_arguments, " +
             "arguments_digest, idempotency_key, policy_decision_id, confirmation_summary, " +
-            "expires_at, version FROM operation_record WHERE idempotency_key = ?";
+            "expires_at, version, origin_plane " +
+            "FROM operation_record WHERE idempotency_key = ?";
 
     private static final String SQL_CAS_UPDATE_STATE =
             "UPDATE operation_record SET state = ?, version = version + 1, " +
@@ -110,6 +113,10 @@ public class JdbcOperationRepository implements OperationRepository {
         JsonbSupport.setJsonbObject(ps, 13, record.confirmationSummary());
         ps.setTimestamp(14, Timestamp.from(record.expiresAt()));
         ps.setLong(15, record.version());
+        // 即便平面是 UNKNOWN 也照实写入 'unknown'，不退化成 NULL：
+        // 这样 NULL 只表示「该行早于 V2 迁移」，与「新行但调用点没给出平面」可区分，
+        // 后者是需要修的代码缺陷，不应与历史数据混在同一个分桶里。
+        ps.setString(16, record.originPlane().wireValue());
     }
 
     @Override
@@ -170,7 +177,10 @@ public class JdbcOperationRepository implements OperationRepository {
                     policyDecisionId,
                     confirmationSummary,
                     expiresAt,
-                    rs.getLong("version"));
+                    rs.getLong("version"),
+                    // NULL 或无法识别的取值统一降级为 UNKNOWN：平面标签是可观测性维度，
+                    // 不是执行判据，不能因为它让 Confirm 直接失败。
+                    AuditPlane.fromWireValue(rs.getString("origin_plane")));
         };
     }
 }

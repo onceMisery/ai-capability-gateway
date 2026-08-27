@@ -98,6 +98,10 @@ public record ExecutionAuditContext(
 
     /**
      * 根据冻结的写操作记录创建审计上下文。
+     *
+     * <p>平面取自记录本身而不是当前请求：Confirm/Cancel 是独立请求，其调用上下文
+     * 无法反映写操作最初的发起平面。记录里没有平面时保持 {@link AuditPlane#UNKNOWN}，
+     * 不猜测。</p>
      */
     public static ExecutionAuditContext forOperation(OperationRecord record) {
         Objects.requireNonNull(record, "record must not be null");
@@ -109,7 +113,8 @@ public record ExecutionAuditContext(
                 record.capabilityId(),
                 record.capabilityVersion(),
                 record.manifestDigest(),
-                record.snapshotVersion());
+                record.snapshotVersion(),
+                record.originPlane());
     }
 
     private static void requireText(String value, String name) {

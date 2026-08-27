@@ -33,6 +33,9 @@ class GatewaySchemaMigrationTest {
         assertThat(sql).contains("interaction_id UUID NOT NULL");
         assertThat(sql).contains("execution_id VARCHAR(128) NOT NULL");
         assertThat(sql).contains("CONSTRAINT uq_operation_record_idempotency_key UNIQUE (idempotency_key)");
+        // 发起平面必须留在基线里：Confirm/Cancel 只能从操作记录读回平面，
+        // 这一列消失并不会让任何测试报错，只会让写操作的终态审计静默退化为 unknown。
+        assertThat(sql).contains("origin_plane VARCHAR(32)");
         assertThat(sql).contains("CREATE UNIQUE INDEX uq_snapshot_active_environment");
         assertThat(sql).contains("CONSTRAINT fk_outbox_audit_event FOREIGN KEY (audit_event_id)");
         assertThat(sql).contains("CREATE UNIQUE INDEX uq_audit_snapshot_lifecycle_event");

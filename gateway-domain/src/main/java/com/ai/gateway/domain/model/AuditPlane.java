@@ -26,11 +26,32 @@ public enum AuditPlane {
     /** A2A 入站平面。 */
     A2A_INBOUND("a2a-inbound"),
 
+    /**
+     * A2A 出站平面（网关以 Capability 的形态调用远端 Agent）。
+     *
+     * <p>与入站分开成两个取值，而不是共用一个 {@code a2a} 标签：两者的成本归属、失败归因
+     * 与限流口径完全相反——入站被刷是暴露面问题，出站失败是依赖问题。共用一个标签会让
+     * 「远端 Agent 大面积超时」在指标上表现为「本网关 A2A 平面故障率升高」。</p>
+     */
+    A2A_OUTBOUND("a2a-outbound"),
+
     /** MCP 入口平面。 */
     MCP("mcp"),
 
     /** 结构化工具直调等其他运行面入口。 */
-    STRUCTURED("structured");
+    STRUCTURED("structured"),
+
+    /**
+     * 发起平面未被记录（不是「其他平面」，而是「无从得知」）。
+     *
+     * <p>只用于两种情况：一是迁移落地前写入的 {@code operation_record} 行没有平面列；
+     * 二是从持久层读回的平面取值不再对应任何枚举常量（例如回滚到旧版本代码）。</p>
+     *
+     * <p>刻意不复用 {@link #STRUCTURED} 作为缺省：把 MCP 发起的写操作记成结构化直调
+     * 会污染成本归因，而<strong>错误的标签比缺失的标签更糟</strong>——前者无法被发现，
+     * 后者在看板上是一个显式的、可清零的分桶。</p>
+     */
+    UNKNOWN("unknown");
 
     /** 审计 JSON 与监控标签使用的字段名。 */
     public static final String FIELD = "plane";
@@ -46,6 +67,34 @@ public enum AuditPlane {
      */
     public String wireValue() {
         return wireValue;
+    }
+
+    /**
+     * 从持久化取值还原平面标签，无法识别时降级为 {@link #UNKNOWN}。
+     *
+     * <p>刻意不抛异常：平面标签是可观测性维度，不是执行判据。若某一行的取值来自尚未
+     * 认识的版本（灰度期新增平面、或回滚到旧代码），让写操作 Confirm 直接失败是
+     * 用可用性换指标精度，方向是错的；退化为一个显式的 {@code unknown} 分桶，
+     * 既不误导成本归因，也不影响执行。</p>
+     *
+     * <p>同时接受枚举常量名（如 {@code MCP}）与线上取值（如 {@code mcp}）：
+     * 前者便于配置与测试书写，后者是持久层与审计 JSON 的实际形态。</p>
+     *
+     * @param value 线上取值或枚举常量名；{@code null}、空白、未知取值均返回 {@link #UNKNOWN}
+     * @return 匹配到的平面，或 {@link #UNKNOWN}
+     */
+    public static AuditPlane fromWireValue(String value) {
+        if (value == null || value.isBlank()) {
+            return UNKNOWN;
+        }
+        String normalized = value.trim();
+        for (AuditPlane plane : values()) {
+            if (plane.wireValue.equalsIgnoreCase(normalized)
+                    || plane.name().equalsIgnoreCase(normalized)) {
+                return plane;
+            }
+        }
+        return UNKNOWN;
     }
 
     /**

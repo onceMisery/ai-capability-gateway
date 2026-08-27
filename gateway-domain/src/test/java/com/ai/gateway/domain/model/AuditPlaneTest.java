@@ -89,4 +89,47 @@ class AuditPlaneTest {
         assertThatThrownBy(() -> context.withPlane(null))
                 .isInstanceOf(NullPointerException.class);
     }
+
+    /**
+     * Persisted plane values must round-trip, and anything unrecognised must degrade to
+     * {@code UNKNOWN} rather than fail the read.
+     */
+    @Test
+    void unrecognisedWireValuesDegradeToUnknownInsteadOfThrowing() {
+        assertThat(AuditPlane.fromWireValue("mcp")).isEqualTo(AuditPlane.MCP);
+        assertThat(AuditPlane.fromWireValue("gateway-nl-diagnostic"))
+                .isEqualTo(AuditPlane.GATEWAY_NL_DIAGNOSTIC);
+        // 兼容枚举常量名，便于配置与测试书写。
+        assertThat(AuditPlane.fromWireValue("A2A_OUTBOUND")).isEqualTo(AuditPlane.A2A_OUTBOUND);
+        assertThat(AuditPlane.fromWireValue(" agent-host ")).isEqualTo(AuditPlane.AGENT_HOST);
+        // 迁移之前入库的行没有平面列，读回时是 null；灰度期回滚可能读到未知取值。
+        assertThat(AuditPlane.fromWireValue(null)).isEqualTo(AuditPlane.UNKNOWN);
+        assertThat(AuditPlane.fromWireValue("  ")).isEqualTo(AuditPlane.UNKNOWN);
+        assertThat(AuditPlane.fromWireValue("a-plane-from-the-future"))
+                .isEqualTo(AuditPlane.UNKNOWN);
+        // 每个平面都能由自己的线上取值还原，否则 wireValue 就不是一个可往返的契约。
+        for (AuditPlane plane : AuditPlane.values()) {
+            assertThat(AuditPlane.fromWireValue(plane.wireValue())).isEqualTo(plane);
+        }
+    }
+
+    /**
+     * Confirm/Cancel is a separate request, so the terminal audit context must take the
+     * plane from the frozen record — never from the confirming request.
+     */
+    @Test
+    void operationContextTakesThePlaneFrozenAtPrepare() {
+        assertThat(ExecutionAuditContext.forOperation(record(AuditPlane.MCP)).plane())
+                .isEqualTo(AuditPlane.MCP);
+        // 未记录平面时保持 unknown：默认成 structured 会把 MCP 写操作错误计入结构化直调。
+        assertThat(ExecutionAuditContext.forOperation(record(null)).plane())
+                .isEqualTo(AuditPlane.UNKNOWN);
+    }
+
+    private static OperationRecord record(AuditPlane plane) {
+        return new OperationRecord("op-1", OperationState.PREPARED, "digest", 7L,
+                "order.update", "1.0.0", "manifest-digest", 3L, "encrypted", "args-digest",
+                "idem-1", "policy-1", null, java.time.Instant.now().plusSeconds(300), 0L,
+                plane);
+    }
 }

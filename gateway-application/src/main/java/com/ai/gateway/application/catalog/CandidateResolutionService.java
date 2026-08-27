@@ -16,8 +16,15 @@ import java.util.Objects;
  * 这一段收敛为唯一实现。
  *
  * <p><b>为什么必须只有一份</b>：该链路包含授权前置过滤这一安全关键步骤。若运行面
- * 自然语言路由、Agent 平面、诊断面各自持有一套检索入口，就等于持有多套授权过滤，
- * 任何一处遗漏都是越权泄漏，而不仅是重复代码。因此本服务是所有入口的共用内核。</p>
+ * 自然语言路由与诊断面各自持有一套检索入口，就等于持有多套授权过滤，
+ * 任何一处遗漏都是越权泄漏，而不仅是重复代码。</p>
+ *
+ * <p><b>与 Agent 平面的关系</b>：Agent 平面（MCP / A2A / Host）不经过本服务，因为它的目录
+ * 固定方式不同——它必须在请求期锁定 {@link ActiveCatalogView}，随后签发的 toolRef / alias
+ * 都绑定在该视图的目录版本上；若改为经本服务重新加载一次快照，要么多读一次目录，
+ * 要么让候选与绑定落在两个版本上。二者共享的是更下一层的
+ * {@link AuthorizedCandidateRetrieval}：「归一化 → BM25 → 结果落域校验」全网关只有一份实现，
+ * 因此两个平面对同一 Principal、同一 query 得到同一候选集合与同一排序。</p>
  *
  * <p><b>本服务不调用任何模型</b>：BM25 检索与文本归一化都是确定性算法。
  * “消费自然语言”与“自己跑 LLM 编排”是两件事，本服务只承担前者，因此不受运行面
@@ -32,36 +39,53 @@ import java.util.Objects;
  *
  * @see Outcome
  * @see Resolution
+ * @see AuthorizedCandidateRetrieval
  * @since 0.2.0
  */
 public final class CandidateResolutionService {
 
     private final CatalogPort catalogPort;
     private final AuthorizationPort authorizationPort;
-    private final CandidateRetriever candidateRetriever;
-    private final TextNormalizer textNormalizer;
+    private final AuthorizedCandidateRetrieval retrieval;
     private final String environment;
 
     /**
      * @param catalogPort 已发布目录快照来源
      * @param authorizationPort 可见性授权过滤
+     * @param retrieval 授权域内检索内核，与 Agent 平面共用同一实例
+     * @param environment 运行环境标识，用于选取对应环境的已发布快照
+     */
+    public CandidateResolutionService(CatalogPort catalogPort,
+                                      AuthorizationPort authorizationPort,
+                                      AuthorizedCandidateRetrieval retrieval,
+                                      String environment) {
+        this.catalogPort = Objects.requireNonNull(catalogPort, "catalogPort must not be null");
+        this.authorizationPort = Objects.requireNonNull(authorizationPort,
+                "authorizationPort must not be null");
+        this.retrieval = Objects.requireNonNull(retrieval, "retrieval must not be null");
+        this.environment = Objects.requireNonNull(environment, "environment must not be null");
+    }
+
+    /**
+     * 便捷构造：由检索器与归一化服务自行组装检索内核。
+     *
+     * <p>仅供只使用快照面入口的调用方（运行面 NL、管理面诊断）使用。Agent 平面必须与本服务
+     * <b>共用同一个</b> {@link AuthorizedCandidateRetrieval} 实例，因此走上面那个构造器。</p>
+     *
+     * @param catalogPort 已发布目录快照来源
+     * @param authorizationPort 可见性授权过滤
      * @param candidateRetriever BM25 检索器
      * @param textNormalizer 文本归一化服务
-     * @param environment 运行环境标识，用于选取对应环境的已发布快照
+     * @param environment 运行环境标识
      */
     public CandidateResolutionService(CatalogPort catalogPort,
                                       AuthorizationPort authorizationPort,
                                       CandidateRetriever candidateRetriever,
                                       TextNormalizer textNormalizer,
                                       String environment) {
-        this.catalogPort = Objects.requireNonNull(catalogPort, "catalogPort must not be null");
-        this.authorizationPort = Objects.requireNonNull(authorizationPort,
-                "authorizationPort must not be null");
-        this.candidateRetriever = Objects.requireNonNull(candidateRetriever,
-                "candidateRetriever must not be null");
-        this.textNormalizer = Objects.requireNonNull(textNormalizer,
-                "textNormalizer must not be null");
-        this.environment = Objects.requireNonNull(environment, "environment must not be null");
+        this(catalogPort, authorizationPort,
+                new AuthorizedCandidateRetrieval(candidateRetriever, textNormalizer),
+                environment);
     }
 
     /**
@@ -110,23 +134,40 @@ public final class CandidateResolutionService {
                     "principal has no visible capability");
         }
 
-        // 第 3 步：文本归一化（停用词、全半角、大小写、标点）。
-        String normalizedText = textNormalizer.normalize(rawText == null ? "" : rawText);
-        if (normalizedText.isBlank()) {
-            return new Resolution(Outcome.EMPTY_NORMALIZED_TEXT, snapshotVersion, "",
-                    visible.size(), List.of(), "normalized text is blank");
-        }
+        // 第 3、4 步：文本归一化与 BM25 Top-K，交由与 Agent 平面共用的检索内核执行，
+        // 使「检索域严格等于已授权子集」这条不变量只有一处实现。
+        AuthorizedCandidateRetrieval.Retrieved retrieved =
+                retrieval.retrieveWithin(rawText, visible, topK);
+        return new Resolution(outcomeOf(retrieved.status()), snapshotVersion,
+                retrieved.normalizedText(), retrieved.scopeSize(), retrieved.candidates(),
+                retrieved.diagnosticReason() != null
+                        ? retrieved.diagnosticReason()
+                        : diagnosticReasonOf(retrieved.status()));
+    }
 
-        // 第 4 步：BM25 Top-K 检索，检索域严格限定为已授权子集。
-        List<CandidateRetriever.ScoredCapability> candidates;
-        try {
-            candidates = candidateRetriever.retrieve(normalizedText, visible, topK);
-        } catch (RuntimeException e) {
-            return new Resolution(Outcome.RETRIEVAL_FAILED, snapshotVersion, normalizedText,
-                    visible.size(), List.of(), e.getMessage());
-        }
-        return new Resolution(Outcome.RESOLVED, snapshotVersion, normalizedText,
-                visible.size(), candidates == null ? List.of() : List.copyOf(candidates), null);
+    /**
+     * 检索内核的结果分类到本服务对外分类的映射。
+     *
+     * <p>写成 {@code switch} 表达式：内核新增一种结果分类时编译器会在这里报缺分支，
+     * 而 {@code if} 链只会静默落到某个既有分类上。</p>
+     */
+    private static Outcome outcomeOf(AuthorizedCandidateRetrieval.Retrieved.Status status) {
+        return switch (status) {
+            case RETRIEVED -> Outcome.RESOLVED;
+            case EMPTY_SCOPE -> Outcome.NO_VISIBLE_CAPABILITY;
+            case BLANK_TEXT -> Outcome.EMPTY_NORMALIZED_TEXT;
+            case RETRIEVAL_FAILED -> Outcome.RETRIEVAL_FAILED;
+        };
+    }
+
+    private static String diagnosticReasonOf(
+            AuthorizedCandidateRetrieval.Retrieved.Status status) {
+        return switch (status) {
+            case RETRIEVED -> null;
+            case EMPTY_SCOPE -> "principal has no visible capability";
+            case BLANK_TEXT -> "normalized text is blank";
+            case RETRIEVAL_FAILED -> "candidate retrieval failed";
+        };
     }
 
     /**
@@ -138,7 +179,7 @@ public final class CandidateResolutionService {
      * @return 已建索引的目录版本；检索器未实现时为其默认值
      */
     public long indexedCatalogVersion() {
-        return candidateRetriever.indexedCatalogVersion();
+        return retrieval.indexedCatalogVersion();
     }
 
     /** 解析结果分类。调用方据此映射自身的对外错误码，本枚举不承载 HTTP 语义。 */

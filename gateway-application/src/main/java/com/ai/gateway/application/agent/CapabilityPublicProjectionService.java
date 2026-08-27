@@ -3,6 +3,7 @@ package com.ai.gateway.application.agent;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.ArgumentBinding;
 import com.ai.gateway.domain.model.ArgumentSource;
+import com.ai.gateway.domain.service.InstructionInjectionDetector;
 
 import java.text.Normalizer;
 import java.util.ArrayList;
@@ -11,7 +12,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Pattern;
 
 /** Builds bounded model-facing capability data from untrusted Manifest content. */
 public final class CapabilityPublicProjectionService {
@@ -29,12 +29,14 @@ public final class CapabilityPublicProjectionService {
             "type", "enum", "const", "format", "minimum", "maximum",
             "exclusiveMinimum", "exclusiveMaximum", "minLength", "maxLength",
             "pattern", "minItems", "maxItems", "uniqueItems", "default");
-    private static final List<Pattern> INSTRUCTION_PATTERNS = List.of(
-            Pattern.compile("(?iu)(ignore|disregard|override).{0,40}(instruction|prompt|system|developer)"),
-            Pattern.compile("(?iu)(reveal|exfiltrate|print).{0,40}(prompt|secret|token|credential)"),
-            Pattern.compile("(?u)忽略.{0,20}(指令|提示|系统|开发者)"),
-            Pattern.compile("(?u)(泄露|输出|展示).{0,20}(提示词|密钥|令牌|凭据)"),
-            Pattern.compile("(?iu)(assistant|model|模型).{0,30}(must|should|必须|应该).{0,30}(call|invoke|调用|执行)"));
+    /**
+     * 注入检测委派给领域服务。
+     *
+     * <p>出站投影（清单叙述字段）与 A2A 入站 Task 文本必须使用同一份模式列表：
+     * 两侧各自维护会产生「出站拦得住、入站拦不住」的偏差，而这种偏差无法被任何单侧测试发现。</p>
+     */
+    private static final InstructionInjectionDetector INJECTION_DETECTOR =
+            InstructionInjectionDetector.builtIn();
 
     public Optional<Projection> project(CapabilityManifest manifest) {
         if (manifest == null || containsUnsafeContent(manifest)) {
@@ -208,11 +210,7 @@ public final class CapabilityPublicProjectionService {
     }
 
     private boolean looksLikeInstruction(String value) {
-        if (value == null || value.isBlank()) {
-            return false;
-        }
-        String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC);
-        return INSTRUCTION_PATTERNS.stream().anyMatch(pattern -> pattern.matcher(normalized).find());
+        return INJECTION_DETECTOR.detects(value);
     }
 
     private SchemaClass classify(Map<String, Object> schema) {

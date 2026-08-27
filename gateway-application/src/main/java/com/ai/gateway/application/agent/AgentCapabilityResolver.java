@@ -1,7 +1,8 @@
 package com.ai.gateway.application.agent;
 
 import com.ai.gateway.application.catalog.ActiveCatalogView;
-import com.ai.gateway.application.catalog.CatalogBoundCandidateRetriever;
+import com.ai.gateway.application.catalog.AgentCandidateRanker;
+import com.ai.gateway.application.catalog.AuthorizedCandidateRetrieval;
 import com.ai.gateway.application.catalog.InMemoryCatalogManager;
 import com.ai.gateway.domain.model.CapabilityManifest;
 import com.ai.gateway.domain.model.CapabilityReference;
@@ -12,15 +13,11 @@ import com.ai.gateway.domain.model.RequestContext;
 import com.ai.gateway.domain.model.RiskLevel;
 import com.ai.gateway.domain.port.AuthenticationPort;
 import com.ai.gateway.domain.port.AuthorizationPort;
-import com.ai.gateway.domain.port.CandidateRetriever;
 import com.ai.gateway.domain.port.TelemetryPort;
-import com.ai.gateway.domain.service.TextNormalizer;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -57,8 +54,8 @@ public final class AgentCapabilityResolver {
     private final AuthenticationPort authenticationPort;
     private final AuthorizationPort authorizationPort;
     private final InMemoryCatalogManager catalogManager;
-    private final CandidateRetriever candidateRetriever;
-    private final TextNormalizer textNormalizer;
+    private final AuthorizedCandidateRetrieval candidateRetrieval;
+    private final AgentCandidateRanker candidateRanker;
     private final ToolReferenceService toolReferenceService;
     private final TelemetryPort telemetry;
     private final Executor resolveExecutor;
@@ -67,20 +64,20 @@ public final class AgentCapabilityResolver {
     public AgentCapabilityResolver(AuthenticationPort authenticationPort,
                                    AuthorizationPort authorizationPort,
                                    InMemoryCatalogManager catalogManager,
-                                   CandidateRetriever candidateRetriever,
-                                   TextNormalizer textNormalizer,
+                                   AuthorizedCandidateRetrieval candidateRetrieval,
+                                   AgentCandidateRanker candidateRanker,
                                    ToolReferenceService toolReferenceService,
                                    TelemetryPort telemetry) {
-        this(authenticationPort, authorizationPort, catalogManager, candidateRetriever,
-                textNormalizer, toolReferenceService, telemetry,
+        this(authenticationPort, authorizationPort, catalogManager, candidateRetrieval,
+                candidateRanker, toolReferenceService, telemetry,
                 DEFAULT_RESOLVE_EXECUTOR, 100L);
     }
 
     public AgentCapabilityResolver(AuthenticationPort authenticationPort,
                                    AuthorizationPort authorizationPort,
                                    InMemoryCatalogManager catalogManager,
-                                   CandidateRetriever candidateRetriever,
-                                   TextNormalizer textNormalizer,
+                                   AuthorizedCandidateRetrieval candidateRetrieval,
+                                   AgentCandidateRanker candidateRanker,
                                    ToolReferenceService toolReferenceService,
                                    TelemetryPort telemetry,
                                    Executor resolveExecutor,
@@ -88,8 +85,8 @@ public final class AgentCapabilityResolver {
         this.authenticationPort = Objects.requireNonNull(authenticationPort);
         this.authorizationPort = Objects.requireNonNull(authorizationPort);
         this.catalogManager = Objects.requireNonNull(catalogManager);
-        this.candidateRetriever = Objects.requireNonNull(candidateRetriever);
-        this.textNormalizer = Objects.requireNonNull(textNormalizer);
+        this.candidateRetrieval = Objects.requireNonNull(candidateRetrieval);
+        this.candidateRanker = Objects.requireNonNull(candidateRanker);
         this.toolReferenceService = Objects.requireNonNull(toolReferenceService);
         this.telemetry = Objects.requireNonNull(telemetry);
         this.resolveExecutor = Objects.requireNonNull(resolveExecutor);
@@ -150,8 +147,11 @@ public final class AgentCapabilityResolver {
             if (view == null || view.catalogVersion() <= 0) {
                 return Resolution.error("CAPABILITY_UNAVAILABLE", 0L, 0L);
             }
-            long indexedVersion = candidateRetriever.indexedCatalogVersion();
-            if (!(candidateRetriever instanceof CatalogBoundCandidateRetriever)
+            // 索引漂移只在「检索不绑定本次视图」时才需要判定：绑定视图的检索器天然与
+            // view.catalogVersion() 同版本，此时读全局索引版本反而会把一次正常的目录切换
+            // 误判成不可用。该判定条件由检索内核统一给出，不再由本类推断检索器类型。
+            long indexedVersion = candidateRetrieval.indexedCatalogVersion();
+            if (!candidateRetrieval.viewBound()
                     && indexedVersion >= 0 && indexedVersion != view.catalogVersion()) {
                 return Resolution.error("CATALOG_INDEX_NOT_READY",
                         view.catalogVersion(), 0L);
@@ -183,20 +183,17 @@ public final class AgentCapabilityResolver {
                         policySnapshot.policyEpoch());
             }
             CapabilityVisibility visibility = policySnapshot.visibility();
-            List<CapabilityManifest> authorized = view.visibleCapabilities(visibility).stream()
-                    .filter(manifest -> manifest.spec().risk() != RiskLevel.WRITE_HIGH)
-                    .filter(manifest -> view.publicProjection(manifest).isPresent())
-                    .toList();
-
-            String normalizedQuery = textNormalizer.normalize(query);
-            if (normalizedQuery.isEmpty() || requestedTopK <= 0 || authorized.isEmpty()) {
+            if (requestedTopK <= 0) {
+                // 调用方要求 0 个候选，无需占用检索内核的准入名额。
                 outcome = "empty";
                 return Resolution.resolved(view.catalogVersion(), visibility.policyEpoch(),
                         List.of(), null, null);
             }
 
+            // 收窄检索域、归一化与 BM25 召回全部交由共用内核执行：WRITE_HIGH 排除写在内核里，
+            // 本类只补充自身承载面的附加条件（必须存在公开投影，否则没有可展示的字段）。
             RetrievalOutcome retrieval = retrieveWithDeadline(
-                    normalizedQuery, view, authorized, deadlineNanos);
+                    query, view, view.visibleCapabilities(visibility), deadlineNanos);
             if (retrieval.timedOut()) {
                 outcome = "timeout";
                 return Resolution.error("RESOLVE_TIMEOUT", view.catalogVersion(),
@@ -207,8 +204,10 @@ public final class AgentCapabilityResolver {
                 return Resolution.error("RESOLVE_CAPACITY_EXCEEDED",
                         view.catalogVersion(), visibility.policyEpoch());
             }
-            List<CandidateRetriever.ScoredCapability> recalled = retrieval.results();
-            if (recalled == null || recalled.isEmpty()) {
+            // 空检索域、空归一化文本、检索失败与零命中在本平面是同一种对外结果：空候选集。
+            // 刻意不区分——区分即等于告知调用方「有能力但你看不到」。
+            AuthorizedCandidateRetrieval.Retrieved retrieved = retrieval.retrieved();
+            if (retrieved == null || retrieved.candidates().isEmpty()) {
                 outcome = "empty";
                 return Resolution.resolved(view.catalogVersion(), visibility.policyEpoch(),
                         List.of(), null, null);
@@ -219,28 +218,15 @@ public final class AgentCapabilityResolver {
                         visibility.policyEpoch());
             }
 
-            List<RankedCandidate> ranked = recalled.stream()
-                    .filter(Objects::nonNull)
-                    .filter(scored -> scored.capability() != null)
-                    .map(scored -> view.publicProjection(scored.capability())
-                            .map(projection -> new RankedCandidate(
-                                    scored.capability(), projection,
-                                    rerankScore(normalizedQuery, scored, projection)))
-                            .orElse(null))
-                    .filter(Objects::nonNull)
-                    .sorted(Comparator.comparingDouble(RankedCandidate::score).reversed()
-                            .thenComparing(candidate ->
-                                    candidate.manifest().metadata().id())
-                            .thenComparing(candidate ->
-                                    candidate.manifest().metadata().version()))
-                    .toList();
+            List<AgentCandidateRanker.Ranked> ranked = candidateRanker.rank(
+                    retrieved.normalizedText(), view, retrieved.candidates());
 
             int limit = Math.min(Math.max(requestedTopK, 1), MAX_CANDIDATES);
             List<Candidate> candidates = new ArrayList<>(limit);
-            List<RankedCandidate> included = new ArrayList<>(limit);
+            List<AgentCandidateRanker.Ranked> included = new ArrayList<>(limit);
             int contextBytes = 0;
             Instant earliestExpiry = null;
-            for (RankedCandidate rankedCandidate : ranked) {
+            for (AgentCandidateRanker.Ranked rankedCandidate : ranked) {
                 if (expired(deadlineNanos, "reference")) {
                     outcome = "timeout";
                     return Resolution.error("RESOLVE_TIMEOUT", view.catalogVersion(),
@@ -250,7 +236,7 @@ public final class AgentCapabilityResolver {
                     break;
                 }
                 ToolReferenceService.IssuedReference issued = toolReferenceService.issue(
-                        principal, rankedCandidate.manifest(), view.catalogVersion(),
+                        principal, rankedCandidate.capability(), view.catalogVersion(),
                         visibility.policyEpoch());
                 Candidate candidate = toCandidate(issued.toolRef(), rankedCandidate);
                 int candidateBytes = estimatedBytes(candidate);
@@ -266,7 +252,7 @@ public final class AgentCapabilityResolver {
                 }
             }
 
-            SelectedSchema selectedSchema = selectedSchema(candidates, included, normalizedQuery);
+            SelectedSchema selectedSchema = selectedSchema(candidates, included);
             outcome = candidates.isEmpty() ? "empty" : "resolved";
             telemetry.increment("gateway.agent.resolve.candidates", Map.of(
                     "resource", candidateBucket(candidates.size()), "outcome", outcome));
@@ -281,17 +267,22 @@ public final class AgentCapabilityResolver {
         }
     }
 
+    /**
+     * 在 Resolve 预算内执行一次授权域检索。
+     *
+     * <p>整段（收窄检索域 → 归一化 → BM25）都放进受限线程池里执行，而不是先在调用线程上
+     * 判断「文本是否为空」再决定是否提交：把空文本排除在准入控制之外，等于给出一条
+     * 无需名额即可打到网关的路径。</p>
+     */
     private RetrievalOutcome retrieveWithDeadline(
-            String normalizedQuery,
+            String rawQuery,
             ActiveCatalogView view,
-            List<CapabilityManifest> authorized,
+            List<CapabilityManifest> visible,
             long deadlineNanos) {
-        DeadlineCall<List<CandidateRetriever.ScoredCapability>> retrievalCall = callWithDeadline(
-                () -> candidateRetriever instanceof CatalogBoundCandidateRetriever boundRetriever
-                        ? boundRetriever.retrieve(normalizedQuery, view, authorized,
-                                RECALL_CANDIDATES)
-                        : candidateRetriever.retrieve(normalizedQuery, authorized,
-                                RECALL_CANDIDATES),
+        DeadlineCall<AuthorizedCandidateRetrieval.Retrieved> retrievalCall = callWithDeadline(
+                () -> candidateRetrieval.retrieveWithinAgentScope(rawQuery, view, visible,
+                        manifest -> view.publicProjection(manifest).isPresent(),
+                        RECALL_CANDIDATES),
                 deadlineNanos, "retrieval");
         if (retrievalCall.rejected()) {
             return RetrievalOutcome.rejectedOutcome();
@@ -300,7 +291,7 @@ public final class AgentCapabilityResolver {
             return RetrievalOutcome.timeout();
         }
         if (retrievalCall.failure() != null) {
-            return new RetrievalOutcome(List.of(), false, false);
+            return RetrievalOutcome.empty();
         }
         return new RetrievalOutcome(retrievalCall.value(), false, false);
     }
@@ -453,57 +444,40 @@ public final class AgentCapabilityResolver {
                 .anyMatch(expected::equals);
     }
 
+    /**
+     * 判定是否可以随候选一起直接给出唯一 schema。
+     *
+     * <p>「查询与展示名完全一致」这一结论直接取自重排器（{@link AgentCandidateRanker.Ranked#exactNameMatch()}），
+     * 不在这里重算一遍归一化比较：同一个判定写两处，两处早晚会漂移，而漂移的表现是
+     * 「有时给 schema、有时不给」这种无法归因的间歇行为。</p>
+     */
     private SelectedSchema selectedSchema(
             List<Candidate> candidates,
-            List<RankedCandidate> included,
-            String normalizedQuery) {
+            List<AgentCandidateRanker.Ranked> included) {
         if (candidates.isEmpty() || included.isEmpty()) {
             return null;
         }
-        RankedCandidate first = included.get(0);
+        AgentCandidateRanker.Ranked first = included.get(0);
         if (first.projection().schemaClass()
                 != CapabilityPublicProjectionService.SchemaClass.STANDARD) {
             return null;
         }
-        boolean exactName = normalizedQuery.equals(
-                textNormalizer.normalize(first.projection().displayName()));
         boolean separated = included.size() == 1
-                || first.score() - included.get(1).score() >= HIGH_CONFIDENCE_DELTA;
-        if (!exactName && !separated) {
+                || first.rankScore() - included.get(1).rankScore() >= HIGH_CONFIDENCE_DELTA;
+        if (!first.exactNameMatch() && !separated) {
             return null;
         }
         return new SelectedSchema(candidates.get(0).toolRef(), first.projection().publicSchema());
     }
 
-    private double rerankScore(
-            String normalizedQuery,
-            CandidateRetriever.ScoredCapability scored,
-            CapabilityPublicProjectionService.Projection projection) {
-        String normalizedName = textNormalizer.normalize(projection.displayName());
-        double score = scored.score();
-        if (normalizedQuery.equals(normalizedName)) {
-            score += 10.0d;
-        } else if (!normalizedName.isEmpty() && normalizedQuery.contains(normalizedName)) {
-            score += 3.0d;
-        }
-        if (scored.capability().spec().risk() == RiskLevel.READ_ONLY) {
-            score += 0.05d;
-        }
-        if (projection.schemaClass()
-                == CapabilityPublicProjectionService.SchemaClass.COMPLEX) {
-            score -= 0.05d;
-        }
-        return score;
-    }
-
-    private static Candidate toCandidate(String toolRef, RankedCandidate candidate) {
+    private static Candidate toCandidate(String toolRef, AgentCandidateRanker.Ranked candidate) {
         return new Candidate(
                 toolRef,
                 candidate.projection().displayName(),
                 candidate.projection().purpose(),
                 candidate.projection().schemaClass(),
                 candidate.projection().argumentContract(),
-                candidate.manifest().spec().risk() == RiskLevel.READ_ONLY
+                candidate.capability().spec().risk() == RiskLevel.READ_ONLY
                         ? "DIRECT" : "CONFIRMATION_REQUIRED");
     }
 
@@ -620,22 +594,21 @@ public final class AgentCapabilityResolver {
         }
     }
 
-    private record RankedCandidate(
-            CapabilityManifest manifest,
-            CapabilityPublicProjectionService.Projection projection,
-            double score) {
-    }
-
     private record RetrievalOutcome(
-            List<CandidateRetriever.ScoredCapability> results,
+            AuthorizedCandidateRetrieval.Retrieved retrieved,
             boolean timedOut,
             boolean capacityRejected) {
         private static RetrievalOutcome timeout() {
-            return new RetrievalOutcome(List.of(), true, false);
+            return new RetrievalOutcome(null, true, false);
         }
 
         private static RetrievalOutcome rejectedOutcome() {
-            return new RetrievalOutcome(List.of(), false, true);
+            return new RetrievalOutcome(null, false, true);
+        }
+
+        /** 检索任务本身异常终止：与「零命中」同等对待，绝不把内部故障文本带给调用方。 */
+        private static RetrievalOutcome empty() {
+            return new RetrievalOutcome(null, false, false);
         }
     }
 

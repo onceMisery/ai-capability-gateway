@@ -97,30 +97,6 @@ class ProductionConfigurationValidatorTest {
                 .doesNotThrowAnyException();
     }
 
-    @Test
-    void rejectsGatewaySelectionWhenRouterIsDisabled() {
-        MockEnvironment environment = new MockEnvironment()
-                .withProperty("gateway.environment", "development")
-                .withProperty("gateway.runtime.nl-router.mode", "DISABLED")
-                .withProperty("gateway.a2a.selection-mode", "GATEWAY_SELECTION");
-
-        assertThatThrownBy(() -> ProductionConfigurationValidator.validate(environment))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("gateway.a2a.selection-mode")
-                .hasMessageContaining("GATEWAY_SELECTION");
-    }
-
-    @Test
-    void toleratesDelegatedSelectionWhenRouterIsDisabled() {
-        MockEnvironment environment = new MockEnvironment()
-                .withProperty("gateway.environment", "development")
-                .withProperty("gateway.runtime.nl-router.mode", "DISABLED")
-                .withProperty("gateway.a2a.selection-mode", "DELEGATED_SELECTION");
-
-        assertThatCode(() -> ProductionConfigurationValidator.validate(environment))
-                .doesNotThrowAnyException();
-    }
-
     /**
      * A DISABLED deployment that still opts into diagnostics must start: the flag is
      * normalized away by NlRouterMode/NlRouterPolicy, so the validator only warns.

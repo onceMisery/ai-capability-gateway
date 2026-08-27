@@ -104,6 +104,11 @@
             </dependency>
             <dependency>
                 <groupId>com.ai.gateway</groupId>
+                <artifactId>gateway-adapter-a2a</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.ai.gateway</groupId>
                 <artifactId>gateway-adapter-web</artifactId>
                 <version>${project.version}</version>
             </dependency>
